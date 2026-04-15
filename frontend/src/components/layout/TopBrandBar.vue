@@ -3,10 +3,12 @@ import { computed } from 'vue'
 import { useI18nStore } from '@/stores/i18n'
 import { storeToRefs } from 'pinia'
 
+import type { RouteLocationRaw } from 'vue-router'
+
 defineProps<{
   title?: string
   /** 若设置则左侧显示返回链接（用于任务列表等子页），否则显示 Logo */
-  backTo?: string
+  backTo?: RouteLocationRaw
   backLabel?: string
 }>()
 

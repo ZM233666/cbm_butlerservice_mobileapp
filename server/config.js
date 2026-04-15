@@ -36,6 +36,11 @@ function buildConfig(projectRoot) {
     ),
     homeConfigPath: resolveFromProject(projectRoot, env.HOME_CONFIG_PATH, "server/data/home-config.json"),
     taskStatusPath: resolveFromProject(projectRoot, env.TASK_STATUS_PATH, "server/data/task-status.json"),
+    taskEditRequestPath: resolveFromProject(
+      projectRoot,
+      env.TASK_EDIT_REQUEST_PATH,
+      "server/data/task-edit-requests.jsonl"
+    ),
     managerAssignmentsPath: resolveFromProject(
       projectRoot,
       env.MANAGER_ASSIGNMENTS_PATH,

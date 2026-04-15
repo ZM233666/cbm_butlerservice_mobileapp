@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/composables/useI18n'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
-import { fetchGuidanceTasks, fetchTaskStatus, postTaskStatus, postTaskSubmit } from '@/api/tasks'
+import { fetchGuidanceTasks, fetchTaskStatus, postTaskStatus, postTaskSubmit, postTaskEditRequest } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
 import type { GuidanceRow } from '@/types/task'
 import * as exifr from 'exifr'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const { lang, t } = useI18n()
 
@@ -46,6 +47,27 @@ const issueOpen = ref(false)
 const issueRowId = ref('')
 const issueText = ref('')
 const submitConfirmOpen = ref(false)
+const currentTaskStatus = ref<'todo' | 'doing' | 'done'>('todo')
+const editRequestOpen = ref(false)
+const editRequestReason = ref('')
+const editRequestSubmitting = ref(false)
+// taskKey：统一以 Main Task ID 作为唯一 key（来自 query.k / query.taskId）
+const taskKey = computed(() => String(route.query.k || route.query.taskId || '').trim())
+const fallbackTaskKey = computed(() => {
+  const title = String(route.query.title || '').trim()
+  const deadline = String(route.query.deadline || '').trim()
+  if (!title || !deadline) return ''
+  // 与首页 taskKey() 保持一致，maint 统一小写
+  return `${maintType.value.toLowerCase()}-${title}-${deadline}`
+})
+
+const mainTaskId = computed(() => String(route.query.taskId || '').trim() || 'MT-CCBII-88421')
+const effectiveTaskKey = computed(() => mainTaskId.value || taskKey.value || fallbackTaskKey.value)
+const homeRefreshStamp = ref(0)
+const backToHome = computed(() => {
+  if (!homeRefreshStamp.value) return '/'
+  return { path: '/', query: { refresh: String(homeRefreshStamp.value) } }
+})
 
 const visibleRows = computed(() => {
   return guidanceRows.value.filter(row => {
@@ -130,11 +152,26 @@ const incompleteRows = computed(() => {
     return buttons.some((b) => !uploadRecords.value[b.slot]?.url)
   })
 })
+const isTaskDone = computed(() => currentTaskStatus.value === 'done')
+const editRequestBtnText = computed(() => {
+  const dict = t.value as Record<string, string>
+  return dict.editRequestBtn || (lang.value === 'zh' ? '编辑申请' : 'Edit Request')
+})
+const editRequestSentText = computed(() => {
+  const dict = t.value as Record<string, string>
+  return dict.editRequestSent || (lang.value === 'zh' ? '编辑申请已提交' : 'Edit request submitted')
+})
 
 function toast(msg: string) {
   toastMsg.value = msg
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => resolve(), ms)
+  })
 }
 
 function clampZoom(v: number) {
@@ -394,34 +431,118 @@ async function handleUpload(slotId: string, event: Event) {
   }
 }
 
-async function setTaskStatus(status: string) {
+async function setTaskStatus(status: string): Promise<boolean> {
   const employeeId = auth.user?.employeeId || ''
-  if (!employeeId) return
-  try { await postTaskStatus(employeeId, maintType.value, status) } catch { /* local fallback */ }
+  if (!employeeId) return false
+  try {
+    const data = await postTaskStatus(
+      employeeId,
+      maintType.value,
+      status,
+      effectiveTaskKey.value || undefined,
+      {
+        taskId: mainTaskId.value,
+        title: String(route.query.title || '').trim(),
+        deadline: String(route.query.deadline || '').trim(),
+      },
+    ) as any
+    if (data && data.ok === false) return false
+    if (data && data.status && data.status !== status) return false
+    return true
+  } catch {
+    return false
+  }
 }
 
 async function onSave() {
-  const hasProgress = Object.keys(uploadRecords.value).length > 0 || Object.values(issueRecords.value).some(v => v.text.trim())
-  if (hasProgress) { await setTaskStatus('doing'); toast(t.value.savedToDoing) }
-  else toast(t.value.saved)
+  const ok = await setTaskStatus('doing')
+  if (ok) currentTaskStatus.value = 'doing'
+  toast(ok ? t.value.savedToDoing : t.value.saved)
+  if (ok) homeRefreshStamp.value = Date.now()
 }
 
 async function onSubmit() {
   if (!isSubmitReady.value) { submitConfirmOpen.value = true; return }
   try {
-    await postTaskSubmit({ basicInfo: { maintenanceType: maintType.value, employeeId: auth.user?.employeeId }, uploads: uploadRecords.value, issues: issueRecords.value })
-    await setTaskStatus('done')
+    await postTaskSubmit({ basicInfo: { maintenanceType: maintType.value, employeeId: auth.user?.employeeId, taskId: mainTaskId.value }, uploads: uploadRecords.value, issues: issueRecords.value })
+    const doneUpdated = await setTaskStatus('done')
+    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed'); return }
+    currentTaskStatus.value = 'done'
     toast(t.value.submitted)
+    await wait(900)
+    homeRefreshStamp.value = Date.now()
+    router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
   } catch { toast('Submit failed') }
 }
 
 async function confirmSubmitWithMissingUploads() {
   submitConfirmOpen.value = false
   try {
-    await postTaskSubmit({ basicInfo: { maintenanceType: maintType.value, employeeId: auth.user?.employeeId }, uploads: uploadRecords.value, issues: issueRecords.value })
-    await setTaskStatus('done')
+    await postTaskSubmit({ basicInfo: { maintenanceType: maintType.value, employeeId: auth.user?.employeeId, taskId: mainTaskId.value }, uploads: uploadRecords.value, issues: issueRecords.value })
+    const doneUpdated = await setTaskStatus('done')
+    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed'); return }
+    currentTaskStatus.value = 'done'
     toast(t.value.submitted)
+    await wait(900)
+    homeRefreshStamp.value = Date.now()
+    router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
   } catch { toast('Submit failed') }
+}
+
+function onEditRequest() {
+  editRequestReason.value = ''
+  editRequestOpen.value = true
+}
+
+async function submitEditRequest() {
+  const reason = editRequestReason.value.trim()
+  if (!reason) {
+    toast(lang.value === 'zh' ? '请先填写修改原因' : 'Please provide a reason')
+    return
+  }
+  const employeeId = auth.user?.employeeId || ''
+  if (!employeeId) {
+    toast(lang.value === 'zh' ? '缺少员工信息，无法提交申请' : 'Missing employee info')
+    return
+  }
+  if (editRequestSubmitting.value) return
+  editRequestSubmitting.value = true
+  let requestSaved = false
+  try {
+    try {
+      await postTaskEditRequest({
+        employeeId,
+        maint: maintType.value,
+        reason,
+        taskId: mainTaskId.value,
+      })
+      requestSaved = true
+    } catch (err) {
+      console.warn('[TaskList] postTaskEditRequest failed, continue with test flow:', err)
+    }
+
+    const movedToDoing = await setTaskStatus('doing')
+    if (movedToDoing) {
+      currentTaskStatus.value = 'doing'
+      editRequestOpen.value = false
+      if (requestSaved) {
+        toast(lang.value === 'zh' ? '编辑申请已提交，任务状态已切换为 Doing' : 'Edit request submitted. Task moved to Doing.')
+      } else {
+        toast(lang.value === 'zh' ? '编辑申请接口不可用，已按测试流程切换为 Doing' : 'Edit API unavailable. Task moved to Doing for testing.')
+      }
+      return
+    }
+
+    toast(
+      requestSaved
+        ? (lang.value === 'zh' ? '编辑申请已提交，但状态切换失败' : 'Edit request submitted, but failed to switch status.')
+        : (lang.value === 'zh' ? '编辑申请与状态切换均失败' : 'Edit request and status switch both failed.'),
+    )
+  } catch {
+    toast(lang.value === 'zh' ? '处理失败，请稍后重试' : 'Process failed, please try again.')
+  } finally {
+    editRequestSubmitting.value = false
+  }
 }
 
 onMounted(async () => {
@@ -432,7 +553,16 @@ onMounted(async () => {
     guidanceRows.value = data.rows || []
   } catch { toast('Load failed') }
   if (auth.user?.employeeId) {
-    try { await fetchTaskStatus(auth.user.employeeId) } catch { /* */ }
+    try {
+      const statusData = await fetchTaskStatus(auth.user.employeeId)
+      // 关键：如果带了 taskKey（从首页任务卡进入），则只使用 taskKey 状态，避免回退到 maint 导致“同修程串状态”。
+      const entry = effectiveTaskKey.value
+        ? statusData?.statuses?.[effectiveTaskKey.value]
+        : statusData?.statuses?.[maintType.value]
+      if (entry && (entry.status === 'todo' || entry.status === 'doing' || entry.status === 'done')) {
+        currentTaskStatus.value = entry.status
+      }
+    } catch { /* */ }
   }
 })
 </script>
@@ -440,7 +570,7 @@ onMounted(async () => {
 <template>
   <div class="task-list-page">
     <PageShell>
-      <TopBrandBar :title="t.title" back-to="/" :back-label="t.back" />
+      <TopBrandBar :title="t.title" :back-to="backToHome" :back-label="t.back" />
       <main class="tl-main">
       <section class="tl-card">
         <h2 class="tl-card__head">{{ t.basicInfo }}</h2>
@@ -450,7 +580,7 @@ onMounted(async () => {
           <div class="tl-basic__row"><dt>{{ t.train }}</dt><dd><input class="tl-readonly" value="HXD1-1234" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="auth.user?.employeeId || ''" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.maint }}</dt><dd><input class="tl-readonly" :value="maintType === 'c1c3' ? t.maintC1C3 : t.maintC4C6" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" value="MT-CCBII-88421" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" :value="mainTaskId" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.deadline }}</dt><dd><input class="tl-readonly" value="2026-04-30" readonly /></dd></div>
         </dl>
       </section>
@@ -507,9 +637,14 @@ onMounted(async () => {
             </tbody>
           </table>
         </div>
-        <div class="tl-actions tl-actions--sticky">
-          <button type="button" class="tl-btn tl-btn--secondary" @click="onSave">{{ t.save }}</button>
-          <button type="button" class="tl-btn tl-btn--primary" @click="onSubmit">{{ t.submit }}</button>
+        <div class="tl-actions tl-actions--sticky" :class="{ 'is-single': isTaskDone }">
+          <template v-if="isTaskDone">
+            <button type="button" class="tl-btn tl-btn--primary tl-btn--full" @click="onEditRequest">{{ editRequestBtnText }}</button>
+          </template>
+          <template v-else>
+            <button type="button" class="tl-btn tl-btn--secondary" @click="onSave">{{ t.save }}</button>
+            <button type="button" class="tl-btn tl-btn--primary" @click="onSubmit">{{ t.submit }}</button>
+          </template>
         </div>
       </section>
       </main>
@@ -576,6 +711,30 @@ onMounted(async () => {
             </button>
             <button type="button" class="tl-issue-action tl-issue-action--primary" @click="confirmSubmitWithMissingUploads">
               {{ lang === 'zh' ? '仍然提交' : 'Submit anyway' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="editRequestOpen" class="tl-modal-backdrop" role="presentation" @click.self="!editRequestSubmitting && (editRequestOpen = false)">
+      <div class="tl-modal tl-modal--issue" role="dialog" aria-modal="true" :aria-label="lang === 'zh' ? '编辑申请' : 'Edit Request'">
+        <div class="tl-modal__inner">
+          <h3>{{ editRequestBtnText }}</h3>
+          <p class="tl-issue-help">
+            {{ lang === 'zh' ? '请填写修改原因，提交后将发送给管理员审批。' : 'Please provide the reason. The request will be sent for review.' }}
+          </p>
+          <textarea
+            v-model="editRequestReason"
+            class="tl-issue-text"
+            :placeholder="lang === 'zh' ? '请输入修改原因（必填）' : 'Enter reason (required)'"
+          ></textarea>
+          <div class="tl-issue-actions">
+            <button type="button" class="tl-issue-action tl-issue-action--ghost" :disabled="editRequestSubmitting" @click="editRequestOpen = false">
+              {{ lang === 'zh' ? '取消' : 'Cancel' }}
+            </button>
+            <button type="button" class="tl-issue-action tl-issue-action--primary" :disabled="editRequestSubmitting" @click="submitEditRequest">
+              {{ editRequestSubmitting ? (lang === 'zh' ? '提交中...' : 'Submitting...') : (lang === 'zh' ? '提交申请' : 'Submit Request') }}
             </button>
           </div>
         </div>

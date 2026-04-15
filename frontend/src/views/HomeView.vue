@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import PageShell from '@/components/layout/PageShell.vue'
 import ProfileCard from '@/components/home/ProfileCard.vue'
 import ActionTasks from '@/components/home/ActionTasks.vue'
@@ -13,9 +14,11 @@ import { storeToRefs } from 'pinia'
 
 const auth = useAuthStore()
 const i18n = useI18nStore()
+const route = useRoute()
 const { lang } = storeToRefs(i18n)
 const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
 const tasks = ref<TaskCard[]>([])
+const refreshSignal = ref(0)
 
 onMounted(async () => {
   try {
@@ -23,6 +26,14 @@ onMounted(async () => {
     if (cfg.tasks) tasks.value = cfg.tasks
   } catch { /* keep empty */ }
 })
+
+watch(
+  () => String(route.query.refresh || ''),
+  (v) => {
+    if (v) refreshSignal.value = Date.now()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -38,7 +49,7 @@ onMounted(async () => {
       <ProfileCard />
       <ManagerDashboard v-if="auth.isManager" />
       <template v-if="auth.isFse || auth.isThirdParty">
-        <ActionTasks />
+        <ActionTasks :refresh-signal="refreshSignal" />
         <CbmRecommendations class="home-recs-after-tasks" :tasks="tasks" />
       </template>
     </main>

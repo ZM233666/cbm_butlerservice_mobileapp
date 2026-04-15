@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchHomeConfig, fetchTaskSummary, fetchTaskStatus } from '@/api/tasks'
 import { useAuthStore } from '@/stores/auth'
 import type { TaskCard, TaskStatusStore, TaskSummaryMaint } from '@/types/task'
 import { useI18n } from '@/composables/useI18n'
 import { getDaysUntilDeadline, deadlineAlertLevel } from '@/composables/useDeadlineAlert'
+
+const props = defineProps<{
+  refreshSignal?: number
+}>()
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -21,9 +25,39 @@ const defaultStats: Record<string, { items: number; photos: number }> = {
 }
 const summaryMaint = ref<Record<string, TaskSummaryMaint>>({})
 
-function getCardStatus(maint: string): 'todo' | 'doing' | 'done' {
-  const entry = statusStore.value[maint.toLowerCase()]
-  if (entry?.status === 'doing' || entry?.status === 'done' || entry?.status === 'todo') return entry.status
+function getStatusFromEntry(entry: unknown): 'todo' | 'doing' | 'done' | null {
+  const e = entry as { status?: unknown } | null
+  const s = e?.status
+  if (s === 'todo' || s === 'doing' || s === 'done') return s
+  return null
+}
+
+function taskKey(card: TaskCard) {
+  // 任务状态 key：优先使用每条任务独立的 Main Task ID
+  return String((card as any).taskId || '').trim() || `${card.maint}-${card.title}-${card.deadline}`
+}
+
+const maintCounts = computed(() => {
+  const map: Record<string, number> = {}
+  cards.value.forEach((c) => {
+    const k = String(c.maint || '').toLowerCase()
+    map[k] = (map[k] || 0) + 1
+  })
+  return map
+})
+
+function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' {
+  const key = taskKey(card)
+  const byKey = getStatusFromEntry(statusStore.value[key])
+  if (byKey) return byKey
+
+  // 兼容旧数据：仅当该 maint 下只有 1 条任务时，才允许回退到 maint 级别状态。
+  const maint = String(card.maint || '').toLowerCase()
+  if ((maintCounts.value[maint] || 0) <= 1) {
+    const byMaint = getStatusFromEntry(statusStore.value[maint])
+    if (byMaint) return byMaint
+  }
+
   return 'todo'
 }
 
@@ -35,7 +69,7 @@ function getStats(maint: string) {
 }
 
 const filteredCards = computed(() =>
-  cards.value.filter(c => activeFilter.value === 'all' || getCardStatus(c.maint) === activeFilter.value)
+  cards.value.filter(c => activeFilter.value === 'all' || getCardStatusByCard(c) === activeFilter.value)
 )
 
 function urgencyRank(deadline: string, status: string) {
@@ -58,8 +92,8 @@ function parseDeadlineValue(deadline: string) {
 const sortedCards = computed(() => {
   const list = filteredCards.value.slice()
   list.sort((a, b) => {
-    const sa = getCardStatus(a.maint)
-    const sb = getCardStatus(b.maint)
+    const sa = getCardStatusByCard(a)
+    const sb = getCardStatusByCard(b)
     const ra = urgencyRank(a.deadline, sa)
     const rb = urgencyRank(b.deadline, sb)
     if (ra !== rb) return ra - rb
@@ -82,7 +116,7 @@ const sortedCards = computed(() => {
 const counts = computed(() => {
   let todo = 0, doing = 0, done = 0
   cards.value.forEach(c => {
-    const s = getCardStatus(c.maint)
+    const s = getCardStatusByCard(c)
     if (s === 'doing') doing++; else if (s === 'done') done++; else todo++
   })
   return { todo, doing, done, all: todo + doing + done }
@@ -90,6 +124,7 @@ const counts = computed(() => {
 
 function deadlineText(deadline: string, status: string) {
   const days = getDaysUntilDeadline(deadline)
+  if (status === 'done' && days != null && days < 0) return t.value.deadlineCompletedLate
   const level = deadlineAlertLevel(days, status)
   if (level === 'expired') return t.value.deadlineExpired
   if (level === 'urgent' && days != null) return String(t.value.deadlineDaysLeft).replace('{n}', String(days))
@@ -98,6 +133,7 @@ function deadlineText(deadline: string, status: string) {
 
 function deadlineLevel(deadline: string, status: string) {
   const days = getDaysUntilDeadline(deadline)
+  if (status === 'done' && days != null && days < 0) return 'expired' as const
   return deadlineAlertLevel(days, status)
 }
 
@@ -138,7 +174,18 @@ function splitMetaCached(meta: string): { main: string; sub: string } {
 }
 
 function goTask(card: TaskCard) {
-  router.push(`/task-list?maint=${card.maint}`)
+  router.push({
+    path: '/task-list',
+    query: {
+      maint: card.maint,
+      // 关键：确保 TaskList 侧可以在缺 k 时复原 key（以及便于调试/排查）
+      title: card.title,
+      deadline: card.deadline,
+      taskId: (card as any).taskId || '',
+      // k 用于 taskKey 存储/读取：这里直接使用 Main Task ID
+      k: taskKey(card),
+    },
+  })
 }
 
 async function loadStatuses() {
@@ -169,6 +216,22 @@ onMounted(() => {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadStatuses() })
 })
 onUnmounted(() => { window.removeEventListener('focus', onFocus) })
+
+// 有些情况下首页先渲染、auth 后到位，导致未拉到状态；监听 employeeId，确保随时刷新。
+watch(
+  () => auth.user?.employeeId || '',
+  (id) => {
+    if (id) loadStatuses()
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.refreshSignal || 0,
+  () => {
+    loadStatuses()
+  },
+)
 </script>
 
 <template>
@@ -200,15 +263,15 @@ onUnmounted(() => { window.removeEventListener('focus', onFocus) })
         <div v-if="sortedCards.length">
           <button v-for="card in sortedCards" :key="`${card.maint}-${card.title}-${card.deadline}`" type="button" class="ios-list-item" @click="goTask(card)">
             <span class="item-icon-area" aria-hidden="true">
-              <span class="status-ring" :class="ringClass(card.deadline, getCardStatus(card.maint))"></span>
+              <span class="status-ring" :class="ringClass(card.deadline, getCardStatusByCard(card))"></span>
             </span>
             <span class="item-content">
               <span class="item-title">{{ card.title }}</span>
               <span class="item-subtitle">{{ card.meta }} · {{ getStats(card.maint) }}</span>
             </span>
             <span class="item-right" aria-hidden="true">
-              <span class="item-date" :class="dateClass(card.deadline, getCardStatus(card.maint))">
-                {{ deadlineText(card.deadline, getCardStatus(card.maint)) }}
+              <span class="item-date" :class="dateClass(card.deadline, getCardStatusByCard(card))">
+                {{ deadlineText(card.deadline, getCardStatusByCard(card)) }}
               </span>
               <span class="chevron">›</span>
             </span>

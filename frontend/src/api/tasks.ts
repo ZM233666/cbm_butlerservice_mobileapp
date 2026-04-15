@@ -13,8 +13,22 @@ export function fetchTaskStatus(employeeId: string): Promise<{ ok: boolean; stat
   return apiGet('/api/task-status', { employeeId })
 }
 
-export function postTaskStatus(employeeId: string, maint: string, status: string) {
-  return apiPost('/api/task-status', { employeeId, maint, status })
+export function postTaskStatus(
+  employeeId: string,
+  maint: string,
+  status: string,
+  taskKey?: string,
+  meta?: { title?: string; deadline?: string; taskId?: string },
+) {
+  return apiPost('/api/task-status', {
+    employeeId,
+    maint,
+    status,
+    taskKey,
+    taskId: meta?.taskId,
+    title: meta?.title,
+    deadline: meta?.deadline,
+  })
 }
 
 export function fetchGuidanceTasks() {
@@ -23,4 +37,15 @@ export function fetchGuidanceTasks() {
 
 export function postTaskSubmit(body: unknown) {
   return apiPost('/api/task-submit', body)
+}
+
+export interface EditRequestPayload {
+  employeeId: string
+  maint: string
+  reason: string
+  taskId?: string
+}
+
+export function postTaskEditRequest(payload: EditRequestPayload) {
+  return apiPost<{ ok: boolean; requestId: string }>('/api/task-edit-request', payload)
 }

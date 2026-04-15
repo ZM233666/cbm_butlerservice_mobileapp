@@ -372,9 +372,9 @@ body.tl-page {
   touch-action: manipulation;
   text-align: center;
   white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  hyphens: auto;
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: manual;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.95) inset,
     0 8px 18px rgba(15, 23, 42, 0.08);
@@ -542,6 +542,10 @@ body.tl-page {
   padding: 0.25rem 0 0;
 }
 
+.tl-actions.is-single {
+  grid-template-columns: 1fr;
+}
+
 /* 任务可能持续数小时：让保存区常驻视口底部，降低误刷新的心理负担 */
 .tl-actions--sticky {
   position: fixed;
@@ -584,6 +588,10 @@ body.tl-page {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.tl-btn--full {
+  width: 100%;
 }
 
 .tl-btn--primary {

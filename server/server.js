@@ -29,6 +29,7 @@ ensureDir(path.dirname(cfg.manifestPath));
 ensureDir(path.dirname(cfg.recordsDataPath));
 ensureDir(path.dirname(cfg.homeConfigPath));
 ensureDir(path.dirname(cfg.taskStatusPath));
+ensureDir(path.dirname(cfg.taskEditRequestPath));
 ensureDir(path.dirname(cfg.managerAssignmentsPath));
 
 const app = express();
@@ -73,6 +74,13 @@ function normalizeStatus(raw) {
   const v = String(raw || "").trim().toLowerCase();
   if (v === "todo" || v === "doing" || v === "done") return v;
   return "";
+}
+
+function normalizeTaskKeyPart(raw) {
+  // 用于 taskKey 的稳定化：去掉首尾空白，压缩中间空白，避免 key 里出现不可见字符
+  return String(raw || "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 async function requestJson(url, headers) {
@@ -272,6 +280,10 @@ app.post("/api/task-status", (req, res) => {
   const employeeId = String((req.body && req.body.employeeId) || "").trim();
   const maint = normalizeMaint(req.body && req.body.maint);
   const status = normalizeStatus(req.body && req.body.status);
+  const taskKey = String((req.body && req.body.taskKey) || "").trim();
+  const mainTaskId = normalizeTaskKeyPart(req.body && req.body.taskId);
+  const title = normalizeTaskKeyPart(req.body && req.body.title);
+  const deadline = normalizeTaskKeyPart(req.body && req.body.deadline);
   if (!employeeId) {
     return res.status(400).json({ ok: false, error: "employee_id_required" });
   }
@@ -283,10 +295,55 @@ app.post("/api/task-status", (req, res) => {
   }
   const all = readJsonObject(cfg.taskStatusPath);
   const user = all[employeeId] && typeof all[employeeId] === "object" ? all[employeeId] : {};
-  user[maint] = { status, updatedAt: new Date().toISOString() };
+  // 任务唯一状态 key：优先使用每条任务独立的 Main Task ID
+  const derivedKey = title && deadline ? `${maint}-${title}-${deadline}` : "";
+  const key = taskKey || mainTaskId || derivedKey || maint;
+  user[key] = {
+    status,
+    updatedAt: new Date().toISOString(),
+    maint,
+    taskKey: key,
+    taskId: mainTaskId || undefined,
+  };
   all[employeeId] = user;
   writeJsonObject(cfg.taskStatusPath, all);
-  res.json({ ok: true, employeeId, maint, status, statuses: user });
+  res.json({ ok: true, employeeId, maint, taskKey: key, status, statuses: user });
+});
+
+app.post("/api/task-edit-request", (req, res, next) => {
+  const employeeId = String((req.body && req.body.employeeId) || "").trim();
+  const maint = normalizeMaint(req.body && req.body.maint);
+  const reason = String((req.body && req.body.reason) || "").trim();
+  const taskId = String((req.body && req.body.taskId) || "").trim();
+
+  if (!employeeId) {
+    return res.status(400).json({ ok: false, error: "employee_id_required" });
+  }
+  if (!maint) {
+    return res.status(400).json({ ok: false, error: "maint_invalid" });
+  }
+  if (!reason) {
+    return res.status(400).json({ ok: false, error: "reason_required" });
+  }
+  if (reason.length > 2000) {
+    return res.status(400).json({ ok: false, error: "reason_too_long" });
+  }
+
+  const requestId = `editreq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const payload = {
+    type: "task_edit_request",
+    requestId,
+    at: new Date().toISOString(),
+    employeeId,
+    maint,
+    taskId,
+    reason,
+  };
+
+  appendJsonLine(cfg.taskEditRequestPath, payload, (err) => {
+    if (err) return next(err);
+    res.json({ ok: true, requestId });
+  });
 });
 
 app.get("/api/manager/dashboard", (req, res) => {

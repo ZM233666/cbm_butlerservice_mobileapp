@@ -4,6 +4,7 @@ export interface TaskCard {
   title: string
   meta: string
   deadline: string
+  taskId?: string
 }
 
 export interface TaskSummaryMaint {

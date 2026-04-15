@@ -6,7 +6,8 @@ function normalizeTaskCard(item) {
   const meta = String(item.meta || "").trim() || "CCBII · Maintenance";
   const deadline = String(item.deadline || "").trim() || "";
   const href = String(item.href || "").trim() || `/task-list.html?maint=${maint}`;
-  return { maint, title, meta, deadline, href };
+  const taskId = String(item.taskId || "").trim();
+  return { maint, title, meta, deadline, href, taskId: taskId || undefined };
 }
 
 function buildHomeConfig(raw) {

@@ -10,6 +10,7 @@ const i18nMap = {
     colSeq: '序号', colDesc: '操作说明', colUpload: '上传图片',
     save: '保存', submit: '提交', saved: '已保存草稿', submitted: '已提交',
     savedToDoing: '已保存，任务状态已更新为 Doing',
+    savedToTodo: '已保存，任务状态已更新为 To Do',
     submitNeedAllUploads: '请先完成本任务全部图片上传后再提交',
     submitReady: '全部图片已上传，可提交',
     submitPendingPrefix: '还需上传图片：',
@@ -17,6 +18,8 @@ const i18nMap = {
     issueDialogTitle: '上报问题', issueDialogHelp: '请输入拍照和检查过程中遇到的问题。',
     issuePlaceholder: '请描述问题现象、位置和处理建议',
     issueSave: '保存', issueCancel: '取消', issueSaved: '问题已保存', issueCleared: '问题已清除',
+    editRequestBtn: '编辑申请',
+    editRequestSent: '编辑申请已提交',
     issueNotePrefix: '已上报：', schematicTitle: '位置示意图', zoomReset: '重置', close: '关闭',
     filterHint: '依据 GL-CN-FS-020-BRAKE-004《作业指导书》',
     maintC1C3: 'C1～C3', maintC4C6: 'C4～C6',
@@ -33,6 +36,7 @@ const i18nMap = {
     statsProjectPrefix: '项目',
     statsPhotoPrefix: '照片',
     deadlineExpired: '已过期',
+    deadlineCompletedLate: '过期完成',
     deadlineDaysLeft: '剩{n}天',
 
     // Home: CBM recommendations
@@ -168,6 +172,7 @@ const i18nMap = {
     colSeq: 'No.', colDesc: 'Instructions', colUpload: 'Upload',
     save: 'Save', submit: 'Submit', saved: 'Draft saved', submitted: 'Submitted',
     savedToDoing: 'Saved. Task status moved to Doing',
+    savedToTodo: 'Saved. Task status moved to To Do',
     submitNeedAllUploads: 'Upload all required photos before submitting',
     submitReady: 'All required photos uploaded. Ready to submit',
     submitPendingPrefix: 'Photos remaining: ',
@@ -175,6 +180,8 @@ const i18nMap = {
     issueDialogTitle: 'Report Issue', issueDialogHelp: 'Describe issues found during photo taking and inspection.',
     issuePlaceholder: 'Describe symptom, location and suggestion',
     issueSave: 'Save', issueCancel: 'Cancel', issueSaved: 'Issue saved', issueCleared: 'Issue cleared',
+    editRequestBtn: 'Edit Request',
+    editRequestSent: 'Edit request submitted',
     issueNotePrefix: 'Reported: ', schematicTitle: 'Schematic', zoomReset: 'Reset', close: 'Close',
     filterHint: 'Tasks follow the work instruction and current Maintenance Type. Basic info is read-only.',
     maintC1C3: 'C1–C3', maintC4C6: 'C4–C6',
@@ -191,6 +198,7 @@ const i18nMap = {
     statsProjectPrefix: 'Items',
     statsPhotoPrefix: 'Photos',
     deadlineExpired: 'Expired',
+    deadlineCompletedLate: 'Completed Late',
     deadlineDaysLeft: '{n}d left',
 
     // Home: CBM recommendations

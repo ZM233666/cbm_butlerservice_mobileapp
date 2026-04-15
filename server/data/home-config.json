@@ -5,6 +5,7 @@
       "title": "C4/C6",
       "meta": "CCBII · Maintenance",
       "deadline": "2026-04-30",
+      "taskId": "MT-CCBII-88421",
       "href": "/task-list.html?maint=c4c6"
     },
     {
@@ -12,6 +13,7 @@
       "title": "C1/C3 临期示例",
       "meta": "CCBII · Maintenance",
       "deadline": "2026-04-10",
+      "taskId": "MT-CCBII-88422",
       "href": "/task-list.html?maint=c1c3"
     },
     {
@@ -19,6 +21,7 @@
       "title": "C4/C6 过期示例",
       "meta": "CCBII · Maintenance",
       "deadline": "2026-04-05",
+      "taskId": "MT-CCBII-88423",
       "href": "/task-list.html?maint=c4c6"
     },
     {
@@ -26,6 +29,7 @@
       "title": "C1/C3 补充任务",
       "meta": "CCBII · Maintenance",
       "deadline": "2026-04-22",
+      "taskId": "MT-CCBII-88424",
       "href": "/task-list?maint=c1c3"
     }
   ]

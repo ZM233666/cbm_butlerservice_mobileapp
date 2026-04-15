@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="theme-color" content="#00467F" />
+    <title>登录 · Knorr-Bremse CBM</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="login-page">
+    <div class="page">
+      <main class="login-main">
+        <section class="login-card" aria-label="登录">
+          <h1 class="login-title">Digital CBM 登录</h1>
+          <p class="login-subtitle">请输入用户信息并选择角色后进入系统</p>
+
+          <form id="login-form" class="login-form">
+            <div class="login-field">
+              <label for="login-username">用户名</label>
+              <input id="login-username" class="login-input" name="username" type="text" autocomplete="name" required />
+            </div>
+            <div class="login-field">
+              <label for="login-employee-id">工号</label>
+              <input id="login-employee-id" class="login-input" name="employeeId" type="text" autocomplete="off" required />
+            </div>
+            <div class="login-field">
+              <label for="login-email">邮箱</label>
+              <input id="login-email" class="login-input" name="email" type="email" autocomplete="email" required />
+            </div>
+            <div class="login-field">
+              <label for="login-role">角色</label>
+              <select id="login-role" class="login-input" name="role" required>
+                <option value="">请选择角色</option>
+                <option value="fse">FSE</option>
+                <option value="manager">大区经理</option>
+                <option value="third_party">第三方</option>
+              </select>
+            </div>
+            <button type="submit" class="login-submit">登录</button>
+            <p id="login-error" class="login-error" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+      </main>
+      <p class="site-copyright">© 2026 Knorr-Bremse. 版权所有</p>
+    </div>
+
+    <script src="/auth.js"></script>
+    <script src="/login.js"></script>
+  </body>
+</html>

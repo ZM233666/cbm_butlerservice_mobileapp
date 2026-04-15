@@ -1,0 +1,280 @@
+{
+  "source": "GL-CN-FS-020-BRAKE-004 机车管家式服务要求和标准 v03 — 作业指导书",
+  "rows": [
+    {
+      "id": "r1",
+      "seq": "1",
+      "description": "机车号照片：拍照并存入系统附件",
+      "scopeTags": ["all"],
+      "buttons": [{ "slot": "r1-LOCO", "label": "LOCO Number" }]
+    },
+    {
+      "id": "r2",
+      "seq": "2",
+      "description": "BCM 铭牌：拍照并存入系统附件",
+      "scopeTags": ["c4c6"],
+      "buttons": [{ "slot": "r2-BCM-SN", "label": "BCM SN" }]
+    },
+    {
+      "id": "r3",
+      "seq": "3",
+      "description": "IPM 部件号/序列号照片：拍照并存入系统附件。注：此处的 IPM SN 为西屋公司的序列号（非 KB 的 SN）",
+      "scopeTags": ["all"],
+      "buttons": [
+        { "slot": "r3-IPM-PN", "label": "IPM PN" },
+        { "slot": "r3-IPM-SN", "label": "IPM SN" }
+      ]
+    },
+    {
+      "id": "r3-1",
+      "seq": "3.1",
+      "description": "对 C4/C5/C6 后回段首次的管家式服务，要对 IPM 所有插座内部插针进行一次目测检查并拍照存入系统附件，同时确认客户是否将 J7/J8 拧紧。",
+      "scopeTags": ["c4c6"],
+      "buttons": [{ "slot": "r3-1-IPM-SOCKET2", "label": "IPM SOCKET" }]
+    },
+    {
+      "id": "r3-2",
+      "seq": "3.2",
+      "description": "对 C4/C5/C6 后回段首次的管家式服务，J6 插头需要目测检查，拍照存入系统附件（为区分 IPM J6 照片命名，此处命名为 IPM J6C）",
+      "scopeTags": ["c4c6"],
+      "buttons": [{ "slot": "r3-2-IPM-J6C", "label": "IPM J6C" }]
+    },
+    {
+      "id": "r3-3",
+      "seq": "3.3",
+      "description": "检查完毕后将 J1/J4/J5/J6 插头恢复正常拍照存入系统附件。备注：照片中航空插头的定位销需清晰可见",
+      "scopeTags": ["c4c6"],
+      "buttons": [
+        { "slot": "r3-3-J1", "label": "IPM J1" },
+        { "slot": "r3-3-J4", "label": "IPM J4" },
+        { "slot": "r3-3-J5", "label": "IPM J5" },
+        { "slot": "r3-3-J6", "label": "IPM J6" }
+      ]
+    },
+    {
+      "id": "r3-4",
+      "seq": "3.4",
+      "description": "对 C1/C2/C3 检查时也需要对上述插头的紧固状态进行检查（照片可自己本地保存）。",
+      "scopeTags": ["c1c3"],
+      "buttons": []
+    },
+    {
+      "id": "r4",
+      "seq": "4",
+      "description": "BCM 外观状态：BCM 的 HARTING SOCKET 必须检查螺栓有无拧紧并拍照存入系统附件。备注：包括底部的 3 颗螺栓同样需要用手探知是否有松动。",
+      "scopeTags": ["all"],
+      "buttons": [{ "slot": "r4-BCM-PLUG", "label": "BCM PLUG" }]
+    },
+    {
+      "id": "r5",
+      "seq": "5",
+      "description": "LRU 航空插头：检查 EPCU 各个 LRU 上的航空插头卡扣是否已经拧到位。用手轻轻逆时针方向转动插头，看是否有明显的阻力，如果发现有松动，则需要打开检查，此时可能 O 型圈已丢失，需要及时装上新的 O 型圈（PN：779390）。如果发现插头里已经有 O 型圈，但仍然松动，则需要在管家式服务中做记录，并联系客户对松动的插头进行处理。如部分客户已经对插头进行了绝缘胶带捆绑，则做记录并需要确认已经拧紧即可。需要将 J103 状态拍照存入系统附件。备注：照片中航空插头的定位销需清晰可见",
+      "scopeTags": ["all"],
+      "buttons": [{ "slot": "r5-J103", "label": "J103" }]
+    },
+    {
+      "id": "r5-1",
+      "seq": "5.1",
+      "description": "对 C4/C5/C6 后回段首次的管家式服务，要求对 PSJB 所有插头内部插针进行检查（C6 回段机车有发生了多起插针歪斜导致故障，EBVA/B 插头未紧到卡扣位置，有脱落风险）拍照存入系统附件。完成检查后需将所有插头、插座紧固到位。",
+      "scopeTags": ["c4c6"],
+      "buttons": [
+        { "slot": "r5-1-J100A", "label": "J100A" },
+        { "slot": "r5-1-J100B", "label": "J100B" },
+        { "slot": "r5-1-J101", "label": "J101" },
+        { "slot": "r5-1-J102", "label": "J102" }
+      ]
+    },
+    {
+      "id": "r6",
+      "seq": "6",
+      "description": "RIM / E-BOX：RIM / E-Box 箱子的检查，需拍摄铭牌信息存入系统附件。",
+      "scopeTags": ["c4c6"],
+      "buttons": [
+        { "slot": "r6-RIM-SN", "label": "RIM SN" },
+        { "slot": "r6-EBOX-SN", "label": "EBOX SN" }
+      ]
+    },
+    {
+      "id": "r6-1",
+      "seq": "6.1",
+      "description": "E-Box 继电器：仔细检查继电器的底座是否紧固，继电器与底座是否连接正常，继电器的各线是否卡在了端子槽内。J4/跳线是否老化，个别车型继电器座跳线可能需要联系项目进行更换。同时也需要留意 RIM 端子排内的各线束是有接磨风险。需要将所有继电器状态及端子排拍照并存入系统附件",
+      "scopeTags": ["all"],
+      "buttons": [
+        { "slot": "r6-1-RIM1", "label": "RIM1" },
+        { "slot": "r6-1-RIM2", "label": "RIM2" },
+        { "slot": "r6-1-RIM3", "label": "RIM3" },
+        { "slot": "r6-1-RIM4", "label": "RIM4" }
+      ]
+    },
+    {
+      "id": "r7",
+      "seq": "7",
+      "description": "HDLC：需要检查接线盒的插座与线缆头的航空插头卡扣是否到位，拍照并存入系统附件。备注：照片中航空插头的定位销需清晰可见",
+      "scopeTags": ["all"],
+      "buttons": [
+        { "slot": "r7-HDLC1", "label": "HDLC1" },
+        { "slot": "r7-HDLC2", "label": "HDLC2" }
+      ]
+    },
+    {
+      "id": "r8",
+      "seq": "8",
+      "description": "EBV：对 C4/C5/C6 后回段首次的管家式服务要求：接地线状态进行确认，检查 EBVA/B 插座内部插针状态，拍照并存入系统附件",
+      "scopeTags": ["c4c6"],
+      "buttons": [
+        { "slot": "r8-EBVA-SK", "label": "EBVA SOCKET" },
+        { "slot": "r8-EBVB-SK", "label": "EBVB SOCKET" }
+      ]
+    },
+    {
+      "id": "r8-1",
+      "seq": "8.1",
+      "description": "检查 EBV 大小闸手柄各位置定位准确，推动过程中无过大阻力；EBV 航空插头卡扣是否到位，需要拍照并存入系统附件。备注：照片中航空插头的定位销需清晰可见",
+      "scopeTags": ["all"],
+      "buttons": [
+        { "slot": "r8-1-EBVA-PL", "label": "EBVA PLUG" },
+        { "slot": "r8-1-EBVB-PL", "label": "EBVB PLUG" }
+      ]
+    },
+    {
+      "id": "r8-2",
+      "seq": "8.2",
+      "description": "EBV 21 号阀相关管路连接，NB11 相关管路的连接需要检查（C1～C3 仅检查状态，C4～C6 检查拍照并存入系统附件）",
+      "scopeTags": ["c4c6"],
+      "buttons": [
+        { "slot": "r8-2-EBVA-PIPE", "label": "EBVA PIPE" },
+        { "slot": "r8-2-EBVB-PIPE", "label": "EBVB PIPE" },
+        { "slot": "r8-2-NB11-A", "label": "NB11 CABA" },
+        { "slot": "r8-2-NB11-B", "label": "NB11 CABB" }
+      ]
+    },
+    {
+      "id": "r9",
+      "seq": "9",
+      "description": "LCDM：对 C4/C5/C6 后回段首次的管家式服务要求：LCDM 需要检查通讯线缆和电源线是否卡扣到位并记录 LCDM 序列号。备注：照片中航空插头的定位销需清晰可见",
+      "scopeTags": ["c4c6"],
+      "buttons": [
+        { "slot": "r9-LCDMA-PL", "label": "LCDMA PLUG" },
+        { "slot": "r9-LCDMB-PL", "label": "LCDMB PLUG" },
+        { "slot": "r9-LCDMA-SN", "label": "LCDMA SN" },
+        { "slot": "r9-LCDMB-SN", "label": "LCDMB SN" }
+      ]
+    },
+    {
+      "id": "r9-1",
+      "seq": "9.1",
+      "description": "检查 LCDM 外观无损坏，屏幕显示正常，无花/白/黑屏或亮线，各按钮功能正常；LCDM 软件版本需要确认：货运机车 4.19；160KM 车型为 1.4。拍照并存入系统附件",
+      "scopeTags": ["all"],
+      "buttons": [
+        { "slot": "r9-1-LCDMA-SW", "label": "LCDMA SW" },
+        { "slot": "r9-1-LCDMB-SW", "label": "LCDMB SW" }
+      ]
+    },
+    {
+      "id": "r10",
+      "seq": "10",
+      "description": "EPCU 节点：需要通过 PTU 扫描节点，截图并存入系统附件",
+      "scopeTags": ["all"],
+      "buttons": [{ "slot": "r10-EPCU-SW", "label": "EPCU SW" }]
+    },
+    {
+      "id": "r11",
+      "seq": "11",
+      "description": "WSP：WSP 防滑器需要确认 MB04B LED 状态显示「9999」拍照并存入系统附件",
+      "scopeTags": ["c4c6"],
+      "buttons": [{ "slot": "r11-MB04B", "label": "MB04B MMI" }]
+    },
+    {
+      "id": "r11-1",
+      "seq": "11.1",
+      "description": "对 C4/C5/C6 后回段首次的管家式服务，需运行自检；对 WSP 机箱序列号拍照并存入系统附件",
+      "scopeTags": ["c4c6"],
+      "buttons": [{ "slot": "r11-1-WSP-SN", "label": "WSP SN" }]
+    },
+    {
+      "id": "r12",
+      "seq": "12",
+      "description": "EPCU 总风滤芯：需要检查是否能正常排水。（之前有发现客户长期不排水导致模块油污严重）拍照并存入系统附件",
+      "scopeTags": ["all"],
+      "buttons": [{ "slot": "r12-subtask", "label": "Subtask 12" }]
+    },
+    {
+      "id": "r13",
+      "seq": "13",
+      "description": "断钩保护开关：检查断钩保护开关的插头是否正常拧紧，确认安装面是否有泄露。拍照并存入系统附件",
+      "scopeTags": ["all"],
+      "buttons": [{ "slot": "r13-A71", "label": "A71" }]
+    },
+    {
+      "id": "r14",
+      "seq": "14",
+      "description": "U99：对 C4/C5/C6 后回段首次进行的管家式服务要求检查 U99 插头是否拧紧。拍照并存入系统附件",
+      "scopeTags": ["c4c6"],
+      "buttons": [{ "slot": "r14-subtask", "label": "Subtask 14" }]
+    },
+    {
+      "id": "r15",
+      "seq": "15",
+      "description": "辅助模块：检查所有辅助模块开关的插头状态，拍照并存入系统附件",
+      "scopeTags": ["all"],
+      "buttons": [{ "slot": "r15-AUX2", "label": "AUX" }]
+    },
+    {
+      "id": "r16",
+      "seq": "16",
+      "description": "制动机启机后检查：检查 IPM，EPCU 各指示灯状态正常；换端及各操作模式切换功能正常。备注：正常情况下，系统将在 2 分钟内完成启动",
+      "scopeTags": ["all"],
+      "buttons": []
+    },
+    {
+      "id": "r17",
+      "seq": "17",
+      "description": "将 EVENT LOGS 和相应图片上传 FSM 系统附件。具体见下。",
+      "scopeTags": ["all"],
+      "buttons": []
+    },
+    {
+      "id": "r17-1",
+      "seq": "17.1",
+      "description": "将下载的 EAB、EPCU 及 EBV 等所有日志生成压缩文件。命名示例：机车号_EVENTLOGS_日期（例：HXD3D8026_EVENTLOGS_20250918）",
+      "scopeTags": ["all"],
+      "buttons": [],
+      "uploadHint": "机车号_EVENTLOGS_日期"
+    },
+    {
+      "id": "r17-2",
+      "seq": "17.2",
+      "description": "在电脑上打开 SAP FSM WINDOWS 版本，并找到对应 Service Call 下的 Assignment。",
+      "scopeTags": ["all"],
+      "buttons": []
+    },
+    {
+      "id": "r17-3",
+      "seq": "17.3",
+      "description": "进入 Assignment 后，点击 Attach new file / Pick file from the library。",
+      "scopeTags": ["all"],
+      "buttons": []
+    },
+    {
+      "id": "r17-4",
+      "seq": "17.4",
+      "description": "在弹出界面找到保存文件的文件夹，选中所有需要上传的文件，点击打开/Save。",
+      "scopeTags": ["all"],
+      "buttons": []
+    },
+    {
+      "id": "r17-5",
+      "seq": "17.5",
+      "description": "检查确认所有必要的文件/图片/日志都已经上传。",
+      "scopeTags": ["all"],
+      "buttons": []
+    },
+    {
+      "id": "r17-6",
+      "seq": "17.6",
+      "description": "点击右上角同步按钮，完成服务器数据同步。",
+      "scopeTags": ["all"],
+      "buttons": []
+    }
+  ]
+}

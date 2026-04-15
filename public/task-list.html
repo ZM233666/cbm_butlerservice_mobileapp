@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="theme-color" content="#00467F" />
+    <title>Task List — Digital CBM</title>
+    <link rel="stylesheet" href="/task-list.css" />
+  </head>
+  <body class="tl-page">
+    <div class="tl-wrap">
+      <header class="tl-topbar">
+        <a class="tl-back" href="/index.html" id="tl-back">← 返回</a>
+        <h1 class="tl-title" id="tl-page-title">Task List</h1>
+        <button type="button" class="tl-lang" id="tl-lang" aria-label="切换语言">CN/EN</button>
+      </header>
+
+      <main class="tl-main">
+        <section class="tl-card" aria-labelledby="basic-info-title">
+          <h2 class="tl-card__head" id="basic-info-title">Basic Info</h2>
+          <dl class="tl-basic">
+            <div class="tl-basic__row">
+              <dt data-i18n="depot">Depot</dt>
+              <dd><input type="text" name="depot" id="f-depot" class="tl-readonly" value="Shanghai" readonly tabindex="-1" /></dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="project">Project No.</dt>
+              <dd>
+                <input type="text" name="project" id="f-project" class="tl-readonly" value="PRJ-2026-RVS-01" readonly tabindex="-1" />
+              </dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="train">Train No.</dt>
+              <dd><input type="text" name="train" id="f-train" class="tl-readonly" value="HXD1-1234" readonly tabindex="-1" /></dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="employee">员工工号</dt>
+              <dd><input type="text" name="employeeId" id="f-employee-id" class="tl-readonly" value="" readonly tabindex="-1" /></dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="maint">Maintenance Type</dt>
+              <dd>
+                <input type="hidden" id="f-maint-type" name="maintType" value="c4c6" />
+                <input type="text" id="f-maint-type-label" class="tl-readonly" value="C4～C6" readonly tabindex="-1" />
+              </dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="taskid">Main Task ID</dt>
+              <dd>
+                <input type="text" name="taskId" id="f-task-id" class="tl-readonly" value="MT-CCBII-88421" readonly tabindex="-1" />
+              </dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="deadline">Deadline</dt>
+              <dd>
+                <input type="text" name="deadline" id="f-deadline" class="tl-readonly" value="2026-04-30" readonly tabindex="-1" />
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="tl-card" aria-labelledby="subtask-title">
+          <h2 class="tl-card__head" id="subtask-title">Subtask</h2>
+          <p class="tl-hint" id="tl-filter-hint"></p>
+          <div class="tl-table-wrap">
+            <table class="tl-table">
+              <thead>
+                <tr>
+                  <th data-i18n="col-seq">序号</th>
+                  <th data-i18n="col-desc">操作说明</th>
+                  <th data-i18n="col-upload">上传图片</th>
+                </tr>
+              </thead>
+              <tbody id="guidance-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="tl-actions tl-actions--sticky" style="padding: 0.75rem 0.85rem 1rem">
+            <button type="button" class="tl-btn tl-btn--secondary" id="btn-save">Save</button>
+            <button type="button" class="tl-btn tl-btn--primary" id="btn-submit">Submit</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <p class="tl-copyright">© 2026 Knorr-Bremse. 版权所有</p>
+
+    <dialog class="tl-modal" id="dlg-schematic" aria-labelledby="schematic-title">
+      <div class="tl-modal__inner">
+        <h3 id="schematic-title">位置示意图</h3>
+        <figure class="tl-modal__fig">
+          <img
+            src="https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&q=60&w=640"
+            alt="机车示意图"
+            width="640"
+            height="400"
+            loading="lazy"
+          />
+        </figure>
+        <div class="tl-modal__tools" aria-label="zoom controls">
+          <button type="button" class="tl-modal__tool" id="dlg-zoom-out">-</button>
+          <span class="tl-modal__zoom" id="dlg-zoom-level">100%</span>
+          <button type="button" class="tl-modal__tool" id="dlg-zoom-in">+</button>
+          <button type="button" class="tl-modal__tool tl-modal__tool--ghost" id="dlg-zoom-reset">重置</button>
+        </div>
+        <button type="button" class="tl-modal__close" id="dlg-close">关闭</button>
+      </div>
+    </dialog>
+
+    <dialog class="tl-modal tl-modal--issue" id="dlg-issue" aria-labelledby="issue-title">
+      <div class="tl-modal__inner">
+        <h3 id="issue-title">上报问题</h3>
+        <p class="tl-issue-help" id="issue-help">请输入拍照和检查过程中遇到的问题。</p>
+        <textarea id="issue-text" class="tl-issue-text" placeholder="请描述问题现象、位置和处理建议"></textarea>
+        <div class="tl-issue-actions">
+          <button type="button" class="tl-issue-action tl-issue-action--ghost" id="issue-cancel">取消</button>
+          <button type="button" class="tl-issue-action tl-issue-action--primary" id="issue-save">保存</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="tl-toast" id="tl-toast" role="status" aria-live="polite"></div>
+
+    <script src="/auth.js"></script>
+    <script src="/task-list.js"></script>
+  </body>
+</html>

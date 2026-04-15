@@ -1,0 +1,78 @@
+{
+  "fseMembers": [
+    {
+      "employeeId": "20028289",
+      "name": "Maison Miao",
+      "email": "maison.miao@knorr-bremse.com"
+    },
+    {
+      "employeeId": "20030123",
+      "name": "Liam Chen",
+      "email": "liam.chen@knorr-bremse.com"
+    },
+    {
+      "employeeId": "20035678",
+      "name": "Sophie Wang",
+      "email": "sophie.wang@knorr-bremse.com"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "asg_seed_001",
+      "maint": "c4c6",
+      "vehicleNo": "HXD1-1024",
+      "depot": "上海机务段",
+      "deadline": "2026-04-25",
+      "report": "上海段 C4/C6 制动单元月度检查",
+      "status": "doing",
+      "createdAt": "2026-04-01T08:00:00.000Z",
+      "assignedTo": {
+        "employeeId": "20028289",
+        "name": "Maison Miao",
+        "email": "maison.miao@knorr-bremse.com"
+      },
+      "createdBy": {
+        "employeeId": "30000001",
+        "name": "华东大区经理"
+      }
+    },
+    {
+      "id": "asg_seed_002",
+      "maint": "c1c3",
+      "vehicleNo": "HXD3-2308",
+      "depot": "南京机务段",
+      "deadline": "2026-04-16",
+      "report": "南京段 C1/C3 预防性服务报告",
+      "status": "done",
+      "createdAt": "2026-04-03T09:30:00.000Z",
+      "assignedTo": {
+        "employeeId": "20030123",
+        "name": "Liam Chen",
+        "email": "liam.chen@knorr-bremse.com"
+      },
+      "createdBy": {
+        "employeeId": "30000001",
+        "name": "华东大区经理"
+      }
+    },
+    {
+      "id": "asg_seed_003",
+      "maint": "c4c6",
+      "vehicleNo": "HXD2-7781",
+      "depot": "杭州机务段",
+      "deadline": "2026-04-30",
+      "report": "杭州段 C4/C6 临修服务任务",
+      "status": "todo",
+      "createdAt": "2026-04-05T06:20:00.000Z",
+      "assignedTo": {
+        "employeeId": "20035678",
+        "name": "Sophie Wang",
+        "email": "sophie.wang@knorr-bremse.com"
+      },
+      "createdBy": {
+        "employeeId": "30000001",
+        "name": "华东大区经理"
+      }
+    }
+  ]
+}

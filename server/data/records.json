@@ -1,0 +1,38 @@
+[
+  {
+    "id": "REC-20260324-001",
+    "code": "KG-2104",
+    "taskSeq": "8.1",
+    "trainNo": "HXD1-1234",
+    "maintType": "C4/C6",
+    "date": "2026-03-24 09:32",
+    "desc": "EBVA SOCKET 插针歪斜，重新紧固后恢复正常。"
+  },
+  {
+    "id": "REC-20260323-014",
+    "code": "NB11-CABA",
+    "taskSeq": "8.2",
+    "trainNo": "HXD1-1261",
+    "maintType": "C1/C3",
+    "date": "2026-03-23 15:10",
+    "desc": "NB11 CABA 管路接头有轻微渗漏，现场复核后已处理。"
+  },
+  {
+    "id": "REC-20260322-008",
+    "code": "LCDM-PLUG",
+    "taskSeq": "9",
+    "trainNo": "HXD1-1198",
+    "maintType": "C4/C6",
+    "date": "2026-03-22 08:41",
+    "desc": "LCDM 通讯线卡扣未完全到位，调整后拍照留档。"
+  },
+  {
+    "id": "REC-20260321-006",
+    "code": "WSP-SN",
+    "taskSeq": "11.1",
+    "trainNo": "HXD1-1132",
+    "maintType": "C4/C6",
+    "date": "2026-03-21 11:56",
+    "desc": "WSP 自检通过，序列号采集并上传完成。"
+  }
+]

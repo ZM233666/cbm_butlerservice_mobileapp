@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="theme-color" content="#00467F" />
+    <title>我的 · Knorr-Bremse Digital CBM</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page page--my">
+      <header class="top-brand-bar" aria-label="品牌栏">
+        <div class="top-brand-bar__left">
+          <img
+            class="top-brand-bar__logo"
+            src="/RVSChinaDT_Logo.png"
+            width="180"
+            height="40"
+            alt="RVS-CHINA DIGITAL TEAM"
+            decoding="async"
+          />
+          <span class="top-brand-bar__title">Knorr-Bremse CBM</span>
+        </div>
+      </header>
+      <header class="my-header">
+        <div class="my-header__avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="40" height="40" fill="none">
+            <circle cx="12" cy="9" r="3.5" fill="currentColor" />
+            <path
+              fill="currentColor"
+              d="M6 20.5c0-3.3 2.7-6 6-6s6 2.7 6 6"
+              opacity="0.95"
+            />
+          </svg>
+        </div>
+        <div class="my-header__meta">
+          <p class="my-header__name" id="field-username">M</p>
+          <p class="my-header__line">KB Email: <span id="field-email">Maison.Miao@knorr-bremse.com</span></p>
+          <p class="my-header__line">Employee ID: <span id="field-employee-id">20028289</span></p>
+          <p class="my-header__line">Role: <span id="field-role">FSE</span></p>
+        </div>
+      </header>
+
+      <main class="main main--my">
+        <section class="my-info-card" aria-labelledby="my-info-heading">
+          <h2 id="my-info-heading" class="my-info-card__title">Other information</h2>
+          <button type="button" class="my-info-row my-info-row--action" id="my-link-about">
+            <span class="my-info-row__icon my-info-row__icon--info" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22">
+                <circle cx="12" cy="12" r="10" fill="var(--kb-brand)" />
+                <path
+                  fill="#fff"
+                  d="M12 7.25a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Zm-1 4.5h2v6h-2v-6Z"
+                />
+              </svg>
+            </span>
+            <span class="my-info-row__text">
+              <span class="my-info-row__title">About us</span>
+              <span class="my-info-row__sub">Learn about the device health monitoring</span>
+            </span>
+          </button>
+          <button type="button" class="my-info-row my-info-row--action" id="my-link-support">
+            <span class="my-info-row__icon my-info-row__icon--phone" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--kb-brand)" stroke-width="1.75">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+                />
+              </svg>
+            </span>
+            <span class="my-info-row__text">
+              <span class="my-info-row__title">Contact customer service</span>
+              <span class="my-info-row__sub">Get help and support</span>
+            </span>
+          </button>
+        </section>
+
+        <button type="button" class="my-logout" id="btn-logout" aria-label="Log out">
+          <svg
+            class="my-logout__icon"
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span>Log out</span>
+        </button>
+      </main>
+    </div>
+
+    <dialog class="my-dialog" id="dlg-about" aria-labelledby="dlg-about-title">
+      <h3 id="dlg-about-title" class="my-dialog__title">About Us</h3>
+      <p class="my-dialog__body">
+        Knorr-Bremse RVS China Digital Team<br />
+        Digital CBM Mobile app v1.0.0
+      </p>
+      <button type="button" class="my-dialog__ok" data-close-dialog>OK</button>
+    </dialog>
+
+    <dialog class="my-dialog" id="dlg-contact" aria-labelledby="dlg-contact-title">
+      <h3 id="dlg-contact-title" class="my-dialog__title">Contact Support</h3>
+      <p class="my-dialog__body my-dialog__body--muted">
+        Knorr-Bremse RVS China Digital<br />
+        Team Please contact us via<br />
+        Knorr-Bremse email
+      </p>
+      <button type="button" class="my-dialog__ok" data-close-dialog>OK</button>
+    </dialog>
+
+    <p class="site-copyright">© 2026 Knorr-Bremse. 版权所有</p>
+
+    <nav class="bottom-nav" aria-label="主导航">
+      <a href="/" class="bottom-nav__item">
+        <svg class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" stroke="none" d="M12 4L4 10.5h16L12 4z" />
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.65"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M5 10.5V20h4v-6h6v6h4V10.5"
+          />
+        </svg>
+        <span>首页</span>
+      </a>
+      <a href="/records.html" class="bottom-nav__item">
+        <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            stroke="currentColor"
+            stroke-width="1.65"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 10.5V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-9"
+          />
+          <path
+            stroke="currentColor"
+            stroke-width="1.65"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 10.5V8a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v.5"
+          />
+          <ellipse cx="6.25" cy="18.6" rx="2" ry="1.15" stroke="currentColor" stroke-width="1.65" fill="none" />
+          <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" d="M4.25 18.6v-2.5M8.25 18.6v-2.5" />
+        </svg>
+        <span>维修记录查询</span>
+      </a>
+      <a href="/my.html" class="bottom-nav__item is-active" aria-current="page">
+        <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="9" r="3.25" stroke="currentColor" stroke-width="1.65" />
+          <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" d="M5 20.25a7.2 7.2 0 0 1 14 0" />
+        </svg>
+        <span>我的</span>
+      </a>
+    </nav>
+    <script src="/auth.js"></script>
+    <script>
+      (function () {
+        var auth = window.ButlerAuth;
+        if (auth) {
+          var user = auth.requireAuth({ redirectTo: "/login.html" });
+          if (!user) return;
+          if (!auth.enforcePageAccess(user)) return;
+          auth.applyUserToDom(user);
+
+          document.querySelectorAll(".bottom-nav__item[href]").forEach(function (link) {
+            var href = link.getAttribute("href") || "";
+            if (!auth.canAccessPage || auth.canAccessPage(user.role, href)) return;
+            link.hidden = true;
+          });
+
+          document.getElementById("btn-logout")?.addEventListener("click", function () {
+            auth.clearUser();
+            window.location.replace("/login.html");
+          });
+        }
+        var about = document.getElementById("dlg-about");
+        var contact = document.getElementById("dlg-contact");
+        document.getElementById("my-link-about")?.addEventListener("click", function () {
+          about?.showModal();
+        });
+        document.getElementById("my-link-support")?.addEventListener("click", function () {
+          contact?.showModal();
+        });
+        document.querySelectorAll("[data-close-dialog]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            btn.closest("dialog")?.close();
+          });
+        });
+        [about, contact].forEach(function (dlg) {
+          if (!dlg) return;
+          dlg.addEventListener("click", function (e) {
+            if (e.target === dlg) dlg.close();
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

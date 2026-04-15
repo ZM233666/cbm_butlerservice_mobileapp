@@ -1,0 +1,22 @@
+:root {
+  --kb-brand: #00467f;
+  --kb-navy: #033e70;
+  --kb-navy-soft: #0066b3;
+  --page-bg: #f3f7fc;
+  --zinc-200: #e4e4e7;
+  --zinc-500: #71717a;
+  --card-bg: #ffffff;
+  --card-border: var(--zinc-200);
+  --tasks-bg: #00467f;
+  --tasks-card: #e0e0e0;
+  --event-card-bg: #4e8fdb;
+  --event-card-bg-active: #3e7ec8;
+  --tasks-card-active-border: rgba(255, 255, 255, 0.95);
+  --text-muted: #9aa3b2;
+  --column-max: 28rem;
+  --ui-btn-h: 3rem;
+  --ui-btn-radius: 10px;
+  --bottom-nav-h: 3.5rem;
+  --bottom-nav-ink: #18181b;
+  --bottom-nav-muted: #71717a;
+}

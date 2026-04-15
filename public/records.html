@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="theme-color" content="#00467F" />
+    <title>维修记录查询 · Knorr-Bremse Digital CBM</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="records-page">
+    <div class="page">
+      <header class="top-brand-bar" aria-label="品牌栏">
+        <div class="top-brand-bar__left">
+          <img
+            class="top-brand-bar__logo"
+            src="/RVSChinaDT_Logo.png"
+            width="180"
+            height="40"
+            alt="RVS-CHINA DIGITAL TEAM"
+            decoding="async"
+          />
+          <span class="top-brand-bar__title">Knorr-Bremse CBM</span>
+        </div>
+      </header>
+      <main class="main main--records">
+        <section class="records-card" aria-label="维修记录查询">
+          <div class="records-head">
+            <h1 class="records-head__title">Fault Searching</h1>
+          </div>
+
+          <form class="records-search" id="records-search-form">
+            <label class="sr-only" for="records-query-input">请输入需要查询的故障码、任务号或关键词</label>
+            <input
+              id="records-query-input"
+              class="records-search__input"
+              type="text"
+              placeholder="请输入需要查询的故障码"
+              autocomplete="off"
+            />
+            <button type="submit" class="records-search__btn">查询</button>
+          </form>
+
+          <section class="records-result" aria-live="polite" aria-label="查询结果">
+            <h2 class="sr-only">查询结果展示</h2>
+            <p class="records-result__placeholder" id="records-placeholder">查询结果展示</p>
+            <ul class="records-result__list" id="records-result-list" hidden></ul>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <p class="site-copyright">© 2026 Knorr-Bremse. 版权所有</p>
+
+    <nav class="bottom-nav" aria-label="主导航">
+      <a href="/" class="bottom-nav__item">
+        <svg class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" stroke="none" d="M12 4L4 10.5h16L12 4z" />
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.65"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M5 10.5V20h4v-6h6v6h4V10.5"
+          />
+        </svg>
+        <span>首页</span>
+      </a>
+      <a href="/records.html" class="bottom-nav__item is-active" aria-current="page">
+        <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            stroke="currentColor"
+            stroke-width="1.65"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 10.5V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-9"
+          />
+          <path
+            stroke="currentColor"
+            stroke-width="1.65"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 10.5V8a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v.5"
+          />
+          <ellipse cx="6.25" cy="18.6" rx="2" ry="1.15" stroke="currentColor" stroke-width="1.65" fill="none" />
+          <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" d="M4.25 18.6v-2.5M8.25 18.6v-2.5" />
+        </svg>
+        <span>维修记录查询</span>
+      </a>
+      <a href="/my.html" class="bottom-nav__item">
+        <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="9" r="3.25" stroke="currentColor" stroke-width="1.65" />
+          <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" d="M5 20.25a7.2 7.2 0 0 1 14 0" />
+        </svg>
+        <span>我的</span>
+      </a>
+    </nav>
+    <script src="/auth.js"></script>
+    <script>
+      (function () {
+        var auth = window.ButlerAuth;
+        if (!auth) return;
+        var user = auth.requireAuth({ redirectTo: "/login.html" });
+        if (!user) return;
+        if (!auth.enforcePageAccess(user)) return;
+        document.querySelectorAll(".bottom-nav__item[href]").forEach(function (link) {
+          var href = link.getAttribute("href") || "";
+          if (!auth.canAccessPage || auth.canAccessPage(user.role, href)) return;
+          link.hidden = true;
+        });
+      })();
+    </script>
+    <script src="/records.js"></script>
+  </body>
+</html>

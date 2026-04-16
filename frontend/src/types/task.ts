@@ -5,6 +5,7 @@ export interface TaskCard {
   meta: string
   deadline: string
   taskId?: string
+  depot?: string
 }
 
 export interface TaskSummaryMaint {
@@ -20,6 +21,7 @@ export interface TaskSummary {
 export interface HomeConfig {
   ok: boolean
   tasks: TaskCard[]
+  recommendations?: TaskCard[]
 }
 
 export interface TaskStatusEntry {

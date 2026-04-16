@@ -63,6 +63,7 @@ const fallbackTaskKey = computed(() => {
 
 const mainTaskId = computed(() => String(route.query.taskId || '').trim() || 'MT-CCBII-88421')
 const effectiveTaskKey = computed(() => mainTaskId.value || taskKey.value || fallbackTaskKey.value)
+const deadlineTextRaw = computed(() => String(route.query.deadline || '2026-04-30').trim())
 const homeRefreshStamp = ref(0)
 const backToHome = computed(() => {
   if (!homeRefreshStamp.value) return '/'
@@ -153,6 +154,8 @@ const incompleteRows = computed(() => {
   })
 })
 const isTaskDone = computed(() => currentTaskStatus.value === 'done')
+const isTaskTodo = computed(() => currentTaskStatus.value === 'todo')
+const isTaskDoing = computed(() => currentTaskStatus.value === 'doing')
 const editRequestBtnText = computed(() => {
   const dict = t.value as Record<string, string>
   return dict.editRequestBtn || (lang.value === 'zh' ? '编辑申请' : 'Edit Request')
@@ -461,6 +464,21 @@ async function onSave() {
   if (ok) homeRefreshStamp.value = Date.now()
 }
 
+async function onAccept() {
+  const ok = await setTaskStatus('doing')
+  if (ok) {
+    currentTaskStatus.value = 'doing'
+    homeRefreshStamp.value = Date.now()
+  }
+  toast(ok ? (t.value as any).acceptedToDoing : t.value.saved)
+}
+
+function onReject() {
+  toast((t.value as any).rejected || (lang.value === 'zh' ? '已拒绝，该任务仍保留在 To Do' : 'Rejected. Task stays in To Do'))
+  homeRefreshStamp.value = Date.now()
+  router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
+}
+
 async function onSubmit() {
   if (!isSubmitReady.value) { submitConfirmOpen.value = true; return }
   try {
@@ -581,7 +599,7 @@ onMounted(async () => {
           <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="auth.user?.employeeId || ''" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.maint }}</dt><dd><input class="tl-readonly" :value="maintType === 'c1c3' ? t.maintC1C3 : t.maintC4C6" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" :value="mainTaskId" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.deadline }}</dt><dd><input class="tl-readonly" value="2026-04-30" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.deadline }}</dt><dd><input class="tl-readonly" :value="deadlineTextRaw" readonly /></dd></div>
         </dl>
       </section>
 
@@ -642,8 +660,14 @@ onMounted(async () => {
             <button type="button" class="tl-btn tl-btn--primary tl-btn--full" @click="onEditRequest">{{ editRequestBtnText }}</button>
           </template>
           <template v-else>
-            <button type="button" class="tl-btn tl-btn--secondary" @click="onSave">{{ t.save }}</button>
-            <button type="button" class="tl-btn tl-btn--primary" @click="onSubmit">{{ t.submit }}</button>
+            <template v-if="isTaskTodo">
+              <button type="button" class="tl-btn tl-btn--secondary" @click="onReject">{{ (t as any).reject || 'Reject' }}</button>
+              <button type="button" class="tl-btn tl-btn--primary" @click="onAccept">{{ (t as any).accept || 'Accept' }}</button>
+            </template>
+            <template v-else-if="isTaskDoing">
+              <button type="button" class="tl-btn tl-btn--secondary" @click="onSave">{{ t.save }}</button>
+              <button type="button" class="tl-btn tl-btn--primary" @click="onSubmit">{{ t.submit }}</button>
+            </template>
           </template>
         </div>
       </section>

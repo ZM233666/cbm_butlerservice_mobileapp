@@ -7,13 +7,21 @@ function normalizeTaskCard(item) {
   const deadline = String(item.deadline || "").trim() || "";
   const href = String(item.href || "").trim() || `/task-list.html?maint=${maint}`;
   const taskId = String(item.taskId || "").trim();
-  return { maint, title, meta, deadline, href, taskId: taskId || undefined };
+  const depot = String(item.depot || "").trim();
+  return { maint, title, meta, deadline, href, taskId: taskId || undefined, depot: depot || undefined };
 }
 
 function buildHomeConfig(raw) {
   const tasks = Array.isArray(raw && raw.tasks) ? raw.tasks : [];
-  const normalized = tasks.map(normalizeTaskCard).filter(Boolean);
-  if (normalized.length > 0) return { tasks: normalized };
+  const recommendations = Array.isArray(raw && raw.recommendations) ? raw.recommendations : [];
+  const normalizedTasks = tasks.map(normalizeTaskCard).filter(Boolean);
+  const normalizedRecs = recommendations.map(normalizeTaskCard).filter(Boolean);
+  if (normalizedTasks.length > 0 || normalizedRecs.length > 0) {
+    const out = {};
+    if (normalizedTasks.length > 0) out.tasks = normalizedTasks;
+    if (normalizedRecs.length > 0) out.recommendations = normalizedRecs;
+    return out;
+  }
   return {
     tasks: [
       {

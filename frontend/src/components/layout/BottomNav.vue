@@ -112,8 +112,14 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
 }
 
 .bottom-nav__item.is-active {
-  color: var(--kb-brand, #00467f);
-  background: rgba(0, 70, 127, 0.1);
+  /* 更高对比度：户外强光下更易辨识 */
+  color: #00345e;
+  background: rgba(0, 70, 127, 0.16);
+  border: 1px solid rgba(0, 70, 127, 0.22);
+  box-shadow:
+    0 6px 14px rgba(0, 70, 127, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  font-weight: 750;
 }
 
 .bottom-nav__icon {
@@ -121,11 +127,12 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
   width: 26px;
   height: 26px;
   flex-shrink: 0;
-  color: var(--bottom-nav-ink, #18181b);
+  /* 默认图标跟随文字颜色，选中态对比度更统一 */
+  color: currentColor;
 }
 
 .bottom-nav__item.is-active .bottom-nav__icon {
-  color: var(--kb-brand, #00467f);
+  color: #00345e;
 }
 
 .bottom-nav__item span {

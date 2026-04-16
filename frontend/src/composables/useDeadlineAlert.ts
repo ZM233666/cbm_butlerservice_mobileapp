@@ -14,13 +14,14 @@ export type AlertLevel = 'urgent' | 'expired' | null
 export function deadlineAlertLevel(days: number | null, status: string): AlertLevel {
   if (status === 'done' || days == null) return null
   if (days < 0) return 'expired'
-  if (days <= 3) return 'urgent'
+  // 需求：临近截止一周（含 7 天）提示紧急
+  if (days <= 7) return 'urgent'
   return null
 }
 
 export function deadlineAlertText(days: number | null, status: string): string {
   if (status === 'done' || days == null) return ''
   if (days < 0) return '已过期'
-  if (days <= 3) return `剩${days}天`
+  if (days <= 7) return `剩${days}天`
   return ''
 }

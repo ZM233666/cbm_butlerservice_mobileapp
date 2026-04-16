@@ -26,6 +26,7 @@ const copy = computed(() => {
       rolePlaceholder: 'Select a role',
       roleFse: 'FSE',
       roleManager: 'Regional Manager',
+      // NOTE(2026-04): 角色调整，暂时隐藏/禁用 Third-Party 角色入口（保留文案以便后续恢复）
       roleThird: 'Third-Party',
       submit: 'Login',
       errFillAll: 'Please fill in all fields',
@@ -44,6 +45,7 @@ const copy = computed(() => {
     rolePlaceholder: '请选择角色',
     roleFse: 'FSE',
     roleManager: '大区经理',
+    // NOTE(2026-04): 角色调整，暂时隐藏/禁用第三方角色入口（保留文案以便后续恢复）
     roleThird: '第三方',
     submit: '登录',
     errFillAll: '请完整填写全部字段',
@@ -103,7 +105,8 @@ function submit() {
               <option value="">{{ copy.rolePlaceholder }}</option>
               <option value="fse">{{ copy.roleFse }}</option>
               <option value="manager">{{ copy.roleManager }}</option>
-              <option value="third_party">{{ copy.roleThird }}</option>
+              <!-- NOTE(2026-04): 角色调整，暂时隐藏/禁用 third_party 入口（后续如需恢复取消注释） -->
+              <!-- <option value="third_party">{{ copy.roleThird }}</option> -->
             </select>
           </div>
           <button type="submit" class="login-submit">{{ copy.submit }}</button>

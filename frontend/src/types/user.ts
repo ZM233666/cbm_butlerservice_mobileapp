@@ -18,7 +18,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   [ROLE_THIRD_PARTY]: '第三方',
 }
 
-export const ALL_ROLES: UserRole[] = [ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY]
+export const ALL_ROLES: UserRole[] = [
+  ROLE_FSE,
+  ROLE_MANAGER,
+  // NOTE(2026-04): 角色调整，暂时隐藏/禁用第三方角色入口与权限控制。
+  // 如需恢复 third_party：取消注释该行，并同步恢复 LoginView 角色选项与 auth.ts 的 PAGE_ACCESS 配置。
+  // ROLE_THIRD_PARTY,
+]
 
 export function isValidRole(v: string): v is UserRole {
   return ALL_ROLES.includes(v as UserRole)

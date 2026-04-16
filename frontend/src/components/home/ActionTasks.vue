@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchHomeConfig, fetchTaskSummary, fetchTaskStatus } from '@/api/tasks'
+import { fetchHomeConfig, fetchTaskStatus } from '@/api/tasks'
 import { useAuthStore } from '@/stores/auth'
-import type { TaskCard, TaskStatusStore, TaskSummaryMaint } from '@/types/task'
+import type { TaskCard, TaskStatusStore } from '@/types/task'
 import { useI18n } from '@/composables/useI18n'
 import { getDaysUntilDeadline, deadlineAlertLevel } from '@/composables/useDeadlineAlert'
 
 const props = defineProps<{
   refreshSignal?: number
+  extraCards?: TaskCard[]
 }>()
 
 const auth = useAuthStore()
@@ -19,11 +20,20 @@ const cards = ref<TaskCard[]>([])
 const statusStore = ref<TaskStatusStore>({})
 const activeFilter = ref<'todo' | 'doing' | 'done' | 'all'>('todo')
 
-const defaultStats: Record<string, { items: number; photos: number }> = {
-  c1c3: { items: 21, photos: 19 },
-  c4c6: { items: 32, photos: 45 },
-}
-const summaryMaint = ref<Record<string, TaskSummaryMaint>>({})
+const DEFAULT_DEPOT = 'Shanghai'
+
+const allCards = computed<TaskCard[]>(() => {
+  const merged = [...cards.value, ...(props.extraCards || [])]
+  const seen = new Set<string>()
+  const out: TaskCard[] = []
+  merged.forEach((c) => {
+    const k = taskKey(c)
+    if (!k || seen.has(k)) return
+    seen.add(k)
+    out.push(c)
+  })
+  return out
+})
 
 function getStatusFromEntry(entry: unknown): 'todo' | 'doing' | 'done' | null {
   const e = entry as { status?: unknown } | null
@@ -39,7 +49,7 @@ function taskKey(card: TaskCard) {
 
 const maintCounts = computed(() => {
   const map: Record<string, number> = {}
-  cards.value.forEach((c) => {
+  allCards.value.forEach((c) => {
     const k = String(c.maint || '').toLowerCase()
     map[k] = (map[k] || 0) + 1
   })
@@ -61,15 +71,13 @@ function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' {
   return 'todo'
 }
 
-function getStats(maint: string) {
-  const key = maint.toLowerCase()
-  const s = summaryMaint.value[key]
-  const d = defaultStats[key] || {}
-  return `${t.value.statsProjectPrefix} ${s?.items ?? d.items ?? '--'} · ${t.value.statsPhotoPrefix} ${s?.photos ?? d.photos ?? '--'}`
+function getDepot(_card: TaskCard) {
+  // TODO: 后续如果后端 home-config 提供 depot，可在此处直接读取 card.depot
+  return String((_card as any).depot || '').trim() || DEFAULT_DEPOT
 }
 
 const filteredCards = computed(() =>
-  cards.value.filter(c => activeFilter.value === 'all' || getCardStatusByCard(c) === activeFilter.value)
+  allCards.value.filter(c => activeFilter.value === 'all' || getCardStatusByCard(c) === activeFilter.value)
 )
 
 function urgencyRank(deadline: string, status: string) {
@@ -115,7 +123,7 @@ const sortedCards = computed(() => {
 })
 const counts = computed(() => {
   let todo = 0, doing = 0, done = 0
-  cards.value.forEach(c => {
+  allCards.value.forEach(c => {
     const s = getCardStatusByCard(c)
     if (s === 'doing') doing++; else if (s === 'done') done++; else todo++
   })
@@ -202,10 +210,6 @@ async function boot() {
     if (cfg.tasks) cards.value = cfg.tasks
   } catch { /* keep empty */ }
   await loadStatuses()
-  try {
-    const sum = await fetchTaskSummary()
-    if (sum.maint) summaryMaint.value = sum.maint
-  } catch { /* keep defaults */ }
 }
 
 function onFocus() { loadStatuses() }
@@ -252,7 +256,16 @@ watch(
     <div class="ios-list-group">
       <div class="in-card-tabs" role="tablist" aria-label="任务筛选">
         <div class="ios-segmented-control">
-          <button v-for="f in (['todo','doing','done','all'] as const)" :key="f" type="button" class="segment-btn" :class="{ 'is-active': activeFilter === f }" role="tab" :aria-selected="activeFilter === f" @click="activeFilter = f">
+          <button
+            v-for="f in (['todo','doing','done','all'] as const)"
+            :key="f"
+            type="button"
+            class="segment-btn"
+            :class="{ 'is-active': activeFilter === f, 'has-doing-bar': f === 'doing' && counts.doing > 0 }"
+            role="tab"
+            :aria-selected="activeFilter === f"
+            @click="activeFilter = f"
+          >
             <span class="segment-btn__label">{{ { todo: t.filterTodo, doing: t.filterDoing, done: t.filterDone, all: t.filterAll }[f] }}</span>
             <span class="segment-btn__count">{{ counts[f] }}</span>
           </button>
@@ -266,8 +279,8 @@ watch(
               <span class="status-ring" :class="ringClass(card.deadline, getCardStatusByCard(card))"></span>
             </span>
             <span class="item-content">
-              <span class="item-title">{{ card.title }}</span>
-              <span class="item-subtitle">{{ card.meta }} · {{ getStats(card.maint) }}</span>
+              <span class="item-title">{{ card.meta }}</span>
+              <span class="item-subtitle">{{ card.title }} · {{ getDepot(card) }}</span>
             </span>
             <span class="item-right" aria-hidden="true">
               <span class="item-date" :class="dateClass(card.deadline, getCardStatusByCard(card))">

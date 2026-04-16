@@ -8,7 +8,7 @@ import CbmRecommendations from '@/components/home/CbmRecommendations.vue'
 import ManagerDashboard from '@/components/home/ManagerDashboard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useI18nStore } from '@/stores/i18n'
-import { fetchHomeConfig } from '@/api/tasks'
+import { fetchHomeConfig, postTaskStatus } from '@/api/tasks'
 import type { TaskCard } from '@/types/task'
 import { storeToRefs } from 'pinia'
 
@@ -18,13 +18,47 @@ const route = useRoute()
 const { lang } = storeToRefs(i18n)
 const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
 const tasks = ref<TaskCard[]>([])
+const recommendations = ref<TaskCard[]>([])
+const acceptedTasks = ref<TaskCard[]>([])
 const refreshSignal = ref(0)
+
+function acceptedKey(employeeId: string) {
+  return `butler.accepted-reco-tasks.${employeeId}`
+}
+
+function readAccepted(employeeId: string): TaskCard[] {
+  try {
+    const raw = localStorage.getItem(acceptedKey(employeeId))
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeAccepted(employeeId: string, list: TaskCard[]) {
+  try { localStorage.setItem(acceptedKey(employeeId), JSON.stringify(list)) } catch { /* ignore */ }
+}
+
+const acceptedIds = computed(() => new Set(acceptedTasks.value.map(t => String((t as any).taskId || '').trim()).filter(Boolean)))
+
+const cbmRecoTasks = computed(() => {
+  // 仅在 CBM Recommendations 中移除示例项（不影响 Action Tasks）
+  const hiddenIds = new Set(['MT-CCBII-88422', 'MT-CCBII-88423'])
+  return recommendations.value
+    .filter(t => !hiddenIds.has(String((t as any).taskId || '').trim()))
+    .filter(t => !acceptedIds.value.has(String((t as any).taskId || '').trim()))
+})
 
 onMounted(async () => {
   try {
     const cfg = await fetchHomeConfig()
     if (cfg.tasks) tasks.value = cfg.tasks
+    recommendations.value = (cfg as any).recommendations || []
   } catch { /* keep empty */ }
+  if (auth.user?.employeeId) {
+    acceptedTasks.value = readAccepted(auth.user.employeeId)
+  }
 })
 
 watch(
@@ -34,6 +68,28 @@ watch(
   },
   { immediate: true },
 )
+
+async function acceptReco(card: TaskCard) {
+  const employeeId = auth.user?.employeeId || ''
+  const taskId = String((card as any).taskId || '').trim()
+  if (!employeeId || !taskId) return
+
+  // 写入后端状态：Accept 后进入 To Do
+  try {
+    await postTaskStatus(employeeId, String(card.maint || ''), 'todo', taskId, {
+      taskId,
+      title: card.title,
+      deadline: card.deadline,
+    })
+  } catch { /* ignore */ }
+
+  // 持久化到本地并驱动首页 Action Tasks 展示
+  if (!acceptedIds.value.has(taskId)) {
+    acceptedTasks.value = [card, ...acceptedTasks.value]
+    writeAccepted(employeeId, acceptedTasks.value)
+  }
+  refreshSignal.value = Date.now()
+}
 </script>
 
 <template>
@@ -49,8 +105,8 @@ watch(
       <ProfileCard />
       <ManagerDashboard v-if="auth.isManager" />
       <template v-if="auth.isFse || auth.isThirdParty">
-        <ActionTasks :refresh-signal="refreshSignal" />
-        <CbmRecommendations class="home-recs-after-tasks" :tasks="tasks" />
+        <ActionTasks :refresh-signal="refreshSignal" :extra-cards="acceptedTasks" />
+        <CbmRecommendations class="home-recs-after-tasks" :tasks="cbmRecoTasks" :on-accept="acceptReco" />
       </template>
     </main>
   </PageShell>

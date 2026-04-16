@@ -6,11 +6,13 @@ import { ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY, ROLE_LABELS, isValidRole } fr
 const USER_KEY = 'butler.auth.user'
 
 const PAGE_ACCESS: Record<string, UserRole[]> = {
-  '/': [ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY],
-  '/task-center': [ROLE_FSE, ROLE_THIRD_PARTY],
-  '/records': [ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY],
-  '/my': [ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY],
-  '/task-list': [ROLE_FSE, ROLE_THIRD_PARTY],
+  // NOTE(2026-04): 角色调整，暂时隐藏/禁用 third_party 角色。
+  // 如需恢复：把 ROLE_THIRD_PARTY 重新加回各路由白名单，并同步恢复 LoginView 角色选项与 types/user.ts 的 ALL_ROLES。
+  '/': [ROLE_FSE, ROLE_MANAGER /* , ROLE_THIRD_PARTY */],
+  '/task-center': [ROLE_FSE /* , ROLE_THIRD_PARTY */],
+  '/records': [ROLE_FSE, ROLE_MANAGER /* , ROLE_THIRD_PARTY */],
+  '/my': [ROLE_FSE, ROLE_MANAGER /* , ROLE_THIRD_PARTY */],
+  '/task-list': [ROLE_FSE /* , ROLE_THIRD_PARTY */],
 }
 
 function normalizeUser(input: Partial<User>): User | null {

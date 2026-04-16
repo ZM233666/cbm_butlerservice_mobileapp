@@ -26,10 +26,30 @@
     },
     {
       "maint": "c1c3",
-      "title": "C1/C3 补充任务",
+      "title": "C1/C3",
       "meta": "CCBII · Maintenance",
       "deadline": "2026-04-22",
       "taskId": "MT-CCBII-88424",
+      "href": "/task-list?maint=c1c3"
+    }
+  ],
+  "recommendations": [
+    {
+      "maint": "c4c6",
+      "title": "C4/C6",
+      "meta": "CCBII · Maintenance",
+      "depot": "Suzhou",
+      "deadline": "2026-04-28",
+      "taskId": "MT-CCBII-88425",
+      "href": "/task-list?maint=c4c6"
+    },
+    {
+      "maint": "c1c3",
+      "title": "C1/C3",
+      "meta": "CCBII · Maintenance",
+      "depot": "Beijing",
+      "deadline": "2026-04-24",
+      "taskId": "MT-CCBII-88426",
       "href": "/task-list?maint=c1c3"
     }
   ]

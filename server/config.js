@@ -46,6 +46,12 @@ function buildConfig(projectRoot) {
       env.MANAGER_ASSIGNMENTS_PATH,
       "server/data/manager-assignments.json"
     ),
+    usersDataPath: resolveFromProject(projectRoot, env.USERS_DATA_PATH, "server/data/users.json"),
+    recommendationsPath: resolveFromProject(
+      projectRoot,
+      env.RECOMMENDATIONS_DATA_PATH,
+      "server/data/recommendations.json"
+    ),
     reverseGeocodeEnabled,
     geocodeTimeoutMs: toInt(env.GEOCODE_TIMEOUT_MS, 3500),
     amapWebApiKey: String(env.AMAP_WEB_API_KEY || "").trim(),

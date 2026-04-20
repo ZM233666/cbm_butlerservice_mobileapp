@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "employeeId": "1",
+      "username": "Zhen Miao",
+      "email": "1@com",
+      "department": "",
+      "region": "Shanghai",
+      "role": "fse"
+    },
+    {
+      "employeeId": "2",
+      "username": "Zhen Miao",
+      "email": "2@com",
+      "department": "",
+      "region": "Suzhou",
+      "role": "manager"
+    }
+  ]
+}
+

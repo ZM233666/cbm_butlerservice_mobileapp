@@ -31,6 +31,17 @@ async function onSearch() {
   }
 }
 
+// 需求：当用户清空搜索框时，结果立即清空，等待重新搜索（无需再次点击按钮）
+watch(
+  () => query.value,
+  (v) => {
+    if (String(v || '').trim()) return
+    rows.value = []
+    showList.value = false
+    placeholderState.value = 'default'
+  },
+)
+
 watch(() => t.value.recordsPlaceholderDefault, () => {
   if (!showList.value && !query.value.trim()) placeholderState.value = 'default'
 })

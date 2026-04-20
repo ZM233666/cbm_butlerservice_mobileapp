@@ -1,0 +1,26 @@
+{
+  "rows": [
+    {
+      "id": "REC-CCBII-0001",
+      "maint": "c4c6",
+      "title": "C4/C6",
+      "depot": "Suzhou",
+      "deadline": "2026-04-28",
+      "workOrderId": "MT-CCBII-88425",
+      "meta": "CBM AI",
+      "createdAt": "2026-04-17T00:00:00.000Z"
+    },
+    {
+      "id": "REC-CCBII-0002",
+      "maint": "c1c3",
+      "title": "C1/C3",
+      "depot": "Beijing",
+      "deadline": "2026-04-24",
+      "workOrderId": "MT-CCBII-88426",
+      "meta": "CBM AI",
+      "createdAt": "2026-04-17T00:00:01.000Z"
+    }
+  ],
+  "accepted": {}
+}
+

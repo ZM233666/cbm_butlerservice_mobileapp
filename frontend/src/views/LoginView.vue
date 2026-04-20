@@ -7,6 +7,7 @@ import { isValidRole } from '@/types/user'
 import { computed } from 'vue'
 import { useI18nStore } from '@/stores/i18n'
 import { storeToRefs } from 'pinia'
+import { loginUser } from '@/api/users'
 
 const router = useRouter()
 const route = useRoute()
@@ -61,7 +62,7 @@ const email = ref('')
 const role = ref<UserRole | ''>('')
 const error = ref('')
 
-function submit() {
+async function submit() {
   error.value = ''
   const u = username.value.trim()
   const eid = employeeId.value.trim()
@@ -70,7 +71,8 @@ function submit() {
   if (!u || !eid || !em || !r) { error.value = copy.value.errFillAll; return }
   if (!isValidRole(r)) { error.value = copy.value.errRoleInvalid; return }
   try {
-    auth.login({ username: u, employeeId: eid, email: em, role: r, department: '' })
+    const resp = await loginUser({ username: u, employeeId: eid, email: em, role: r, department: '' })
+    auth.login(resp.user, resp.token)
     const next = typeof route.query.next === 'string' && route.query.next.startsWith('/') ? route.query.next : '/'
     router.replace(next)
   } catch { error.value = copy.value.errLoginFail }

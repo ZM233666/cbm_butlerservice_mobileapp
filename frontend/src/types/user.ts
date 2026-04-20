@@ -9,6 +9,7 @@ export interface User {
   employeeId: string
   email: string
   department: string
+  region: string
   role: UserRole
 }
 

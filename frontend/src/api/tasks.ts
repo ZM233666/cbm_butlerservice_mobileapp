@@ -1,8 +1,10 @@
 import { apiGet, apiPost } from './client'
 import type { HomeConfig, TaskSummary, TaskStatusStore } from '@/types/task'
 
-export function fetchHomeConfig(): Promise<HomeConfig> {
-  return apiGet<HomeConfig>('/api/home-config')
+export function fetchHomeConfig(employeeId?: string): Promise<HomeConfig> {
+  const params: Record<string, string> = {}
+  if (employeeId) params.employeeId = employeeId
+  return apiGet<HomeConfig>('/api/home-config', params)
 }
 
 export function fetchTaskSummary(): Promise<TaskSummary> {

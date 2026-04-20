@@ -76,6 +76,12 @@ function getDepot(_card: TaskCard) {
   return String((_card as any).depot || '').trim() || DEFAULT_DEPOT
 }
 
+function doneUploadText(card: TaskCard) {
+  const p = (card as any).uploadProgress as { uploaded?: number; required?: number } | undefined
+  if (!p || !p.required) return ''
+  return `${p.uploaded || 0}/${p.required || 0}`
+}
+
 const filteredCards = computed(() =>
   allCards.value.filter(c => activeFilter.value === 'all' || getCardStatusByCard(c) === activeFilter.value)
 )
@@ -206,7 +212,7 @@ async function loadStatuses() {
 
 async function boot() {
   try {
-    const cfg = await fetchHomeConfig()
+    const cfg = await fetchHomeConfig(auth.user?.employeeId || '')
     if (cfg.tasks) cards.value = cfg.tasks
   } catch { /* keep empty */ }
   await loadStatuses()
@@ -233,7 +239,7 @@ watch(
 watch(
   () => props.refreshSignal || 0,
   () => {
-    loadStatuses()
+    boot()
   },
 )
 </script>
@@ -280,7 +286,12 @@ watch(
             </span>
             <span class="item-content">
               <span class="item-title">{{ card.meta }}</span>
-              <span class="item-subtitle">{{ card.title }} · {{ getDepot(card) }}</span>
+              <span class="item-subtitle">
+                {{ card.title }} · {{ getDepot(card) }}
+                <template v-if="getCardStatusByCard(card) === 'done' && doneUploadText(card)">
+                  · {{ doneUploadText(card) }}
+                </template>
+              </span>
             </span>
             <span class="item-right" aria-hidden="true">
               <span class="item-date" :class="dateClass(card.deadline, getCardStatusByCard(card))">

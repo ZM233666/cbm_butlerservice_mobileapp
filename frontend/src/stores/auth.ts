@@ -4,6 +4,7 @@ import type { User, UserRole } from '@/types/user'
 import { ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY, ROLE_LABELS, isValidRole } from '@/types/user'
 
 const USER_KEY = 'butler.auth.user'
+const TOKEN_KEY = 'butler.auth.token'
 
 const PAGE_ACCESS: Record<string, UserRole[]> = {
   // NOTE(2026-04): 角色调整，暂时隐藏/禁用 third_party 角色。
@@ -22,8 +23,9 @@ function normalizeUser(input: Partial<User>): User | null {
   const department = String(input.department || '').trim()
   const rawRole = String(input.role || '').trim().toLowerCase()
   const role: UserRole = isValidRole(rawRole) ? rawRole : ROLE_FSE
+  const region = String(input.region || '').trim() || (role === ROLE_MANAGER ? 'Suzhou' : 'Shanghai')
   if (!username || !employeeId || !email) return null
-  return { username, employeeId, email, department, role }
+  return { username, employeeId, email, department, region, role }
 }
 
 function readFromStorage(): User | null {
@@ -38,24 +40,30 @@ function readFromStorage(): User | null {
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(readFromStorage())
+  const token = ref<string>(localStorage.getItem(TOKEN_KEY) || '')
 
-  const isLoggedIn = computed(() => user.value !== null)
+  const isLoggedIn = computed(() => user.value !== null && !!token.value)
   const role = computed<UserRole>(() => user.value?.role ?? ROLE_FSE)
   const roleLabel = computed(() => ROLE_LABELS[role.value])
   const isManager = computed(() => role.value === ROLE_MANAGER)
   const isFse = computed(() => role.value === ROLE_FSE)
   const isThirdParty = computed(() => role.value === ROLE_THIRD_PARTY)
 
-  function login(input: Partial<User>) {
+  function login(input: Partial<User>, accessToken?: string) {
     const normalized = normalizeUser(input)
-    if (!normalized) throw new Error('invalid_user_data')
+    const t = String(accessToken || '').trim()
+    if (!normalized || !t) throw new Error('invalid_user_data')
     user.value = normalized
+    token.value = t
     localStorage.setItem(USER_KEY, JSON.stringify(normalized))
+    localStorage.setItem(TOKEN_KEY, t)
   }
 
   function logout() {
     user.value = null
+    token.value = ''
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem(TOKEN_KEY)
   }
 
   function canAccess(path: string): boolean {
@@ -64,5 +72,5 @@ export const useAuthStore = defineStore('auth', () => {
     return allowed.includes(role.value)
   }
 
-  return { user, isLoggedIn, role, roleLabel, isManager, isFse, isThirdParty, login, logout, canAccess }
+  return { user, token, isLoggedIn, role, roleLabel, isManager, isFse, isThirdParty, login, logout, canAccess }
 })

@@ -6,6 +6,7 @@ export interface TaskCard {
   deadline: string
   taskId?: string
   depot?: string
+  uploadProgress?: { uploaded: number; required: number; percent: number }
 }
 
 export interface TaskSummaryMaint {

@@ -162,7 +162,7 @@ const i18nMap = {
 
     // Manager dashboard
     mgrTitle: '我发布的任务汇总',
-    mgrSubtitle: '区分展示当前经理历史累计发布任务与当月新发布任务',
+    mgrSubtitle: '',
     mgrMonth: '统计月份',
     mgrTaskOverview: '历史发布任务总数',
     mgrMonthlyServiceTotal: '本月新发布任务数',
@@ -367,7 +367,7 @@ const i18nMap = {
 
     // Manager dashboard
     mgrTitle: 'My Published Task Summary',
-    mgrSubtitle: 'Separate lifetime published tasks from newly published tasks in the selected month',
+    mgrSubtitle: '',
     mgrMonth: 'Month',
     mgrTaskOverview: 'Total Published Tasks',
     mgrMonthlyServiceTotal: 'New Tasks This Month',

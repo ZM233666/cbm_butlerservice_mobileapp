@@ -27,6 +27,7 @@ function buildConfig(projectRoot) {
     publicDir: path.join(projectRoot, "public"),
     picSamplesDir: path.join(projectRoot, "PicSamples"),
     uploadsDir: path.join(projectRoot, "server", "uploads", "task"),
+    certUploadsDir: path.join(projectRoot, "server", "uploads", "certificates"),
     manifestPath: path.join(projectRoot, "server", "uploads", "upload-manifest.jsonl"),
     recordsDataPath: resolveFromProject(projectRoot, env.RECORDS_DATA_PATH, "server/data/records.json"),
     tasksDataPath: resolveFromProject(

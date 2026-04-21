@@ -62,3 +62,122 @@ test("buildManagerDashboard should aggregate overview and progress", () => {
   assert.equal(out.monthlyServiceTotal, 2);
   assert.equal(out.vehiclesNeedService.length, 1);
 });
+
+test("buildManagerDashboard should scope data to current manager", () => {
+  const store = {
+    fseMembers: [{ employeeId: "2001", name: "A" }],
+    assignments: [
+      {
+        id: "asg_1",
+        maint: "c4c6",
+        vehicleNo: "HXD1-1",
+        deadline: "2026-04-12",
+        status: "done",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        assignedTo: { employeeId: "2001", name: "A" },
+        createdBy: { employeeId: "mgr_1", name: "Manager A" },
+      },
+      {
+        id: "asg_2",
+        maint: "c1c3",
+        vehicleNo: "HXD1-2",
+        deadline: "2026-04-22",
+        status: "todo",
+        createdAt: "2026-04-02T00:00:00.000Z",
+        assignedTo: { employeeId: "2001", name: "A" },
+        createdBy: { employeeId: "mgr_2", name: "Manager B" },
+      },
+    ],
+  };
+  const out = buildManagerDashboard({
+    store,
+    month: "2026-04",
+    actorEmployeeId: "mgr_1",
+  });
+  assert.equal(out.overview.total, 1);
+  assert.equal(out.overview.done, 1);
+  assert.equal(out.monthlyServiceTotal, 1);
+  assert.equal(out.assignments.length, 1);
+  assert.equal(out.assignments[0].id, "asg_1");
+});
+
+test("buildManagerDashboard monthlyServiceTotal should count createdAt month", () => {
+  const store = {
+    fseMembers: [{ employeeId: "2001", name: "A" }],
+    assignments: [
+      {
+        id: "asg_1",
+        maint: "c4c6",
+        vehicleNo: "HXD1-1",
+        deadline: "2026-05-12",
+        status: "todo",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        assignedTo: { employeeId: "2001", name: "A" },
+        createdBy: { employeeId: "mgr_1", name: "Manager A" },
+      },
+      {
+        id: "asg_2",
+        maint: "c1c3",
+        vehicleNo: "HXD1-2",
+        deadline: "2026-04-22",
+        status: "todo",
+        createdAt: "2026-05-02T00:00:00.000Z",
+        assignedTo: { employeeId: "2001", name: "A" },
+        createdBy: { employeeId: "mgr_1", name: "Manager A" },
+      },
+    ],
+  };
+  const out = buildManagerDashboard({
+    store,
+    month: "2026-04",
+    actorEmployeeId: "mgr_1",
+  });
+  assert.equal(out.monthlyServiceTotal, 1);
+});
+
+test("buildManagerDashboard progress should follow selected month", () => {
+  const store = {
+    fseMembers: [{ employeeId: "2001", name: "A" }],
+    assignments: [
+      {
+        id: "asg_1",
+        maint: "c4c6",
+        vehicleNo: "HXD1-1",
+        deadline: "2026-04-12",
+        status: "done",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        assignedTo: { employeeId: "2001", name: "A" },
+        createdBy: { employeeId: "mgr_1", name: "Manager A" },
+      },
+      {
+        id: "asg_2",
+        maint: "c1c3",
+        vehicleNo: "HXD1-2",
+        deadline: "2026-04-22",
+        status: "doing",
+        createdAt: "2026-04-02T00:00:00.000Z",
+        assignedTo: { employeeId: "2001", name: "A" },
+        createdBy: { employeeId: "mgr_1", name: "Manager A" },
+      },
+      {
+        id: "asg_3",
+        maint: "c1c3",
+        vehicleNo: "HXD1-3",
+        deadline: "2026-05-10",
+        status: "todo",
+        createdAt: "2026-05-02T00:00:00.000Z",
+        assignedTo: { employeeId: "2001", name: "A" },
+        createdBy: { employeeId: "mgr_1", name: "Manager A" },
+      },
+    ],
+  };
+  const out = buildManagerDashboard({
+    store,
+    month: "2026-04",
+    actorEmployeeId: "mgr_1",
+  });
+  assert.equal(out.progress.done, 1);
+  assert.equal(out.progress.doing, 1);
+  assert.equal(out.progress.total, 2);
+  assert.equal(out.progress.percentage, 50);
+});

@@ -36,6 +36,9 @@ export interface ManagerAssignment {
 }
 
 export interface ManagerProgress {
+  done: number
+  doing: number
+  total: number
   percentage: number
 }
 

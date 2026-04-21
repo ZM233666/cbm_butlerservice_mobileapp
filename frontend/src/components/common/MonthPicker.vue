@@ -36,6 +36,7 @@ const panelEl = ref<HTMLElement | null>(null)
 
 const current = computed(() => (isMonthValue(props.modelValue) ? props.modelValue : ''))
 const { lang, t } = useI18n()
+const thisMonthKey = computed(() => nowMonth())
 const displayText = computed(() => {
   if (!current.value) return props.placeholder || 'YYYY-MM'
   if (lang.value !== 'zh') return current.value
@@ -64,7 +65,7 @@ const months = computed(() => {
     const key = `${activeYear.value}-${mm}`
     const status = props.statusByMonth?.[key] ?? 'none'
     const label = lang.value === 'zh' ? `${i + 1}月` : MONTHS_EN[i]
-    return { key, label, status }
+    return { key, label, status, isThisMonth: key === thisMonthKey.value }
   })
 })
 
@@ -153,7 +154,7 @@ onBeforeUnmount(() => {
           :key="m.key"
           type="button"
           class="mp__month"
-          :class="{ 'is-active': current === m.key }"
+          :class="{ 'is-active': current === m.key, 'is-this-month': m.isThisMonth }"
           role="gridcell"
           data-month-btn="1"
           @click="pickMonth(m.key)"
@@ -207,7 +208,7 @@ onBeforeUnmount(() => {
 
 .mp__year {
   display: grid;
-  grid-template-columns: 2.2rem 1fr 2.2rem;
+  grid-template-columns: 2.35rem minmax(0, 1fr) 2.35rem;
   align-items: center;
   gap: 0.35rem;
   padding: 0.6rem;
@@ -215,6 +216,7 @@ onBeforeUnmount(() => {
   background: #f8fafc;
 }
 .mp__year-btn {
+  min-width: 0;
   min-height: 2.2rem;
   border-radius: 10px;
   border: 1px solid #cbd5e1;
@@ -222,9 +224,16 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font: inherit;
   font-weight: 800;
+  font-size: 1.2rem;
+  line-height: 1;
   color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .mp__year-input {
+  width: 100%;
+  min-width: 0;
   min-height: 2.2rem;
   border-radius: 10px;
   border: 1px solid #cbd5e1;
@@ -246,13 +255,17 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   border: 1px solid transparent;
   background: #fff;
-  padding: 0.55rem 0.45rem 0.42rem;
+  padding: 0.8rem 0.45rem 0.42rem;
   cursor: pointer;
   position: relative;
   min-height: 2.6rem;
 }
 .mp__month:hover { background: #f8fafc; }
 .mp__month.is-active { border-color: #2563eb; background: #eff6ff; }
+.mp__month.is-this-month:not(.is-active) {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
 .mp__month-text { font: inherit; font-weight: 760; color: #0f172a; }
 .mp__bar {
   position: absolute;

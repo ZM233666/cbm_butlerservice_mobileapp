@@ -36,6 +36,46 @@ function normalizeIso(v) {
   return d.toISOString();
 }
 
+function normalizeStringList(input) {
+  if (!Array.isArray(input)) return [];
+  return input.map((item) => normalizeText(item)).filter(Boolean);
+}
+
+function normalizeCertificateStatus(v) {
+  const status = normalizeText(v).toLowerCase();
+  if (status === "valid" || status === "expiring" || status === "expired") return status;
+  return "valid";
+}
+
+function normalizeCertificates(input) {
+  if (!Array.isArray(input)) return [];
+  const list = [];
+  input.forEach((item) => {
+    if (typeof item === "string") {
+      const name = normalizeText(item);
+      if (name) list.push({ name, status: "valid" });
+      return;
+    }
+    const src = item && typeof item === "object" ? item : null;
+    if (!src) return;
+    const name = normalizeText(src.name);
+    if (!name) return;
+    const id = normalizeText(src.id);
+    const issuer = normalizeText(src.issuer);
+    const validUntil = normalizeText(src.validUntil);
+    const photoUrl = normalizeText(src.photoUrl);
+    list.push({
+      name,
+      ...(id ? { id } : {}),
+      ...(issuer ? { issuer } : {}),
+      ...(validUntil ? { validUntil } : {}),
+      ...(photoUrl ? { photoUrl } : {}),
+      status: normalizeCertificateStatus(src.status),
+    });
+  });
+  return list;
+}
+
 function normalizeUser(input) {
   const src = input && typeof input === "object" ? input : {};
   const employeeId = normalizeText(src.employeeId);
@@ -45,6 +85,10 @@ function normalizeUser(input) {
   const email = normalizeText(src.email);
   const department = normalizeText(src.department);
   const region = normalizeText(src.region) || defaultRegionByRole(role);
+  const specialWorkCertificates = normalizeCertificates(src.specialWorkCertificates);
+  const qualifications = normalizeStringList(src.qualifications);
+  const skillLevel = normalizeText(src.skillLevel);
+  const skillTypes = normalizeStringList(src.skillTypes);
   return {
     employeeId,
     username,
@@ -52,6 +96,10 @@ function normalizeUser(input) {
     department,
     region,
     role,
+    specialWorkCertificates,
+    qualifications,
+    ...(skillLevel ? { skillLevel } : {}),
+    skillTypes,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -288,9 +336,7 @@ function toTaskCard(assignment) {
   const meta =
     row.source === "cbm_ai"
       ? "CBM AI"
-      : (row.createdBy && row.createdBy.employeeId
-          ? "Regional Manager"
-          : "CCBII · Maintenance");
+      : "CCBII Maintenance";
   return {
     maint: row.maint,
     title: row.title || row.vehicleNo || row.maint.toUpperCase(),

@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
 import { createClientId } from '@/utils/id'
-import { createWorkOrder, fetchWorkOrders, setWorkOrderStatus, type WorkOrder } from '@/api/workOrders'
+import { createWorkOrder, setWorkOrderStatus } from '@/api/workOrders'
 import { fetchHomeConfig, fetchTaskStatus } from '@/api/tasks'
 import type { TaskCard, TaskStatusStore } from '@/types/task'
 
@@ -19,19 +19,13 @@ interface TaskCenterTask {
   template: TaskTemplate
   month: string
   trainModel: string
-  team: string
   requiredAttachments: number
   uploadedAttachments: number
   status: TaskStatus
-  hours: number
   createdAt: string
   completedAt?: string
   serviceCity?: string
   endDate?: string
-  isSeconded?: boolean
-  secondCity?: string
-  secondStartDate?: string
-  secondEndDate?: string
 }
 
 function nowMonth(): string {
@@ -59,13 +53,8 @@ const form = ref({
   customName: '',
   trainModel: '',
   requiredAttachments: 19,
-  hours: 8,
   serviceCity: '',
   endDate: '',
-  isSeconded: false,
-  secondCity: '',
-  secondStartDate: '',
-  secondEndDate: '',
 })
 
 const TASK_KEY = computed(() => `butler.task-center.${auth.user?.employeeId || 'guest'}`)
@@ -96,11 +85,9 @@ function seedIfEmpty() {
       template: 'c1c3',
       month: m,
       trainModel: 'HXD1',
-      team: 'A',
       requiredAttachments: 19,
       uploadedAttachments: 19,
       status: 'done',
-      hours: 7.5,
       createdAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
     },
@@ -110,11 +97,9 @@ function seedIfEmpty() {
       template: 'c4c6',
       month: m,
       trainModel: 'HXD3',
-      team: 'B',
       requiredAttachments: 45,
       uploadedAttachments: 26,
       status: 'doing',
-      hours: 9.5,
       createdAt: new Date().toISOString(),
     },
   ]
@@ -129,13 +114,6 @@ watch(() => form.value.template, (v) => {
   else form.value.requiredAttachments = Math.max(0, form.value.requiredAttachments || 0)
 })
 
-watch(() => form.value.isSeconded, (v) => {
-  if (v) return
-  form.value.secondCity = ''
-  form.value.secondStartDate = ''
-  form.value.secondEndDate = ''
-})
-
 watch(() => form.value.endDate, (v) => {
   const text = String(v || '').trim()
   if (!text) return
@@ -143,22 +121,8 @@ watch(() => form.value.endDate, (v) => {
   if (text < todayMin.value) form.value.endDate = todayMin.value
 })
 
-watch(() => form.value.secondStartDate, (v) => {
-  const start = String(v || '').trim()
-  const end = String(form.value.secondEndDate || '').trim()
-  if (!end) return
-  if (start && end < start) form.value.secondEndDate = ''
-})
-
-const secondEndMin = computed(() => {
-  const start = String(form.value.secondStartDate || '').trim()
-  return start || todayMin.value
-})
-
 const homeCards = ref<TaskCard[]>([])
 const statusStore = ref<TaskStatusStore>({})
-const workOrders = ref<WorkOrder[]>([])
-
 function taskKey(card: TaskCard) {
   return String((card as any).taskId || '').trim() || `${card.maint}-${card.title}-${card.deadline}`
 }
@@ -233,17 +197,6 @@ const canAddTask = computed(() => {
   // 自定义模板时，自定义名称也必须填写
   if (form.value.template === 'custom' && !String(form.value.customName || '').trim()) return false
 
-  // 借调时额外必填：临时借调城市 / 借调开始日期 / 借调结束日期
-  if (form.value.isSeconded) {
-    const secCityOk = !!String(form.value.secondCity || '').trim()
-    const secStartOk = !!String(form.value.secondStartDate || '').trim()
-    const secEndOk = !!String(form.value.secondEndDate || '').trim()
-    if (!secCityOk || !secStartOk || !secEndOk) return false
-    const start = String(form.value.secondStartDate || '').trim()
-    const end = String(form.value.secondEndDate || '').trim()
-    if (start && end && end < start) return false
-  }
-
   return true
 })
 
@@ -281,89 +234,23 @@ const attachmentStats = computed(() => {
   return { uploaded, required, percent }
 })
 
-function ymdFromIso(iso: string) {
-  const m = String(iso || '').match(/\d{4}-\d{2}-\d{2}/)
-  return m ? m[0] : ''
-}
-
-function daysInclusive(startYmd: string, endYmd: string): number {
-  const s = String(startYmd || '').trim()
-  const e = String(endYmd || '').trim()
-  if (!s || !e) return 0
-  const sd = new Date(`${s}T00:00:00`)
-  const ed = new Date(`${e}T00:00:00`)
-  const st = sd.getTime()
-  const et = ed.getTime()
-  if (Number.isNaN(st) || Number.isNaN(et)) return 0
-  const diff = Math.floor((et - st) / (24 * 60 * 60 * 1000)) + 1
-  return Math.max(0, diff)
-}
-
-function normalizeRegionToken(raw: string): string {
-  const text = String(raw || '').trim().toLowerCase()
-  if (!text) return ''
-  // 统一中英写法 + 去掉常见后缀，提升地点模糊匹配命中率
-  return text
-    .replace(/上海|shanghai/g, 'shanghai')
-    .replace(/苏州|suzhou/g, 'suzhou')
-    .replace(/机务段|车辆段|段所|检修段|检修车间|车间|车队|站点|站|depot|city|district|workshop|area|市|区/g, '')
-    .replace(/[()（）\-_.,，。]/g, '')
-    .replace(/\s+/g, '')
-}
-
-function isSameRegion(location: string, region: string): boolean {
-  const a = normalizeRegionToken(location)
-  const b = normalizeRegionToken(region)
-  if (!a || !b) return false
-  return a === b || a.includes(b) || b.includes(a)
-}
-
-const crossTeamRows = computed(() => {
-  // 按后端工单数据统计“跨区域”任务：任务地点与用户所在区域不同
-  const map = new Map<string, { count: number; days: number }>()
-  const userRegion = String(auth.user?.region || (auth.user?.role === 'manager' ? 'Suzhou' : 'Shanghai')).trim()
-  workOrders.value.forEach((x) => {
-    const m = (String(x.deadline || '').match(/^\d{4}-\d{2}/)?.[0]) || (String(x.createdAt || '').match(/^\d{4}-\d{2}/)?.[0]) || ''
-    if (m !== selectedMonth.value) return
-    const location = String(x.depot || '').trim()
-    if (!location) return
-    if (userRegion && isSameRegion(location, userRegion)) return
-    const start = ymdFromIso(String(x.createdAt || ''))
-    const end = String(x.deadline || '').trim()
-    const d = daysInclusive(start, end)
-    const prev = map.get(location) || { count: 0, days: 0 }
-    prev.count += 1
-    prev.days += d
-    map.set(location, prev)
-  })
-  return Array.from(map.entries()).map(([location, v]) => ({
-    team: location,
-    count: v.count,
-    days: Number(v.days.toFixed(1)),
-  }))
-})
-
 async function loadActionSource() {
   const employeeId = String(auth.user?.employeeId || '').trim()
   if (!employeeId) {
     homeCards.value = []
     statusStore.value = {}
-    workOrders.value = []
     return
   }
   try {
-    const [cfg, statusResp, woResp] = await Promise.all([
+    const [cfg, statusResp] = await Promise.all([
       fetchHomeConfig(employeeId),
       fetchTaskStatus(employeeId),
-      fetchWorkOrders({ assigneeId: employeeId }),
     ])
     homeCards.value = Array.isArray(cfg?.tasks) ? cfg.tasks : []
     statusStore.value = statusResp?.statuses || {}
-    workOrders.value = Array.isArray(woResp?.rows) ? woResp.rows : []
   } catch {
     homeCards.value = []
     statusStore.value = {}
-    workOrders.value = []
   }
 }
 
@@ -409,20 +296,13 @@ async function addTask() {
     template: form.value.template,
     month: selectedMonth.value,
     trainModel: form.value.trainModel.trim() || 'N/A',
-    // NOTE: 兼容旧统计字段（跨团队统计仍依赖 team/hours）
-    team: form.value.isSeconded ? 'TEMP' : 'A',
     requiredAttachments: Math.max(0, Number(form.value.requiredAttachments) || 0),
     uploadedAttachments: 0,
     // 需求：Task Centre 自建任务直接进入 Doing（跳过 To Do）
     status: 'doing',
-    hours: Math.max(0.5, Number(form.value.hours) || 1),
     createdAt: new Date().toISOString(),
     serviceCity: form.value.serviceCity.trim() || undefined,
     endDate: form.value.endDate || undefined,
-    isSeconded: !!form.value.isSeconded,
-    secondCity: form.value.secondCity.trim() || undefined,
-    secondStartDate: form.value.secondStartDate || undefined,
-    secondEndDate: form.value.secondEndDate || undefined,
   }
   tasks.value = [task, ...tasks.value]
   writeTasks(tasks.value)
@@ -456,10 +336,6 @@ async function addTask() {
   form.value.trainModel = ''
   form.value.serviceCity = ''
   form.value.endDate = ''
-  form.value.isSeconded = false
-  form.value.secondCity = ''
-  form.value.secondStartDate = ''
-  form.value.secondEndDate = ''
   // 稍微延迟释放锁，避免极端情况下的连点与视觉抖动
   setTimeout(() => { adding.value = false }, 450)
 }
@@ -517,19 +393,6 @@ async function addTask() {
       </section>
 
       <section class="tc-card">
-        <h2 class="tc-title">{{ t.tcCrossTeam }}</h2>
-        <div v-if="crossTeamRows.length" class="tc-table">
-          <div class="tc-table__head">
-            <span>{{ t.tcTeam }}</span><span>{{ t.tcServices }}</span><span>{{ t.tcHours }}</span>
-          </div>
-          <div v-for="row in crossTeamRows" :key="row.team" class="tc-table__row">
-            <span>{{ row.team }}</span><span>{{ row.count }}</span><span>{{ row.days }}</span>
-          </div>
-        </div>
-        <p v-else class="tc-empty">{{ t.tcNoCrossTeam }}</p>
-      </section>
-
-      <section class="tc-card">
         <h2 class="tc-title">{{ t.tcAddSelfTask }}</h2>
         <div class="tc-form">
           <label><span>{{ t.tcTemplate }}</span>
@@ -543,24 +406,6 @@ async function addTask() {
           <label><span>{{ t.tcTrainModel }}</span><input v-model="form.trainModel" :placeholder="t.tcTrainPlaceholder" /></label>
           <label><span>{{ t.tcServiceCity }}</span><input v-model="form.serviceCity" :placeholder="lang === 'zh' ? '如：上海机务段' : 'e.g. Shanghai Depot'" /></label>
           <label><span>{{ t.tcEndDate }}</span><input v-model="form.endDate" type="date" :min="todayMin" /></label>
-          <label class="tc-form__row3"><span>{{ t.tcTeamField }}</span>
-            <select v-model="form.isSeconded">
-              <option :value="false">{{ t.tcNo }}</option>
-              <option :value="true">{{ t.tcYes }}</option>
-            </select>
-          </label>
-          <label :class="{ 'is-disabled': !form.isSeconded }">
-            <span>{{ t.tcRequiredAttach }}</span>
-            <input v-model="form.secondCity" :disabled="!form.isSeconded" :placeholder="lang === 'zh' ? '如：上海机务段' : 'e.g. Shanghai Depot'" />
-          </label>
-          <label :class="{ 'is-disabled': !form.isSeconded }">
-            <span>{{ t.tcHoursField }}</span>
-            <input v-model="form.secondStartDate" :disabled="!form.isSeconded" type="date" :min="todayMin" />
-          </label>
-          <label :class="{ 'is-disabled': !form.isSeconded }">
-            <span>{{ t.tcSecondEndDate }}</span>
-            <input v-model="form.secondEndDate" :disabled="!form.isSeconded" type="date" :min="secondEndMin" />
-          </label>
         </div>
         <button
           type="button"
@@ -591,7 +436,17 @@ async function addTask() {
   color: #0b4a82;
   font-weight: 800;
 }
-.tc-month { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; font-size: 0.8rem; font-weight: 700; color: #334155; }
+.tc-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.84rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  font-weight: 760;
+  color: #24476f;
+}
 .tc-month :deep(.mp) { flex: 0 0 30%; width: 30%; max-width: 30%; min-width: 0; }
 .tc-month :deep(.mp__control) { width: 100%; }
 .tc-kpis { display: grid; gap: 0.5rem; }
@@ -675,48 +530,8 @@ async function addTask() {
 }
 .tc-progress { margin-top: 0.4rem; width: 100%; height: 0.58rem; border-radius: 999px; background: #e6edf7; overflow: hidden; }
 .tc-progress__bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #3c86d2 0%, #2f74c0 100%); transition: width 0.25s ease; }
-.tc-table { border: 1px solid #e2e8f0; border-radius: 0.8rem; overflow: hidden; }
-.tc-table__head, .tc-table__row {
-  display: grid;
-  grid-template-columns: minmax(2.5rem, 1fr) minmax(5rem, 1fr) minmax(6.5rem, 1.1fr);
-  gap: 0.65rem;
-  padding: 0.56rem 1rem 0.56rem 0.7rem;
-  align-items: center;
-}
-.tc-table__head {
-  background: #f8fafc;
-  color: #52657d;
-  font-size: 0.72rem;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
-  font-weight: 760;
-}
-.tc-table__row {
-  border-top: 1px solid #e2e8f0;
-  color: #0f172a;
-  font-size: 0.82rem;
-  line-height: 1.35;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.tc-table__head > span,
-.tc-table__row > span { justify-self: start; text-align: left; min-width: 0; }
-.tc-empty {
-  margin: 0;
-  font-size: 0.79rem;
-  line-height: 1.45;
-  color: #64748b;
-  font-weight: 500;
-}
 .tc-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; }
 .tc-form label { display: grid; gap: 0.2rem; font-size: 0.72rem; color: #475569; }
-.tc-form__row3 { margin-top: 0.25rem; }
-.tc-form label.is-disabled { opacity: 0.62; }
-.tc-form label.is-disabled input,
-.tc-form label.is-disabled select {
-  background: #f1f5f9;
-  color: #64748b;
-}
 .tc-form input, .tc-form select { min-height: 2.15rem; border-radius: 10px; border: 1px solid #cbd5e1; padding: 0.35rem 0.55rem; font: inherit; font-size: 0.82rem; color: #0f172a; background: #fff; }
 .tc-add {
   margin-top: 0.6rem;

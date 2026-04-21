@@ -95,15 +95,17 @@ function buildManagerDashboard(payload) {
   const src = payload && typeof payload === "object" ? payload : {};
   const store = normalizeAssignmentsStore(src.store);
   const month = normalizeMonth(src.month);
-  const records = Array.isArray(src.records) ? src.records : [];
-  const assignments = store.assignments.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const actorEmployeeId = normalizeText(src.actorEmployeeId);
+  const scopedAssignments = actorEmployeeId
+    ? store.assignments.filter((row) => normalizeText(row.createdBy && row.createdBy.employeeId) === actorEmployeeId)
+    : store.assignments.slice();
+  const assignments = scopedAssignments.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const monthAssignments = assignments.filter((row) => {
     const serviceMonth = monthFromValue(row.deadline) || monthFromValue(row.createdAt);
     return serviceMonth === month;
   });
-  const monthRecords = records.filter((r) => monthFromValue(r.date) === month);
-  const monthlyServiceTotal = monthRecords.length + monthAssignments.filter((x) => x.status === "done").length;
+  const monthlyServiceTotal = assignments.filter((row) => monthFromValue(row.createdAt) === month).length;
 
   const overview = {
     total: assignments.length,
@@ -127,10 +129,14 @@ function buildManagerDashboard(payload) {
     });
   });
 
+  const monthProgressDone = monthAssignments.filter((x) => x.status === "done").length;
+  const monthProgressDoing = monthAssignments.filter((x) => x.status === "doing").length;
+  const monthProgressTotal = monthAssignments.length;
   const progress = {
-    done: overview.done,
-    total: overview.total,
-    percentage: overview.total ? Math.round((overview.done / overview.total) * 100) : 0,
+    done: monthProgressDone,
+    doing: monthProgressDoing,
+    total: monthProgressTotal,
+    percentage: monthProgressTotal ? Math.round((monthProgressDone / monthProgressTotal) * 100) : 0,
   };
 
   const reports = assignments

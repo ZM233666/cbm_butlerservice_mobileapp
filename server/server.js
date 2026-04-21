@@ -37,6 +37,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const cfg = buildConfig(projectRoot);
 
 ensureDir(cfg.uploadsDir);
+ensureDir(cfg.certUploadsDir);
 ensureDir(path.dirname(cfg.manifestPath));
 ensureDir(path.dirname(cfg.recordsDataPath));
 ensureDir(path.dirname(cfg.homeConfigPath));
@@ -121,6 +122,21 @@ function ensureUsersSeeded() {
         role: "fse",
         department: "",
         region: "Shanghai",
+        specialWorkCertificates: [
+          {
+            name: "登高证",
+            id: "20240108001",
+            validUntil: "2028.01.01",
+            status: "valid",
+          },
+        ],
+        qualifications: [
+          "工程师",
+        ],
+        skillLevel: "T3",
+        skillTypes: [
+          "EMU",
+        ],
       },
       {
         employeeId: "2",
@@ -129,6 +145,22 @@ function ensureUsersSeeded() {
         role: "manager",
         department: "",
         region: "Suzhou",
+      },
+      {
+        employeeId: "3",
+        username: "Zhen Miao",
+        email: "3@com",
+        role: "fse",
+        department: "",
+        region: "Shanghai",
+        specialWorkCertificates: [],
+        qualifications: [
+          "工程师",
+        ],
+        skillLevel: "T4",
+        skillTypes: [
+          "LOCO",
+        ],
       },
     ],
   };
@@ -469,19 +501,23 @@ app.use("/api", (req, res, next) => {
   next();
 });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, cfg.uploadsDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || ".jpg";
-    const base = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    cb(null, `${base}${ext}`);
-  },
-});
+function createUpload(dir) {
+  const storage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, dir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || ".jpg";
+      const base = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      cb(null, `${base}${ext}`);
+    },
+  });
+  return multer({
+    storage,
+    limits: { fileSize: cfg.maxUploadBytes },
+  });
+}
 
-const upload = multer({
-  storage,
-  limits: { fileSize: cfg.maxUploadBytes },
-});
+const upload = createUpload(cfg.uploadsDir);
+const certificateUpload = createUpload(cfg.certUploadsDir);
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -732,6 +768,48 @@ app.post("/api/users", (req, res) => {
   }
   const saved = writeUsersStore(upserted.store);
   res.status(201).json({ ok: true, user: upserted.user, total: saved.users.length });
+});
+
+app.post("/api/users/self-certificates", (req, res) => {
+  const actor = req.authUser || {};
+  const employeeId = String(actor.employeeId || "").trim();
+  if (!employeeId) {
+    return res.status(401).json({ ok: false, error: "unauthorized" });
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const specialWorkCertificates = Array.isArray(body.specialWorkCertificates)
+    ? body.specialWorkCertificates
+    : [];
+  const current = readUsersStore();
+  const existing = current.users.find((x) => x.employeeId === employeeId);
+  if (!existing) {
+    return res.status(404).json({ ok: false, error: "user_not_found" });
+  }
+  const upserted = upsertUser(current, {
+    ...existing,
+    specialWorkCertificates,
+  });
+  if (upserted.error) {
+    return res.status(400).json({ ok: false, error: upserted.error });
+  }
+  writeUsersStore(upserted.store);
+  res.json({ ok: true, user: upserted.user });
+});
+
+app.post("/api/users/self-certificates/upload", certificateUpload.single("file"), (req, res) => {
+  const actor = req.authUser || {};
+  const employeeId = String(actor.employeeId || "").trim();
+  if (!employeeId) {
+    return res.status(401).json({ ok: false, error: "unauthorized" });
+  }
+  if (!req.file) {
+    return res.status(400).json({ ok: false, error: "no_file" });
+  }
+  return res.json({
+    ok: true,
+    photoUrl: `/uploads/certificates/${req.file.filename}`,
+    filename: req.file.filename,
+  });
 });
 
 app.post("/api/users/login", (req, res) => {
@@ -994,7 +1072,12 @@ app.get("/api/manager/dashboard", (req, res) => {
     store.fseMembers = fromUsers;
   }
   const records = readJsonArray(cfg.recordsDataPath);
-  const dashboard = buildManagerDashboard({ store, records, month });
+  const dashboard = buildManagerDashboard({
+    store,
+    records,
+    month,
+    actorEmployeeId: String(actor.employeeId || "").trim(),
+  });
   res.json({ ok: true, ...dashboard });
 });
 
@@ -1035,6 +1118,7 @@ app.get("/RVSChinaDT_Logo.png", (_req, res) => {
 
 app.use("/PicSamples", express.static(cfg.picSamplesDir));
 app.use("/uploads/task", express.static(cfg.uploadsDir));
+app.use("/uploads/certificates", express.static(cfg.certUploadsDir));
 // 兼容 TaskList 子任务数据：即便启用 Vue dist，也始终从 public/data 提供静态 JSON
 app.use("/data", express.static(path.join(cfg.publicDir, "data")));
 

@@ -13,6 +13,7 @@ interface NavItem { to: string; label: string; icon: string }
 const items = computed<NavItem[]>(() => {
   return [
     { to: '/', label: t.value.navHome, icon: 'home' },
+    { to: '/assignments', label: t.value.navAssignments, icon: 'assignments' },
     { to: '/task-center', label: t.value.navTaskCenter, icon: 'task-center' },
     { to: '/records', label: t.value.navRecords, icon: 'records' },
     { to: '/my', label: t.value.navMy, icon: 'my' },
@@ -35,6 +36,11 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
       <svg v-if="item.icon === 'home'" class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" stroke="none" d="M12 4L4 10.5h16L12 4z" />
         <path fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" d="M5 10.5V20h4v-6h6v6h4V10.5" />
+      </svg>
+      <svg v-else-if="item.icon === 'assignments'" class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.65" />
+        <path d="M8 9.25h8M8 12h5" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" />
+        <path d="m13.5 15.5 1.6 1.6 3-3.6" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <svg v-else-if="item.icon === 'records'" class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" d="M3 10.5V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-9" />

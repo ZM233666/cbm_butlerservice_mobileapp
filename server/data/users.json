@@ -6,7 +6,22 @@
       "email": "1@com",
       "department": "",
       "region": "Shanghai",
-      "role": "fse"
+      "role": "fse",
+      "specialWorkCertificates": [
+        {
+          "name": "登高证",
+          "id": "20240108001",
+          "validUntil": "2028.01.01",
+          "status": "valid"
+        }
+      ],
+      "qualifications": [
+        "工程师"
+      ],
+      "skillLevel": "T3",
+      "skillTypes": [
+        "EMU"
+      ]
     },
     {
       "employeeId": "2",
@@ -15,6 +30,22 @@
       "department": "",
       "region": "Suzhou",
       "role": "manager"
+    },
+    {
+      "employeeId": "3",
+      "username": "Zhen Miao",
+      "email": "3@com",
+      "department": "",
+      "region": "Shanghai",
+      "role": "fse",
+      "specialWorkCertificates": [],
+      "qualifications": [
+        "工程师"
+      ],
+      "skillLevel": "T4",
+      "skillTypes": [
+        "LOCO"
+      ]
     }
   ]
 }

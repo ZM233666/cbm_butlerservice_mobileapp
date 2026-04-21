@@ -4,11 +4,40 @@
       "employeeId": "1",
       "name": "Zhen Miao",
       "email": "1@com"
+    },
+    {
+      "employeeId": "3",
+      "name": "Zhen Miao",
+      "email": "3@com"
     }
   ],
   "assignments": [
     {
+      "id": "wo_1776762743332_8wtrh",
+      "source": "",
+      "maint": "c4c6",
+      "vehicleNo": "kuaile123",
+      "title": "kuaile123 C4C6",
+      "deadline": "2026-04-30",
+      "status": "todo",
+      "report": "",
+      "reportUrl": "",
+      "depot": "",
+      "assignedTo": {
+        "employeeId": "3",
+        "name": "Zhen Miao",
+        "email": "3@com"
+      },
+      "createdBy": {
+        "employeeId": "2",
+        "name": "Zhen Miao"
+      },
+      "createdAt": "2026-04-21T09:12:23.332Z",
+      "updatedAt": "2026-04-21T09:12:23.332Z"
+    },
+    {
       "id": "wo_1776407253145_30mqg",
+      "source": "",
       "maint": "c1c3",
       "vehicleNo": "HXD00123",
       "title": "C1～C3 Service",
@@ -31,11 +60,12 @@
     },
     {
       "id": "MT-CCBII-88421",
+      "source": "",
       "maint": "c4c6",
       "vehicleNo": "HXD1-1234",
       "title": "C4/C6",
       "deadline": "2026-04-30",
-      "status": "todo",
+      "status": "done",
       "report": "",
       "reportUrl": "",
       "depot": "Shanghai",
@@ -49,10 +79,11 @@
         "name": "Zhen Miao"
       },
       "createdAt": "2026-04-17T00:00:00.000Z",
-      "updatedAt": "2026-04-17T00:00:00.000Z"
+      "updatedAt": "2026-04-21T09:13:02.081Z"
     },
     {
       "id": "MT-CCBII-88422",
+      "source": "",
       "maint": "c1c3",
       "vehicleNo": "HXD1-1234",
       "title": "C1/C3 临期示例",
@@ -75,6 +106,7 @@
     },
     {
       "id": "MT-CCBII-88423",
+      "source": "",
       "maint": "c4c6",
       "vehicleNo": "HXD1-1234",
       "title": "C4/C6 过期示例",
@@ -97,6 +129,7 @@
     },
     {
       "id": "MT-CCBII-88424",
+      "source": "",
       "maint": "c1c3",
       "vehicleNo": "HXD1-1234",
       "title": "C1/C3",

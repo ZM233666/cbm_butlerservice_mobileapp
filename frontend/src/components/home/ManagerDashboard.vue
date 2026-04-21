@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { fetchManagerDashboard, postAssignment } from '@/api/manager'
-import type { ManagerDashboard, ManagerVehicle, ManagerReport, ManagerAssignment, FseMember } from '@/types/manager'
+import { fetchManagerDashboard } from '@/api/manager'
+import type { ManagerDashboard, ManagerVehicle, ManagerReport } from '@/types/manager'
 import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
 
-const auth = useAuthStore()
 const { t } = useI18n()
 const month = ref(new Date().toISOString().slice(0, 7))
 const hintKey = ref('')
@@ -23,13 +21,6 @@ const progressTotal = ref(0)
 const progressPct = ref(0)
 const vehicles = ref<ManagerVehicle[]>([])
 const reports = ref<ManagerReport[]>([])
-const assignments = ref<ManagerAssignment[]>([])
-const fseMembers = ref<FseMember[]>([])
-
-const assignee = ref('')
-const maint = ref('c4c6')
-const vehicleNo = ref('')
-const deadline = ref('')
 
 const hintText = computed(() => {
   if (!hintKey.value) return ''
@@ -60,13 +51,11 @@ function applyData(data: ManagerDashboard) {
   overviewDoing.value = data.overview?.doing ?? 0
   overviewDone.value = data.overview?.done ?? 0
   monthlyTotal.value = data.monthlyServiceTotal ?? 0
-  const d = data.overview?.done ?? 0, dg = data.overview?.doing ?? 0, total = data.overview?.total ?? 0
+  const d = data.progress?.done ?? 0, dg = data.progress?.doing ?? 0, total = data.progress?.total ?? 0
   const pct = data.progress?.percentage ?? 0
   progressDone.value = d; progressDoing.value = dg; progressTotal.value = total; progressPct.value = pct
   vehicles.value = data.vehiclesNeedService || []
   reports.value = data.reports || []
-  fseMembers.value = data.fseMembers || []
-  assignments.value = data.assignments || []
 }
 
 async function load(m?: string) {
@@ -82,22 +71,6 @@ async function load(m?: string) {
 }
 
 async function onMonthChange() { hintKey.value = 'mgrHintRefreshing'; hintErr.value = false; await load() }
-
-async function onAssign() {
-  if (!assignee.value || !maint.value || !vehicleNo.value.trim() || !deadline.value) {
-    hintKey.value = 'mgrHintFillAll'; hintErr.value = true; return
-  }
-  try {
-    await postAssignment({
-      assignedToEmployeeId: assignee.value, maint: maint.value,
-      vehicleNo: vehicleNo.value.trim(), deadline: deadline.value,
-      createdBy: { employeeId: auth.user?.employeeId || '', name: auth.user?.username || '' },
-    })
-    hintKey.value = 'mgrHintAssignOk'; hintErr.value = false
-    vehicleNo.value = ''
-    await load()
-  } catch { hintKey.value = 'mgrHintAssignFail'; hintErr.value = true }
-}
 
 function openReport(r: ManagerReport) {
   if (r.reportUrl) { window.open(r.reportUrl, '_blank', 'noopener,noreferrer'); return }
@@ -133,15 +106,7 @@ onMounted(() => load())
       </article>
     </div>
 
-    <div class="manager-board__panel">
-      <h3 class="manager-board__panel-title">{{ t.mgrVehiclesNeedService }}</h3>
-      <ul class="manager-list">
-        <li v-if="!vehicles.length" class="manager-list__empty">{{ t.mgrNoVehicles }}</li>
-        <li v-for="v in vehicles" :key="v.vehicleNo" class="manager-list__item">
-          <strong>{{ v.vehicleNo }}</strong> · {{ v.maint.toUpperCase() }} · {{ t.mgrOwner }} {{ v.assignedTo?.name || v.assignedTo?.employeeId || '-' }} · {{ t.mgrDue }} {{ v.deadline || '-' }}
-        </li>
-      </ul>
-    </div>
+    <p v-if="hintText" class="manager-hint" :style="{ color: hintErr ? '#dc2626' : '#0f766e' }">{{ hintText }}</p>
 
     <div class="manager-board__panel">
       <h3 class="manager-board__panel-title">{{ t.mgrProgressTitle }}</h3>
@@ -157,6 +122,16 @@ onMounted(() => load())
     </div>
 
     <div class="manager-board__panel">
+      <h3 class="manager-board__panel-title">{{ t.mgrVehiclesNeedService }}</h3>
+      <ul class="manager-list">
+        <li v-if="!vehicles.length" class="manager-list__empty">{{ t.mgrNoVehicles }}</li>
+        <li v-for="v in vehicles" :key="v.vehicleNo" class="manager-list__item">
+          <strong>{{ v.vehicleNo }}</strong> · {{ v.maint.toUpperCase() }} · {{ t.mgrOwner }} {{ v.assignedTo?.name || v.assignedTo?.employeeId || '-' }} · {{ t.mgrDue }} {{ v.deadline || '-' }}
+        </li>
+      </ul>
+    </div>
+
+    <div class="manager-board__panel">
       <h3 class="manager-board__panel-title">{{ t.mgrReportsTitle }}</h3>
       <ul class="manager-list">
         <li v-if="!reports.length" class="manager-list__empty">{{ t.mgrNoReports }}</li>
@@ -167,42 +142,6 @@ onMounted(() => load())
           </button>
         </li>
       </ul>
-    </div>
-
-    <div class="manager-board__panel">
-      <h3 class="manager-board__panel-title">{{ t.mgrAssignTitle }}</h3>
-      <form class="manager-assign-form" @submit.prevent="onAssign">
-        <label class="manager-field"><span>{{ t.mgrFse }}</span>
-          <select v-model="assignee" required>
-            <option value="">{{ t.mgrSelectFse }}</option>
-            <option v-for="m in fseMembers" :key="m.employeeId" :value="m.employeeId">{{ m.name }} ({{ m.employeeId }}){{ m.email ? ` · ${m.email}` : '' }}</option>
-          </select>
-        </label>
-        <label class="manager-field"><span>{{ t.mgrMaint }}</span>
-          <select v-model="maint" required><option value="c4c6">C4/C6</option><option value="c1c3">C1/C3</option></select>
-        </label>
-        <label class="manager-field"><span>{{ t.mgrVehicleNo }}</span><input v-model="vehicleNo" type="text" :placeholder="t.mgrVehiclePlaceholder" required /></label>
-        <label class="manager-field"><span>{{ t.mgrDeadline }}</span><input v-model="deadline" type="date" required /></label>
-        <button type="submit" class="manager-submit">{{ t.mgrAssignBtn }}</button>
-        <p class="manager-hint" :style="{ color: hintErr ? '#dc2626' : '#0f766e' }">{{ hintText }}</p>
-      </form>
-    </div>
-
-    <div class="manager-board__panel">
-      <h3 class="manager-board__panel-title">{{ t.mgrRecentAssignments }}</h3>
-      <div class="manager-table-wrap">
-        <table class="manager-table">
-          <thead><tr><th>{{ t.mgrTaskId }}</th><th>{{ t.mgrVehicle }}</th><th>{{ t.mgrMaint }}</th><th>{{ t.mgrFse }}</th><th>{{ t.mgrStatus }}</th><th>{{ t.mgrDeadline }}</th></tr></thead>
-          <tbody>
-            <tr v-if="!assignments.length"><td colspan="6" class="manager-table__empty">{{ t.mgrNoAssignments }}</td></tr>
-            <tr v-for="a in assignments" :key="a.id">
-              <td>{{ a.id }}</td><td>{{ a.vehicleNo || '-' }}</td><td>{{ a.maint.toUpperCase() }}</td>
-              <td>{{ a.assignedTo?.name || a.assignedTo?.employeeId || '-' }}</td>
-              <td>{{ managerStatusLabel(a.status) }}</td><td>{{ a.deadline || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </div>
   </section>
 </template>

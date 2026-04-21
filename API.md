@@ -189,7 +189,8 @@ Authorization: Bearer <token>
 
 **接口**：`GET /api/manager/dashboard?month=YYYY-MM`
 
-> 仅 `manager` 可调用。
+> 仅 `manager` 可调用。  
+> 返回当前登录经理自己发布的任务汇总，不包含其他经理创建的任务。
 
 #### 2.3.2 经理派发任务
 
@@ -251,6 +252,12 @@ Authorization: Bearer <token>
 
 ## 4. Task Centre 模块（TaskCenterView）
 
+> 说明：Task Centre 当前仅包含月度工作量概览和 FSE 自建任务能力。
+>
+> - 不存在“借调 / Temporary Secondment”概念
+> - 不存在“跨团队 / Cross-team Service Records”模块
+> - 工单接口也不接收相关字段，前端仅提交修程、车号、结束日期、服务地点等基础信息
+
 ### 4.1 创建工单（FSE 自建 / 经理创建）
 
 **接口**：`POST /api/work-orders`
@@ -269,6 +276,8 @@ Authorization: Bearer <token>
 | `deadline` | string | 是 | 截止日期 |
 | `title` | string | 否 | 标题 |
 | `depot` | string | 否 | 服务地点 |
+
+> 注：当前接口不支持借调地点、借调开始/结束日期、跨团队标记等扩展字段。
 
 ### 4.2 更新工单状态
 
@@ -302,6 +311,8 @@ Authorization: Bearer <token>
 **接口**：`GET /api/work-orders/stats`
 
 **Query 参数**：同 `GET /api/work-orders`
+
+> 说明：统计口径仅基于工单列表，不包含跨团队、借调天数等维度。
 
 ---
 
@@ -493,6 +504,11 @@ Authorization: Bearer <token>
 > - `todo`：待办（刚派发/刚生成）
 > - `doing`：进行中（已接受/开始执行）
 > - `done`：已完成（提交完成）
+>
+> 业务约束：
+> - 当前系统没有“借调 / Temporary Secondment”概念
+> - 当前系统没有“跨团队 / Cross-team”统计或筛选维度
+> - 因此工单模型中不包含 secondment、cross-team 等相关字段
 
 ### 3.1 查询工单列表
 
@@ -506,6 +522,8 @@ Authorization: Bearer <token>
 | `status` | string | 否 | `todo/doing/done` |
 | `month` | string | 否 | `YYYY-MM`（按 deadline 或 createdAt 归属月份） |
 | `maint` | string | 否 | `c1c3` / `c4c6` |
+
+> 说明：当前查询接口不支持按借调、跨团队、服务天数等条件过滤。
 
 **成功响应**：
 
@@ -531,6 +549,10 @@ Authorization: Bearer <token>
 | `title` | string | 否 | 标题 |
 | `depot` | string | 否 | 服务地点/段所 |
 | `createdBy` | object | 否 | `{ employeeId, name }` |
+
+> 说明：FSE 在 Task Centre 自建任务时，前端会先调用本接口创建工单，再调用状态接口把工单置为 `doing`。
+>
+> 不支持字段示例：`isSeconded`、`secondCity`、`secondStartDate`、`secondEndDate`、`crossTeam`
 
 **成功响应**（201）：
 
@@ -743,6 +765,8 @@ Authorization: Bearer <token>
 ### 9.1 看板数据
 
 **接口**：`GET /api/manager/dashboard?month=YYYY-MM`
+
+> 仅统计当前登录经理自己发布的任务。
 
 ### 9.2 经理派发工单（兼容入口）
 

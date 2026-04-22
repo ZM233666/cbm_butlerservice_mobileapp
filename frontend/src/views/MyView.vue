@@ -10,7 +10,7 @@ import type { UserCertificate } from '@/types/user'
 const auth = useAuthStore()
 const router = useRouter()
 const user = computed(() => auth.user!)
-const { t } = useI18n()
+const { t, lang } = useI18n()
 
 const aboutOpen = ref(false)
 const contactOpen = ref(false)
@@ -37,6 +37,59 @@ type CertificateDraft = {
 const certificateDrafts = ref<CertificateDraft[]>([])
 const certificateSaving = ref(false)
 const certificateFeedback = ref('')
+
+const PROFILE_TERM_LABELS = {
+  qualification: {
+    zh: {
+      engineer: '工程师',
+    },
+    en: {
+      engineer: 'Engineer',
+    },
+  },
+  certificate: {
+    zh: {
+      working_at_height: '登高证',
+    },
+    en: {
+      working_at_height: 'Working at Height',
+    },
+  },
+  skillType: {
+    zh: {
+      emu: 'EMU',
+      loco: 'LOCO',
+    },
+    en: {
+      emu: 'EMU',
+      loco: 'LOCO',
+    },
+  },
+} as const
+
+function normalizeProfileTerm(value: string): string {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const compact = raw.replace(/\s+/g, '').toLowerCase()
+  if (compact === '工程师' || compact === 'engineer') return 'engineer'
+  if (compact === '登高证' || compact === 'workingatheight' || compact === 'workingatheightcertificate') return 'working_at_height'
+  if (compact === 'emu') return 'emu'
+  if (compact === 'loco') return 'loco'
+  return ''
+}
+
+function translateProfileTerm(category: keyof typeof PROFILE_TERM_LABELS, value: string): string {
+  const normalized = normalizeProfileTerm(value)
+  if (!normalized) return value
+  return PROFILE_TERM_LABELS[category][lang.value][normalized as keyof typeof PROFILE_TERM_LABELS[typeof category]['zh']] || value
+}
+
+const translatedQualifications = computed(() => qualifications.value.map(item => translateProfileTerm('qualification', item)))
+const translatedSkillTypes = computed(() => skillTypes.value.map(item => translateProfileTerm('skillType', item)))
+const translatedCertificates = computed(() => certificates.value.map(cert => ({
+  ...cert,
+  translatedName: translateProfileTerm('certificate', String(cert.name || '')),
+})))
 
 function certificateStatusLabel(status?: string) {
   if (status === 'expiring') return t.value.myStatusExpiring
@@ -196,7 +249,7 @@ onMounted(() => {
               <p class="my-panel__title">{{ t.myQualifications }}</p>
             </div>
             <div class="my-chip-group">
-              <span v-for="item in qualifications" :key="item" class="my-chip my-chip--qualification">{{ item }}</span>
+              <span v-for="item in translatedQualifications" :key="item" class="my-chip my-chip--qualification">{{ item }}</span>
             </div>
           </article>
 
@@ -205,7 +258,7 @@ onMounted(() => {
               <p class="my-panel__title">{{ t.mySkillTypes }}</p>
             </div>
             <div class="my-chip-group">
-              <span v-for="item in skillTypes" :key="item" class="my-chip my-chip--skill">{{ item }}</span>
+              <span v-for="item in translatedSkillTypes" :key="item" class="my-chip my-chip--skill">{{ item }}</span>
             </div>
           </article>
 
@@ -216,16 +269,16 @@ onMounted(() => {
             </div>
             <div v-if="hasCertificates" class="my-certificate-list">
               <article
-                v-for="cert in certificates"
+                v-for="cert in translatedCertificates"
                 :key="cert.id || cert.name"
                 class="my-certificate-card"
                 :class="certificateStatusClass(cert.status)"
               >
                 <div v-if="cert.photoUrl" class="my-certificate-card__photo-wrap">
-                  <img :src="cert.photoUrl" :alt="cert.name" class="my-certificate-card__photo" />
+                  <img :src="cert.photoUrl" :alt="cert.translatedName" class="my-certificate-card__photo" />
                 </div>
                 <div class="my-certificate-card__top">
-                  <strong class="my-certificate-card__name">{{ cert.name }}</strong>
+                  <strong class="my-certificate-card__name">{{ cert.translatedName }}</strong>
                   <span class="my-certificate-card__badge">{{ certificateStatusLabel(cert.status) }}</span>
                 </div>
                 <div v-if="cert.id" class="my-certificate-card__meta">

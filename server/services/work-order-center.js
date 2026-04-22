@@ -28,6 +28,12 @@ function normalizeStatus(v) {
   return VALID_STATUS.has(status) ? status : "";
 }
 
+function normalizeBoolean(v) {
+  if (typeof v === "boolean") return v;
+  const text = normalizeText(v).toLowerCase();
+  return text === "1" || text === "true" || text === "yes";
+}
+
 function normalizeIso(v) {
   const text = normalizeText(v);
   if (!text) return "";
@@ -151,6 +157,8 @@ function normalizeWorkOrder(input) {
     report: normalizeText(src.report),
     reportUrl: normalizeText(src.reportUrl),
     depot: normalizeText(src.depot),
+    requiresSpecialWorkCertificate: normalizeBoolean(src.requiresSpecialWorkCertificate),
+    requiredCertificateName: normalizeText(src.requiredCertificateName),
     assignedTo: {
       employeeId: normalizeText(src.assignedTo && src.assignedTo.employeeId),
       name: normalizeText(src.assignedTo && src.assignedTo.name),
@@ -185,7 +193,12 @@ function buildFseMembersFromUsers(usersStore) {
   const users = normalizeUsersStore(usersStore).users;
   return users
     .filter((u) => u.role === "fse")
-    .map((u) => ({ employeeId: u.employeeId, name: u.username, email: u.email }));
+    .map((u) => ({
+      employeeId: u.employeeId,
+      name: u.username,
+      email: u.email,
+      specialWorkCertificates: normalizeCertificates(u.specialWorkCertificates),
+    }));
 }
 
 function createWorkOrder(payload, usersStore) {
@@ -214,6 +227,8 @@ function createWorkOrder(payload, usersStore) {
     report: normalizeText(src.report),
     reportUrl: normalizeText(src.reportUrl),
     depot: normalizeText(src.depot),
+    requiresSpecialWorkCertificate: normalizeBoolean(src.requiresSpecialWorkCertificate),
+    requiredCertificateName: normalizeText(src.requiredCertificateName),
     assignedTo: {
       employeeId: assignee.employeeId,
       name: assignee.username,

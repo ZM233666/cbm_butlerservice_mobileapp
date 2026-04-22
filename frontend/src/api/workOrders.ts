@@ -7,6 +7,8 @@ export interface WorkOrder {
   title?: string
   deadline?: string
   depot?: string
+  requiresSpecialWorkCertificate?: boolean
+  requiredCertificateName?: string
   status: 'todo' | 'doing' | 'done'
   assignedTo?: { employeeId?: string; name?: string; email?: string }
   createdBy?: { employeeId?: string; name?: string }
@@ -21,6 +23,8 @@ export interface CreateWorkOrderPayload {
   deadline: string
   title?: string
   depot?: string
+  requiresSpecialWorkCertificate?: boolean
+  requiredCertificateName?: string
   createdBy?: { employeeId: string; name: string }
 }
 

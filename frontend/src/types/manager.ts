@@ -1,7 +1,10 @@
+import type { UserCertificate } from './user'
+
 export interface FseMember {
   employeeId: string
   name: string
   email?: string
+  specialWorkCertificates?: UserCertificate[]
 }
 
 export interface ManagerOverview {
@@ -30,6 +33,9 @@ export interface ManagerAssignment {
   id: string
   vehicleNo: string
   maint: string
+  depot?: string
+  requiresSpecialWorkCertificate?: boolean
+  requiredCertificateName?: string
   assignedTo?: { name?: string; employeeId?: string }
   status: string
   deadline: string

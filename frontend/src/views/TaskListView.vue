@@ -594,7 +594,6 @@ onMounted(async () => {
         <h2 class="tl-card__head">{{ t.basicInfo }}</h2>
         <dl class="tl-basic">
           <div class="tl-basic__row"><dt>{{ t.depot }}</dt><dd><input class="tl-readonly" value="Shanghai" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.project }}</dt><dd><input class="tl-readonly" value="PRJ-2026-RVS-01" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.train }}</dt><dd><input class="tl-readonly" value="HXD1-1234" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="auth.user?.employeeId || ''" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.maint }}</dt><dd><input class="tl-readonly" :value="maintType === 'c1c3' ? t.maintC1C3 : t.maintC4C6" readonly /></dd></div>

@@ -11,7 +11,10 @@ export interface CreateAssignmentPayload {
   assignedToEmployeeId: string
   maint: string
   vehicleNo: string
+  depot: string
   deadline: string
+  requiresSpecialWorkCertificate?: boolean
+  requiredCertificateName?: string
   createdBy: { employeeId: string; name: string }
 }
 

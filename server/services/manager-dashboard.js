@@ -21,6 +21,12 @@ function normalizeStatus(v) {
   return "todo";
 }
 
+function normalizeBoolean(v) {
+  if (typeof v === "boolean") return v;
+  const raw = String(v || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
 function normalizeMonth(v) {
   const raw = String(v || "").trim();
   if (/^\d{4}-\d{2}$/.test(raw)) return raw;
@@ -49,6 +55,7 @@ function normalizeFseMember(raw) {
     employeeId,
     name: normalizeText(m.name) || employeeId,
     email: normalizeText(m.email),
+    specialWorkCertificates: Array.isArray(m.specialWorkCertificates) ? m.specialWorkCertificates : [],
   };
 }
 
@@ -62,6 +69,8 @@ function normalizeAssignment(raw) {
     maint: normalizeMaint(row.maint) || "c4c6",
     vehicleNo: normalizeText(row.vehicleNo),
     depot: normalizeText(row.depot),
+    requiresSpecialWorkCertificate: normalizeBoolean(row.requiresSpecialWorkCertificate),
+    requiredCertificateName: normalizeText(row.requiredCertificateName),
     deadline: normalizeText(row.deadline),
     report: normalizeText(row.report),
     reportUrl: normalizeText(row.reportUrl),

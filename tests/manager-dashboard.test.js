@@ -6,7 +6,7 @@ const {
   createAssignment,
 } = require("../server/services/manager-dashboard");
 
-test("normalizeAssignmentsStore should fallback FSE members", () => {
+test("normalizeAssignmentsStore should fallback FieldServiceEngineer members", () => {
   const store = normalizeAssignmentsStore({});
   assert.equal(Array.isArray(store.fseMembers), true);
   assert.equal(store.fseMembers.length > 0, true);

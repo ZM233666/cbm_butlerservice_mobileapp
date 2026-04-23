@@ -219,7 +219,7 @@ body {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
 }
 
-/* ====== FSE Home (dash.html inspired) ====== */
+/* ====== FieldServiceEngineer Home (dash.html inspired) ====== */
 .home-section {
   display: flex;
   flex-direction: column;
@@ -2158,7 +2158,7 @@ button.my-info-row.my-info-row--action {
   min-width: 0;
 }
 
-/* 与 FSE 首页 home-section / ios-list-group 一致的白色分组与圆角阴影 */
+/* 与 FieldServiceEngineer 首页 home-section / ios-list-group 一致的白色分组与圆角阴影 */
 .manager-board.manager-board--ios-home {
   display: flex;
   flex-direction: column;

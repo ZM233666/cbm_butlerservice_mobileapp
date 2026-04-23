@@ -100,7 +100,7 @@
     if (!select) return;
     const currentValue = select.value;
     const options = Array.isArray(members) ? members : [];
-    select.innerHTML = '<option value="">请选择 FSE</option>' +
+    select.innerHTML = '<option value="">请选择 FieldServiceEngineer</option>' +
       options
         .map((m) => {
           const name = m.name || m.employeeId;
@@ -222,7 +222,7 @@
       setManagerHint("派发失败，请检查数据后重试", true);
       return;
     }
-    setManagerHint("派发成功，已同步到对应 FSE 待办", false);
+    setManagerHint("派发成功，已同步到对应 FieldServiceEngineer 待办", false);
     managerEl("mgr-vehicle").value = "";
     const dash = await fetchManagerDashboard();
     renderManagerDashboard(dash);

@@ -215,7 +215,7 @@ onMounted(() => {
       </div>
       <div class="my-header__meta">
         <p class="my-header__name">{{ user.username }}</p>
-        <p class="my-header__line">{{ t.myHeaderEmail }}: {{ user.email }}</p>
+        <p class="my-header__line">{{ t.myHeaderEmail }}: {{ user.email || '-' }}</p>
         <p class="my-header__line">{{ t.myHeaderEmployeeId }}: {{ user.employeeId }}</p>
         <p class="my-header__line">{{ t.myHeaderRegion }}: {{ user.region || '-' }}</p>
         <p class="my-header__line">{{ t.myHeaderRole }}: {{ auth.roleLabel }}</p>

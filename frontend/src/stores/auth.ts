@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, UserCertificate, UserRole } from '@/types/user'
 import { ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY, ROLE_LABELS, isValidRole } from '@/types/user'
-import { loginUser } from '@/api/users'
+import { fetchUserInfo } from '@/api/users'
 import { useI18nStore } from './i18n'
 
 const USER_KEY = 'butler.auth.user'
@@ -63,7 +63,7 @@ function normalizeCertificates(input: unknown): UserCertificate[] {
 
 function normalizeUser(input: Partial<User>): User | null {
   const username = String(input.username || '').trim()
-  const employeeId = String(input.employeeId || '').trim()
+  const employeeId = String(input.employeeId || '').trim() || username || 'unknown'
   const email = String(input.email || '').trim()
   const department = String(input.department || '').trim()
   const rawRole = String(input.role || '').trim().toLowerCase()
@@ -73,7 +73,7 @@ function normalizeUser(input: Partial<User>): User | null {
   const qualifications = normalizeStringList((input as any).qualifications)
   const skillLevel = String((input as any).skillLevel || '').trim()
   const skillTypes = normalizeStringList((input as any).skillTypes)
-  if (!username || !employeeId || !email) return null
+  if (!username) return null
   return {
     username,
     employeeId,
@@ -138,14 +138,14 @@ export const useAuthStore = defineStore('auth', () => {
     const currentToken = String(token.value || '').trim()
     if (!current || !currentToken) return false
     try {
-      const resp = await loginUser({
-        username: current.username,
-        employeeId: current.employeeId,
-        email: current.email,
-        role: current.role,
-        department: current.department || '',
-      })
-      login(resp.user, resp.token)
+      const key = String(current.employeeId || current.username || '').trim()
+      if (!key) return false
+      const info = await fetchUserInfo(key)
+      const rawRole = String((info as any).role || '').trim().toLowerCase()
+      const safeRole: UserRole | undefined = rawRole && isValidRole(rawRole) ? (rawRole as UserRole) : undefined
+      const { role: _ignoredRole, ...rest } = (info as any) || {}
+      const merged: Partial<User> = { ...current, ...rest, ...(safeRole ? { role: safeRole } : {}) }
+      login(merged, currentToken)
       return true
     } catch {
       return false

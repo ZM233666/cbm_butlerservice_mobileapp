@@ -7,7 +7,7 @@
   let watermarkTimer = null;
 
   const ROLE_LABELS = {
-    [ROLE_FSE]: "FSE",
+    [ROLE_FSE]: "FieldServiceEngineer",
     [ROLE_MANAGER]: "大区经理",
     [ROLE_THIRD_PARTY]: "第三方",
   };
@@ -83,7 +83,7 @@
       return ROLE_FSE;
     }
 
-    // 默认角色：FSE
+    // 默认角色：FieldServiceEngineer
     return ROLE_FSE;
   }
 
@@ -268,7 +268,7 @@
     enforcePageAccess,
     syncScreenshotWatermark,
     roles: {
-      FSE: ROLE_FSE,
+      FieldServiceEngineer: ROLE_FSE,
       MANAGER: ROLE_MANAGER,
       THIRD_PARTY: ROLE_THIRD_PARTY,
     },

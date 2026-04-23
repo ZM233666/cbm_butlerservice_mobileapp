@@ -1,7 +1,7 @@
 # ButlerService 接口文档（按前端模块）
 
 > 说明：本文档按前端页面/模块组织，便于联调。  
-> 除登录接口外，其余 `/api/*` 均需携带 `Authorization: Bearer <token>`。
+> 除登录/验证码接口外，其余 `/api/*` 均需携带 `Authorization: JWT <access>`。
 
 ---
 
@@ -14,21 +14,20 @@
 
 ### 0.2 鉴权
 
-- 登录成功后会返回 `token`
+- 登录成功后会返回 `access`（access token）
 - 后续请求需带 Header：
 
 ```http
-Authorization: Bearer <token>
+Authorization: JWT <access>
 ```
 
-相关环境变量：
-- `AUTH_TOKEN_SECRET`：签名密钥（生产环境必配）
-- `AUTH_TOKEN_EXPIRE_SEC`：过期秒数（默认 43200）
+> 说明：当前前端以 `Authorization: JWT ...` 方式与后端鉴权对齐（参考 `web/src/utils/service.ts`）。
 
 ### 0.3 通用响应
 
-- 成功：`{ "ok": true, ... }`
-- 失败：`{ "ok": false, "error": "<code>" }`
+- 本项目后端返回风格以 `code/msg/data` 为主：
+  - 成功：`{ "code": 2000, "data": {...}, "msg": "..." }`
+  - 失败：`{ "code": 4000|401|..., "data": null, "msg": "..." }`
 
 常见错误码：
 - `400` 参数错误（如 `employee_id_required`、`status_invalid`）
@@ -41,29 +40,46 @@ Authorization: Bearer <token>
 
 ## 1. 用户登录（LoginView）
 
-### 1.1 用户登录
+### 1.1 获取验证码（页面打开即调用）
 
-**接口**：`POST /api/users/login`
+**接口**：`GET /api/captcha/`
+
+**成功响应**（200）：
+
+```json
+{
+  "code": 2000,
+  "data": {
+    "key": 29,
+    "image_base": "data:image/png;base64,...."
+  },
+  "msg": "success"
+}
+```
+
+> `data.key` 作为后续登录的 `captchaKey`；`data.image_base` 可直接作为 `<img src>`。
+
+### 1.2 用户登录（工号 + 密码 + 验证码）
+
+**接口**：`POST /api/login/`
 
 **请求参数（JSON）**：
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `username` | string | 是 | 用户名 |
-| `employeeId` | string | 是 | 工号 |
-| `email` | string | 是 | 邮箱 |
-| `role` | string | 是 | `fse` / `manager` |
-| `department` | string | 否 | 预留 |
+| `captcha` | string | 是 | 用户输入的验证码 |
+| `captchaKey` | string/number | 是 | 调用 `/api/captcha/` 返回的 `data.key` |
+| `username` | string | 是 | 工号 |
+| `password` | string | 是 | 密码（**前端需 MD5 后提交**） |
 
 **请求示例**：
 
 ```json
 {
-  "username": "Zhen Miao",
-  "employeeId": "1",
-  "email": "1@com",
-  "role": "fse",
-  "department": ""
+  "captcha": "9-8",
+  "captchaKey": 29,
+  "username": "819943",
+  "password": "md5(password)"
 }
 ```
 
@@ -71,17 +87,39 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "ok": true,
-  "user": {
-    "employeeId": "1",
-    "username": "Zhen Miao",
-    "email": "1@com",
-    "department": "",
-    "role": "fse",
-    "updatedAt": "2026-04-17T00:00:00.000Z"
+  "code": 2000,
+  "data": {
+    "access": "<access_token>",
+    "username": "819943",
+    "pwd_change_count": 0
   },
-  "token": "<bearer_token>",
-  "isNewUser": false
+  "msg": "..."
+}
+```
+
+### 1.3 获取用户信息（用于个人信息卡片）
+
+**接口**：`GET /api/system/user/user_info/?username=<工号>`
+
+**请求 Header**：
+
+```http
+Authorization: JWT <access>
+```
+
+**成功响应**（节选）：
+
+```json
+{
+  "code": 2000,
+  "data": {
+    "username": "819943",
+    "name": "贺大勇",
+    "email": null,
+    "dept_info": { "dept_id": 15, "dept_name": "西安" },
+    "role_info": [{ "id": 3, "name": "FieldServiceEngineer", "key": "FSE" }]
+  },
+  "msg": "Query successful"
 }
 ```
 
@@ -203,7 +241,7 @@ Authorization: Bearer <token>
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `assignedToEmployeeId` | string | 是 | 指派的 FSE 工号 |
+| `assignedToEmployeeId` | string | 是 | 指派的 FieldServiceEngineer 工号 |
 | `maint` | string | 是 | 修程 |
 | `vehicleNo` | string | 是 | 车辆号 |
 | `deadline` | string | 是 | 截止日期 |
@@ -243,7 +281,7 @@ Authorization: Bearer <token>
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `employeeId` | string | 是 | 当前 FSE 工号（必须本人） |
+| `employeeId` | string | 是 | 当前 FieldServiceEngineer 工号（必须本人） |
 | `maint` | string | 是 | 修程 |
 | `reason` | string | 是 | 申请原因 |
 | `taskId` | string | 否 | 任务 ID |
@@ -252,18 +290,18 @@ Authorization: Bearer <token>
 
 ## 4. Task Centre 模块（TaskCenterView）
 
-> 说明：Task Centre 当前仅包含月度工作量概览和 FSE 自建任务能力。
+> 说明：Task Centre 当前仅包含月度工作量概览和 FieldServiceEngineer 自建任务能力。
 >
 > - 不存在“借调 / Temporary Secondment”概念
 > - 不存在“跨团队 / Cross-team Service Records”模块
 > - 工单接口也不接收相关字段，前端仅提交修程、车号、结束日期、服务地点等基础信息
 
-### 4.1 创建工单（FSE 自建 / 经理创建）
+### 4.1 创建工单（FieldServiceEngineer 自建 / 经理创建）
 
 **接口**：`POST /api/work-orders`
 
 **权限规则**：
-- `manager`：可给任意 FSE 创建
+- `manager`：可给任意 FieldServiceEngineer 创建
 - `fse`：只能给自己创建（`assignedToEmployeeId` 必须是本人）
 
 **请求参数（JSON）**：
@@ -360,7 +398,7 @@ Authorization: Bearer <token>
 
 > 说明：本项目为 H5 联调与演示用途，采用本地 JSON 作为“模拟数据库”。
 >
-> - **通用响应风格**：多数接口返回 `{ "ok": true, ... }`；校验失败返回 `4xx` 且 `{ "ok": false, "error": "<code>" }`
+> - **通用响应风格**：以 `code/msg/data` 为主（成功 `2000`，失败常见 `4000/401`）。
 > - **HTTPS**：开发时常用 `npm run start:https`（自签证书）
 
 ## 基础地址
@@ -370,15 +408,11 @@ Authorization: Bearer <token>
 
 ## 鉴权说明（新增）
 
-- 除 `POST /api/users/login` 外，其余 `/api/*` 接口均需要：
-  - `Authorization: Bearer <token>`
-- `token` 由登录接口返回，服务端会校验签名、过期时间、用户与角色一致性。
-- 相关环境变量：
-  - `AUTH_TOKEN_SECRET`：签名密钥（生产环境必须配置）
-  - `AUTH_TOKEN_EXPIRE_SEC`：token 过期秒数（默认 43200 秒）
+- 除 `POST /api/login/`、`GET /api/captcha/` 外，其余 `/api/*` 接口均需要：
+  - `Authorization: JWT <access>`
+- `access` 由登录接口返回（`data.access`）。
 - 常见鉴权错误：
-  - `401 { "ok": false, "error": "unauthorized" }`
-  - `403 { "ok": false, "error": "forbidden" }`
+  - `401 { "code": 401, "data": null, "msg": { "detail": "..." } }`
 
 ## 常见错误码（建议前端统一处理）
 
@@ -416,32 +450,28 @@ Authorization: Bearer <token>
 > 数据文件：`server/data/users.json`
 >
 > 当前默认内置用户：
-> - FSE：`username=Zhen Miao`, `employeeId=1`, `email=1@com`, `role=fse`
+> - FieldServiceEngineer：`username=Zhen Miao`, `employeeId=1`, `email=1@com`, `role=fse`
 > - 大区经理：`username=Zhen Miao`, `employeeId=2`, `email=2@com`, `role=manager`
 
-### 2.1 登录（必须校验信息）
+### 2.1 登录（工号 + 密码）
 
-**接口**：`POST /api/users/login`
+**接口**：`POST /api/login/`
 
 **请求 Body**：
 
 | 字段名 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `username` | string | 是 | 姓名 |
-| `employeeId` | string | 是 | 工号 |
-| `email` | string | 是 | 邮箱 |
-| `role` | string | 是 | `fse` / `manager` |
-| `department` | string | 否 | 部门（预留） |
+| `captcha` | string | 是 | 验证码（如后端要求） |
+| `username` | string | 是 | 工号 |
+| `password` | string | 是 | 密码 |
 
 **请求示例**：
 
 ```json
 {
+  "captcha": "",
   "username": "Zhen Miao",
-  "employeeId": "1",
-  "email": "1@com",
-  "role": "fse",
-  "department": ""
+  "password": "******"
 }
 ```
 
@@ -492,7 +522,7 @@ Authorization: Bearer <token>
 **接口**：`POST /api/users`
 > 仅 `manager` 可调用
 
-> 注意：此接口用于调试，`/api/users/login` 不会自动注册用户。
+> 注意：此接口用于调试，`/api/login/` 不会自动注册用户。
 
 ---
 
@@ -535,14 +565,14 @@ Authorization: Bearer <token>
 
 **接口**：`POST /api/work-orders`
 > 权限规则：
-> - `manager`：可为任意 FSE 创建
+> - `manager`：可为任意 FieldServiceEngineer 创建
 > - `fse`：仅允许 `assignedToEmployeeId` 等于自己
 
 **请求 Body**：
 
 | 字段名 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `assignedToEmployeeId` | string | 是 | 指派给的 FSE 工号 |
+| `assignedToEmployeeId` | string | 是 | 指派给的 FieldServiceEngineer 工号 |
 | `maint` | string | 是 | `c1c3` / `c4c6` |
 | `vehicleNo` | string | 是 | 车辆编号 |
 | `deadline` | string | 是 | `YYYY-MM-DD` |
@@ -550,7 +580,7 @@ Authorization: Bearer <token>
 | `depot` | string | 否 | 服务地点/段所 |
 | `createdBy` | object | 否 | `{ employeeId, name }` |
 
-> 说明：FSE 在 Task Centre 自建任务时，前端会先调用本接口创建工单，再调用状态接口把工单置为 `doing`。
+> 说明：FieldServiceEngineer 在 Task Centre 自建任务时，前端会先调用本接口创建工单，再调用状态接口把工单置为 `doing`。
 >
 > 不支持字段示例：`isSeconded`、`secondCity`、`secondStartDate`、`secondEndDate`、`crossTeam`
 
@@ -569,7 +599,7 @@ Authorization: Bearer <token>
 
 | 字段名 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `assignedToEmployeeId` | string | 是 | 新的 FSE 工号 |
+| `assignedToEmployeeId` | string | 是 | 新的 FieldServiceEngineer 工号 |
 | `maint` / `deadline` / `vehicleNo` / `title` / `depot` | string | 否 | 可选补丁字段 |
 
 **成功响应**：

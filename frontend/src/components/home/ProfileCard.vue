@@ -24,7 +24,7 @@ const user = auth.user!
           <span class="profile-card__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </span>
-          <span class="profile-card__value profile-card__value--email">{{ user.email }}</span>
+          <span class="profile-card__value profile-card__value--email">{{ user.email || '-' }}</span>
         </div>
         <div class="profile-card__field">
           <span class="profile-card__icon" aria-hidden="true">

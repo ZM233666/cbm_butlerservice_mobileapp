@@ -93,12 +93,12 @@
           </div>
 
           <div class="manager-board__panel">
-            <h3 class="manager-board__panel-title">任务派发（指定 FSE）</h3>
+            <h3 class="manager-board__panel-title">任务派发（指定 FieldServiceEngineer）</h3>
             <form id="mgr-assign-form" class="manager-assign-form">
               <label class="manager-field">
-                <span>FSE</span>
+                <span>FieldServiceEngineer</span>
                 <select id="mgr-assignee" required>
-                  <option value="">请选择 FSE</option>
+                  <option value="">请选择 FieldServiceEngineer</option>
                 </select>
               </label>
               <label class="manager-field">
@@ -130,7 +130,7 @@
                     <th>任务ID</th>
                     <th>车辆</th>
                     <th>修程</th>
-                    <th>FSE</th>
+                    <th>FieldServiceEngineer</th>
                     <th>状态</th>
                     <th>截止日期</th>
                   </tr>
@@ -362,7 +362,7 @@
           if (actionTasks) actionTasks.hidden = false;
           if (cbmReco) cbmReco.hidden = true;
         } else {
-          // FSE 默认视图
+          // FieldServiceEngineer 默认视图
           if (managerBoard) managerBoard.hidden = true;
           if (actionTasks) actionTasks.hidden = false;
           if (cbmReco) cbmReco.hidden = false;

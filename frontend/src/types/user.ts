@@ -30,12 +30,12 @@ export interface User {
 
 export const ROLE_LABELS: Record<'zh' | 'en', Record<UserRole, string>> = {
   zh: {
-    [ROLE_FSE]: 'FSE',
+    [ROLE_FSE]: 'FieldServiceEngineer',
     [ROLE_MANAGER]: '大区经理',
     [ROLE_THIRD_PARTY]: '第三方',
   },
   en: {
-    [ROLE_FSE]: 'FSE',
+    [ROLE_FSE]: 'FieldServiceEngineer',
     [ROLE_MANAGER]: 'Regional Manager',
     [ROLE_THIRD_PARTY]: 'Third Party',
   },

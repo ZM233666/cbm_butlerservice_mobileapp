@@ -395,29 +395,68 @@ async function addTask() {
       <section class="tc-card">
         <h2 class="tc-title">{{ t.tcAddSelfTask }}</h2>
         <div class="tc-form">
-          <label><span>{{ t.tcTemplate }}</span>
-            <select v-model="form.template">
-              <option value="c1c3">{{ t.tcTemplateC1C3 }}</option>
-              <option value="c4c6">{{ t.tcTemplateC4C6 }}</option>
-              <option value="custom">{{ t.tcTemplateCustom }}</option>
-            </select>
-          </label>
-          <label v-if="form.template === 'custom'"><span>{{ t.tcCustomName }}</span><input v-model="form.customName" :placeholder="t.tcCustomPlaceholder" /></label>
-          <label><span>{{ t.tcTrainModel }}</span><input v-model="form.trainModel" :placeholder="t.tcTrainPlaceholder" /></label>
-          <label><span>{{ t.tcServiceCity }}</span><input v-model="form.serviceCity" :placeholder="lang === 'zh' ? '如：上海机务段' : 'e.g. Shanghai Depot'" /></label>
-          <label><span>{{ t.tcEndDate }}</span><input v-model="form.endDate" type="date" :min="todayMin" /></label>
+          <section class="tc-step" aria-label="Step 1">
+            <header class="tc-step__head">
+              <span class="tc-step__no" aria-hidden="true">1</span>
+              <div class="tc-step__copy">
+                <p class="tc-step__title">{{ lang === 'zh' ? '选车与位置' : 'Vehicle & Location' }}</p>
+                <p class="tc-step__sub">{{ lang === 'zh' ? '车号 / 地点' : 'Train No. / Service Location' }}</p>
+              </div>
+            </header>
+            <div class="tc-step__fields">
+              <label><span>{{ t.tcServiceCity }}</span><input v-model="form.serviceCity" :placeholder="lang === 'zh' ? '如：上海机务段' : 'e.g. Shanghai Depot'" /></label>
+              <label><span>{{ t.tcTrainModel }}</span><input v-model="form.trainModel" :placeholder="t.tcTrainPlaceholder" /></label>
+            </div>
+          </section>
+
+          <section class="tc-step" aria-label="Step 2">
+            <header class="tc-step__head">
+              <span class="tc-step__no" aria-hidden="true">2</span>
+              <div class="tc-step__copy">
+                <p class="tc-step__title">{{ lang === 'zh' ? '选标准' : 'Standard' }}</p>
+                <p class="tc-step__sub">{{ lang === 'zh' ? '维保级别 / 自动带出检查项' : 'Maintenance level / Auto checklist' }}</p>
+              </div>
+            </header>
+            <div class="tc-step__fields tc-step__fields--standard">
+              <label class="tc-step__field--maintenance">
+                <span>{{ t.tcTemplate }}</span>
+                <select v-model="form.template">
+                  <option value="c1c3">{{ t.tcTemplateC1C3 }}</option>
+                  <option value="c4c6">{{ t.tcTemplateC4C6 }}</option>
+                  <option value="custom">{{ t.tcTemplateCustom }}</option>
+                </select>
+              </label>
+              <span class="tc-step__pill tc-step__pill--inline" :title="lang === 'zh' ? '自动带出检查项数量' : 'Auto checklist count'">
+                {{ lang === 'zh' ? `检查项 ${form.requiredAttachments} 项` : `${form.requiredAttachments} items` }}
+              </span>
+              <label v-if="form.template === 'custom'" class="tc-step__field--full"><span>{{ t.tcCustomName }}</span><input v-model="form.customName" :placeholder="t.tcCustomPlaceholder" /></label>
+            </div>
+          </section>
+
+          <section class="tc-step" aria-label="Step 3">
+            <header class="tc-step__head">
+              <span class="tc-step__no" aria-hidden="true">3</span>
+              <div class="tc-step__copy">
+                <p class="tc-step__title">{{ lang === 'zh' ? '定时间并确认' : 'Schedule & Confirm' }}</p>
+                <p class="tc-step__sub">{{ lang === 'zh' ? '选择日期后提交' : 'Pick a date then submit' }}</p>
+              </div>
+            </header>
+            <div class="tc-step__fields">
+              <label><span>{{ t.tcEndDate }}</span><input v-model="form.endDate" type="date" :min="todayMin" /></label>
+            </div>
+            <button
+              type="button"
+              class="tc-add"
+              :class="{ 'is-loading': adding }"
+              :disabled="!canAddTask"
+              :aria-busy="adding ? 'true' : 'false'"
+              @click="addTask"
+            >
+              <span v-if="adding" class="tc-add__spinner" aria-hidden="true"></span>
+              {{ adding ? t.tcAdding : t.tcAddBtn }}
+            </button>
+          </section>
         </div>
-        <button
-          type="button"
-          class="tc-add"
-          :class="{ 'is-loading': adding }"
-          :disabled="!canAddTask"
-          :aria-busy="adding ? 'true' : 'false'"
-          @click="addTask"
-        >
-          <span v-if="adding" class="tc-add__spinner" aria-hidden="true"></span>
-          {{ adding ? t.tcAdding : t.tcAddBtn }}
-        </button>
       </section>
     </main>
 
@@ -530,9 +569,110 @@ async function addTask() {
 }
 .tc-progress { margin-top: 0.4rem; width: 100%; height: 0.58rem; border-radius: 999px; background: #e6edf7; overflow: hidden; }
 .tc-progress__bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #3c86d2 0%, #2f74c0 100%); transition: width 0.25s ease; }
-.tc-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; }
+.tc-form { display: grid; grid-template-columns: 1fr; gap: 0.7rem; }
 .tc-form label { display: grid; gap: 0.2rem; font-size: 0.72rem; color: #475569; }
 .tc-form input, .tc-form select { min-height: 2.15rem; border-radius: 10px; border: 1px solid #cbd5e1; padding: 0.35rem 0.55rem; font: inherit; font-size: 0.82rem; color: #0f172a; background: #fff; }
+
+.tc-step {
+  border: 1px solid #dbe7f5;
+  border-radius: 0.95rem;
+  background: #f7faff;
+  padding: 0.62rem 0.62rem 0.7rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.tc-step__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-bottom: 0.55rem;
+}
+
+.tc-step__no {
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: #0b4a82;
+  background: #eaf2fb;
+  border: 1px solid rgba(47, 116, 192, 0.18);
+  flex: 0 0 auto;
+}
+
+.tc-step__copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tc-step__title {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.2;
+  font-weight: 850;
+  color: #0b4a82;
+  letter-spacing: -0.01em;
+}
+
+.tc-step__sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: #5b6b80;
+  font-weight: 650;
+}
+
+.tc-step__pill {
+  flex: 0 0 auto;
+  margin-top: 0.05rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(255,255,255,0.85);
+  color: #334155;
+  font-size: 0.68rem;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.tc-step__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.tc-step__fields label {
+  font-size: 0.72rem;
+}
+
+.tc-step__fields--standard {
+  align-items: end;
+}
+
+.tc-step__field--maintenance {
+  min-width: 0;
+}
+
+.tc-step__field--maintenance select {
+  width: 100%;
+}
+
+.tc-step__field--full {
+  grid-column: 1 / -1;
+}
+
+.tc-step__pill--inline {
+  justify-self: start;
+  align-self: end;
+  margin-top: 0;
+  height: 2.15rem;
+  display: inline-flex;
+  align-items: center;
+}
 .tc-add {
   margin-top: 0.6rem;
   /* 避免小屏被底部导航栏遮挡 */
@@ -565,7 +705,7 @@ async function addTask() {
 .tc-toast { position: fixed; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) translateY(120%); background: rgba(24, 24, 27, 0.92); color: #fff; padding: 0.55rem 1rem; border-radius: 999px; font-size: 0.8rem; font-weight: 650; z-index: 10120; transition: transform 0.22s ease; pointer-events: none; opacity: 0; }
 .tc-toast.is-show { transform: translateX(-50%) translateY(0); opacity: 1; }
 @media (max-width: 420px) {
-  .tc-form { grid-template-columns: 1fr; }
+  .tc-step__fields { grid-template-columns: 1fr; }
   .tc-kpis--summary { grid-template-columns: 1fr; }
 }
 </style>

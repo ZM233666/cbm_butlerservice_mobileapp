@@ -30,7 +30,7 @@ const user = auth.user!
           <span class="profile-card__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 20V10l8-5 8 5v10" stroke-linecap="round" stroke-linejoin="round" /><path d="M9 20v-6h6v6" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </span>
-          <span class="profile-card__value">{{ auth.roleLabel || user.role }}</span>
+          <span class="profile-card__value profile-card__value--nowrap" :title="auth.roleLabel || user.role">{{ auth.roleLabel || user.role }}</span>
         </div>
       </div>
     </div>

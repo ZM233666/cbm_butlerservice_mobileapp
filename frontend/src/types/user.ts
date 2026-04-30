@@ -1,8 +1,15 @@
 export const ROLE_FSE = 'fse' as const
-export const ROLE_MANAGER = 'manager' as const
-export const ROLE_THIRD_PARTY = 'third_party' as const
+export const ROLE_RS_MANAGER = 'rsmanager' as const
+export const ROLE_FS_MANAGER = 'fieldservicemanager' as const
+export const ROLE_FS_DIRECTOR = 'fieldservicedirector' as const
+export const ROLE_EXTERNAL_CONTRACTOR = 'externalcontractor' as const
 
-export type UserRole = typeof ROLE_FSE | typeof ROLE_MANAGER | typeof ROLE_THIRD_PARTY
+export type UserRole =
+  | typeof ROLE_FSE
+  | typeof ROLE_RS_MANAGER
+  | typeof ROLE_FS_MANAGER
+  | typeof ROLE_FS_DIRECTOR
+  | typeof ROLE_EXTERNAL_CONTRACTOR
 
 export type CertificateStatus = 'valid' | 'expiring' | 'expired'
 
@@ -22,6 +29,8 @@ export interface User {
   department: string
   region: string
   role: UserRole
+  /** 后端 role_info[0].name（展示用，如 RegionalServiceManager） */
+  roleDisplayName?: string
   specialWorkCertificates?: UserCertificate[]
   qualifications?: string[]
   skillLevel?: string
@@ -30,23 +39,27 @@ export interface User {
 
 export const ROLE_LABELS: Record<'zh' | 'en', Record<UserRole, string>> = {
   zh: {
-    [ROLE_FSE]: 'FieldServiceEngineer',
-    [ROLE_MANAGER]: '大区经理',
-    [ROLE_THIRD_PARTY]: '第三方',
+    [ROLE_FSE]: '现场服务工程师',
+    [ROLE_RS_MANAGER]: '大区服务经理',
+    [ROLE_FS_MANAGER]: '现场服务经理',
+    [ROLE_FS_DIRECTOR]: '现场服务总监',
+    [ROLE_EXTERNAL_CONTRACTOR]: '外部承包商',
   },
   en: {
     [ROLE_FSE]: 'FieldServiceEngineer',
-    [ROLE_MANAGER]: 'Regional Manager',
-    [ROLE_THIRD_PARTY]: 'Third Party',
+    [ROLE_RS_MANAGER]: 'RegionalServiceManager',
+    [ROLE_FS_MANAGER]: 'FieldServiceManager',
+    [ROLE_FS_DIRECTOR]: 'FieldServiceDirector',
+    [ROLE_EXTERNAL_CONTRACTOR]: 'Externalcontractor',
   },
 }
 
 export const ALL_ROLES: UserRole[] = [
   ROLE_FSE,
-  ROLE_MANAGER,
-  // NOTE(2026-04): 角色调整，暂时隐藏/禁用第三方角色入口与权限控制。
-  // 如需恢复 third_party：取消注释该行，并同步恢复 LoginView 角色选项与 auth.ts 的 PAGE_ACCESS 配置。
-  // ROLE_THIRD_PARTY,
+  ROLE_RS_MANAGER,
+  ROLE_FS_MANAGER,
+  ROLE_FS_DIRECTOR,
+  ROLE_EXTERNAL_CONTRACTOR,
 ]
 
 export function isValidRole(v: string): v is UserRole {

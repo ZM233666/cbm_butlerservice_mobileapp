@@ -1,6 +1,6 @@
 import { watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { ROLE_THIRD_PARTY } from '@/types/user'
+import { ROLE_EXTERNAL_CONTRACTOR } from '@/types/user'
 
 const WATERMARK_ID = 'third-party-screenshot-watermark'
 let timer: ReturnType<typeof setInterval> | null = null
@@ -43,11 +43,11 @@ export function useScreenshotWatermark() {
   const auth = useAuthStore()
 
   function sync() {
-    if (!auth.user || auth.user.role !== ROLE_THIRD_PARTY) { remove(); return }
+    if (!auth.user || auth.user.role !== ROLE_EXTERNAL_CONTRACTOR) { remove(); return }
     render(auth.user.username, auth.user.employeeId)
     if (!timer) {
       timer = setInterval(() => {
-        if (auth.user?.role === ROLE_THIRD_PARTY) render(auth.user.username, auth.user.employeeId)
+        if (auth.user?.role === ROLE_EXTERNAL_CONTRACTOR) render(auth.user.username, auth.user.employeeId)
         else remove()
       }, 60_000)
     }

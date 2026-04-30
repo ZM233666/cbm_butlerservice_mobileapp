@@ -166,6 +166,7 @@ body {
   align-items: center;
   gap: 0.35rem;
   min-height: 1.35rem;
+  min-width: 0;
 }
 
 .profile-card__field--full {
@@ -204,6 +205,15 @@ body {
   word-break: break-word;
   overflow-wrap: anywhere;
   line-height: 1.2;
+  min-width: 0;
+}
+
+.profile-card__value--nowrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .profile-card__value--email {
@@ -2442,6 +2452,73 @@ button.my-info-row.my-info-row--action {
   gap: 0.55rem;
 }
 
+.manager-assign-form--steps {
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.mgr-step {
+  border-radius: 1.05rem;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  padding: 0.75rem;
+}
+
+.mgr-step__head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.55rem;
+}
+
+.mgr-step__no {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: #0f172a;
+  background: rgba(2, 132, 199, 0.09);
+  border: 1px solid rgba(2, 132, 199, 0.24);
+  flex: 0 0 auto;
+}
+
+.mgr-step__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.mgr-step__sub {
+  margin: 0.05rem 0 0;
+  font-size: 0.74rem;
+  color: #64748b;
+}
+
+.mgr-step__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.mgr-summary {
+  border-radius: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 0.6rem 0.65rem;
+}
+
+.mgr-summary__text {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #334155;
+  line-height: 1.35;
+}
+
 .manager-field {
   display: grid;
   gap: 0.24rem;
@@ -2498,11 +2575,14 @@ button.my-info-row.my-info-row--action {
   font: inherit;
   font-size: 0.82rem;
   font-weight: 760;
+  width: 100%;
+  display: block;
+  margin-top: 0.55rem;
 }
 
 .manager-hint {
   grid-column: 1 / -1;
-  margin: 0;
+  margin: 0.35rem 0 0;
   min-height: 1rem;
   font-size: 0.72rem;
   color: #0f766e;
@@ -2573,6 +2653,10 @@ button.my-info-row.my-info-row--action {
   }
 
   .manager-assign-form {
+    grid-template-columns: 1fr;
+  }
+
+  .mgr-step__fields {
     grid-template-columns: 1fr;
   }
 

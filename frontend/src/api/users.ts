@@ -33,9 +33,37 @@ export interface UserInfoData {
 }
 
 function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
-  const roleKey = String(info?.role_info?.[0]?.key || '').trim().toLowerCase()
-  if (roleKey === 'fse') return 'fse'
-  if (roleKey === 'manager' || roleKey === 'regionalmanager' || roleKey === 'rm') return 'manager'
+  const ri = info?.role_info?.[0]
+  const roleKey = String(ri?.key || '').trim().toLowerCase()
+  const roleName = String(ri?.name || '').trim().toLowerCase()
+
+  if (roleKey === 'fse' || roleName === 'fieldserviceengineer') return 'fse'
+
+  // Regional Service Manager
+  if (
+    roleKey === 'rsmanager' ||
+    roleKey === 'rsm' ||
+    roleKey === 'manager' || // 兼容旧后端/旧约定
+    roleKey === 'regionalservicemanager' ||
+    roleName === 'regionalservicemanager'
+  )
+    return 'rsmanager'
+
+  // Field Service Manager
+  if (roleKey === 'fieldservicemanager' || roleKey === 'fsm' || roleName === 'fieldservicemanager') return 'fieldservicemanager'
+
+  // Field Service Director
+  if (roleKey === 'fieldservicedirector' || roleKey === 'fsd' || roleName === 'fieldservicedirector') return 'fieldservicedirector'
+
+  // External contractor
+  if (
+    roleKey === 'externalcontractor' ||
+    roleName === 'externalcontractor' ||
+    roleKey === 'contractor' ||
+    roleKey === 'third_party' // 兼容旧后端/旧约定
+  )
+    return 'externalcontractor'
+
   return undefined
 }
 
@@ -67,24 +95,24 @@ export async function fetchUserInfo(username: string) {
   // - data.username: 工号
   // - data.name: 姓名
   // - data.email: 邮箱（可为 null）
-  // - data.role_info[0]: 角色信息（name=展示名, key=角色key）
+  // - data.role_info[0]: name=后台角色名称（如 RegionalServiceManager），key=角色 key（如 RSM）
   const employeeId = String(data.username || '').trim() || u
   const displayName = String(data.name || '').trim()
   const email = data.email == null ? '' : String(data.email).trim()
   const deptName = String(data.dept_info?.dept_name || '').trim()
   const role = mapRoleFromUserInfo(data)
 
-  const mapped: Partial<User> & { roleDisplayName?: string } = {
+  const roleDisplayName = String(data.role_info?.[0]?.name || '').trim()
+
+  const mapped: Partial<User> = {
     employeeId,
     username: displayName || employeeId,
     email,
     department: deptName,
     region: deptName,
     ...(role ? { role } : {}),
+    ...(roleDisplayName ? { roleDisplayName } : {}),
   }
-
-  const roleDisplayName = String(data.role_info?.[0]?.name || '').trim()
-  if (roleDisplayName) (mapped as any).roleDisplayName = roleDisplayName
   return mapped
 }
 

@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, UserCertificate, UserRole } from '@/types/user'
-import { ROLE_FSE, ROLE_MANAGER, ROLE_THIRD_PARTY, ROLE_LABELS, isValidRole } from '@/types/user'
+import {
+  ROLE_EXTERNAL_CONTRACTOR,
+  ROLE_FSE,
+  ROLE_FS_DIRECTOR,
+  ROLE_FS_MANAGER,
+  ROLE_LABELS,
+  ROLE_RS_MANAGER,
+  isValidRole,
+} from '@/types/user'
 import { fetchUserInfo } from '@/api/users'
 import { useI18nStore } from './i18n'
 
@@ -9,14 +17,12 @@ const USER_KEY = 'butler.auth.user'
 const TOKEN_KEY = 'butler.auth.token'
 
 const PAGE_ACCESS: Record<string, UserRole[]> = {
-  // NOTE(2026-04): 角色调整，暂时隐藏/禁用 third_party 角色。
-  // 如需恢复：把 ROLE_THIRD_PARTY 重新加回各路由白名单，并同步恢复 LoginView 角色选项与 types/user.ts 的 ALL_ROLES。
-  '/': [ROLE_FSE, ROLE_MANAGER /* , ROLE_THIRD_PARTY */],
-  '/assignments': [ROLE_MANAGER],
-  '/task-center': [ROLE_FSE /* , ROLE_THIRD_PARTY */],
-  '/records': [ROLE_FSE, ROLE_MANAGER /* , ROLE_THIRD_PARTY */],
-  '/my': [ROLE_FSE, ROLE_MANAGER /* , ROLE_THIRD_PARTY */],
-  '/task-list': [ROLE_FSE /* , ROLE_THIRD_PARTY */],
+  '/': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
+  '/assignments': [ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR],
+  '/task-center': [ROLE_FSE, ROLE_EXTERNAL_CONTRACTOR],
+  '/records': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
+  '/my': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
+  '/task-list': [ROLE_FSE, ROLE_EXTERNAL_CONTRACTOR],
 }
 
 function normalizeStringList(input: unknown): string[] {
@@ -66,13 +72,19 @@ function normalizeUser(input: Partial<User>): User | null {
   const employeeId = String(input.employeeId || '').trim() || username || 'unknown'
   const email = String(input.email || '').trim()
   const department = String(input.department || '').trim()
-  const rawRole = String(input.role || '').trim().toLowerCase()
+  let rawRole = String(input.role || '').trim().toLowerCase()
+  // 兼容旧版本本地缓存的角色值
+  if (rawRole === 'manager') rawRole = ROLE_RS_MANAGER
+  if (rawRole === 'third_party') rawRole = ROLE_EXTERNAL_CONTRACTOR
   const role: UserRole = isValidRole(rawRole) ? rawRole : ROLE_FSE
-  const region = String(input.region || '').trim() || (role === ROLE_MANAGER ? 'Suzhou' : 'Shanghai')
+  const region =
+    String(input.region || '').trim() ||
+    (role === ROLE_RS_MANAGER || role === ROLE_FS_MANAGER || role === ROLE_FS_DIRECTOR ? 'Suzhou' : 'Shanghai')
   const specialWorkCertificates = normalizeCertificates((input as any).specialWorkCertificates)
   const qualifications = normalizeStringList((input as any).qualifications)
   const skillLevel = String((input as any).skillLevel || '').trim()
   const skillTypes = normalizeStringList((input as any).skillTypes)
+  const roleDisplayName = String((input as any).roleDisplayName || '').trim()
   if (!username) return null
   return {
     username,
@@ -81,6 +93,7 @@ function normalizeUser(input: Partial<User>): User | null {
     department,
     region,
     role,
+    ...(roleDisplayName ? { roleDisplayName } : {}),
     specialWorkCertificates,
     qualifications,
     skillLevel: skillLevel || undefined,
@@ -105,10 +118,14 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => user.value !== null && !!token.value)
   const role = computed<UserRole>(() => user.value?.role ?? ROLE_FSE)
-  const roleLabel = computed(() => ROLE_LABELS[i18n.lang][role.value])
-  const isManager = computed(() => role.value === ROLE_MANAGER)
+  const roleLabel = computed(() => {
+    const fromApi = String(user.value?.roleDisplayName || '').trim()
+    if (fromApi) return fromApi
+    return ROLE_LABELS[i18n.lang][role.value]
+  })
+  const isManager = computed(() => role.value === ROLE_RS_MANAGER || role.value === ROLE_FS_MANAGER || role.value === ROLE_FS_DIRECTOR)
   const isFse = computed(() => role.value === ROLE_FSE)
-  const isThirdParty = computed(() => role.value === ROLE_THIRD_PARTY)
+  const isThirdParty = computed(() => role.value === ROLE_EXTERNAL_CONTRACTOR)
 
   function login(input: Partial<User>, accessToken?: string) {
     const normalized = normalizeUser(input)

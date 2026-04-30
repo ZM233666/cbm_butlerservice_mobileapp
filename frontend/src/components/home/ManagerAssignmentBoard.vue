@@ -8,7 +8,7 @@ import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
 
 const auth = useAuthStore()
-const { t } = useI18n()
+const { t, lang } = useI18n()
 
 const month = ref(new Date().toISOString().slice(0, 7))
 const hintKey = ref('')
@@ -40,6 +40,35 @@ const filteredFseMembers = computed(() => {
   return fseMembers.value.filter(member =>
     (member.specialWorkCertificates || []).some(cert => String(cert.name || '').trim() === requiredCertificateName.value)
   )
+})
+
+const selectedFseName = computed(() => {
+  const id = String(assignee.value || '').trim()
+  if (!id) return ''
+  return filteredFseMembers.value.find(m => String(m.employeeId) === id)?.name || ''
+})
+
+const maintDisplay = computed(() => {
+  const m = String(maint.value || '').trim().toLowerCase()
+  if (lang.value === 'en') {
+    if (m === 'c1c3') return 'C1 Maintenance'
+    if (m === 'c4c6') return 'C4 Maintenance'
+    return String(m || '').toUpperCase()
+  }
+  if (m === 'c1c3') return 'C1级保养'
+  if (m === 'c4c6') return 'C4级保养'
+  return String(m || '').toUpperCase()
+})
+
+const dispatchSummary = computed(() => {
+  const v = vehicleNo.value.trim() || (lang.value === 'en' ? '—' : '—')
+  const m = maintDisplay.value || (lang.value === 'en' ? '—' : '—')
+  const who = selectedFseName.value || (lang.value === 'en' ? '—' : '—')
+  const d = String(deadline.value || '').trim() || (lang.value === 'en' ? '—' : '—')
+  if (lang.value === 'en') {
+    return `You are assigning [${v}] [${m}] to [${who}] with deadline [${d}].`
+  }
+  return `你正将 [${v}] 的 [${m}] 分配给 [${who}]，截止日期 [${d}]。`
 })
 
 watch([() => requiredCertificateName.value, () => fseMembers.value], () => {
@@ -149,46 +178,84 @@ onMounted(() => load())
 
     <div class="manager-board__panel">
       <h2 class="manager-board__panel-title">{{ t.mgrAssignTitle }}</h2>
-      <form class="manager-assign-form" @submit.prevent="onAssign">
-        <label class="manager-field">
-          <span>{{ t.mgrCertificateType }}</span>
-          <select v-model="requiredCertificateName">
-            <option value="">{{ t.mgrCertificateNone }}</option>
-            <option v-for="certificateName in certificateOptions" :key="certificateName" :value="certificateName">
-              {{ certificateName }}
-            </option>
-          </select>
-        </label>
-        <label class="manager-field">
-          <span>{{ t.mgrFse }}</span>
-          <select v-model="assignee" required>
-            <option value="">{{ t.mgrSelectFse }}</option>
-            <option v-for="member in filteredFseMembers" :key="member.employeeId" :value="member.employeeId">
-              {{ member.name }} ({{ member.employeeId }}){{ member.email ? ` · ${member.email}` : '' }}
-            </option>
-          </select>
-        </label>
-        <label class="manager-field">
-          <span>{{ t.mgrMaint }}</span>
-          <select v-model="maint" required>
-            <option value="c4c6">C4/C6</option>
-            <option value="c1c3">C1/C3</option>
-          </select>
-        </label>
-        <label class="manager-field">
-          <span>{{ t.tcServiceCity }}</span>
-          <input v-model="depot" type="text" :placeholder="t.tcServiceCity" required />
-        </label>
-        <label class="manager-field">
-          <span>{{ t.mgrVehicleNo }}</span>
-          <input v-model="vehicleNo" type="text" :placeholder="t.mgrVehiclePlaceholder" required />
-        </label>
-        <label class="manager-field">
-          <span>{{ t.mgrDeadline }}</span>
-          <input v-model="deadline" type="date" required />
-        </label>
-        <button type="submit" class="manager-submit">{{ t.mgrAssignBtn }}</button>
-        <p class="manager-hint" :style="{ color: hintErr ? '#dc2626' : '#0f766e' }">{{ hintText }}</p>
+      <form class="manager-assign-form manager-assign-form--steps" @submit.prevent="onAssign">
+        <section class="mgr-step" aria-label="Step 1">
+          <header class="mgr-step__head">
+            <span class="mgr-step__no" aria-hidden="true">1</span>
+            <div class="mgr-step__copy">
+              <p class="mgr-step__title">{{ lang === 'zh' ? '对象与人员' : 'Who & Where' }}</p>
+              <p class="mgr-step__sub">{{ lang === 'zh' ? '选择工程师并填写车辆与地点' : 'Pick an engineer and fill vehicle/location' }}</p>
+            </div>
+          </header>
+          <div class="mgr-step__fields">
+            <label class="manager-field">
+              <span>{{ t.mgrCertificateType }}</span>
+              <select v-model="requiredCertificateName">
+                <option value="">{{ t.mgrCertificateNone }}</option>
+                <option v-for="certificateName in certificateOptions" :key="certificateName" :value="certificateName">
+                  {{ certificateName }}
+                </option>
+              </select>
+            </label>
+            <label class="manager-field">
+              <span>{{ t.mgrFse }}</span>
+              <select v-model="assignee" required>
+                <option value="">{{ t.mgrSelectFse }}</option>
+                <option v-for="member in filteredFseMembers" :key="member.employeeId" :value="member.employeeId">
+                  {{ member.name }} ({{ member.employeeId }}){{ member.email ? ` · ${member.email}` : '' }}
+                </option>
+              </select>
+            </label>
+            <label class="manager-field">
+              <span>{{ t.tcServiceCity }}</span>
+              <input v-model="depot" type="text" :placeholder="t.tcServiceCity" required />
+            </label>
+            <label class="manager-field">
+              <span>{{ t.mgrVehicleNo }}</span>
+              <input v-model="vehicleNo" type="text" :placeholder="t.mgrVehiclePlaceholder" required />
+            </label>
+          </div>
+        </section>
+
+        <section class="mgr-step" aria-label="Step 2">
+          <header class="mgr-step__head">
+            <span class="mgr-step__no" aria-hidden="true">2</span>
+            <div class="mgr-step__copy">
+              <p class="mgr-step__title">{{ lang === 'zh' ? '内容与标准' : 'What & How' }}</p>
+              <p class="mgr-step__sub">{{ lang === 'zh' ? '选择保养大类' : 'Pick a maintenance category' }}</p>
+            </div>
+          </header>
+          <div class="mgr-step__fields">
+            <label class="manager-field manager-field--full">
+              <span>{{ t.mgrMaint }}</span>
+              <select v-model="maint" required>
+                <option value="c4c6">C4/C6</option>
+                <option value="c1c3">C1/C3</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="mgr-step" aria-label="Step 3">
+          <header class="mgr-step__head">
+            <span class="mgr-step__no" aria-hidden="true">3</span>
+            <div class="mgr-step__copy">
+              <p class="mgr-step__title">{{ lang === 'zh' ? '定时间并确认与下发' : 'Review & Dispatch' }}</p>
+              <p class="mgr-step__sub">{{ lang === 'zh' ? '确认摘要后下发任务' : 'Review summary then dispatch' }}</p>
+            </div>
+          </header>
+          <div class="mgr-step__fields">
+            <label class="manager-field manager-field--full">
+              <span>{{ t.mgrDeadline }}</span>
+              <input v-model="deadline" type="date" required />
+            </label>
+            <div class="mgr-summary manager-field--full" role="note" aria-label="Dispatch summary">
+              <p class="mgr-summary__text">{{ dispatchSummary }}</p>
+            </div>
+          </div>
+          <button type="submit" class="manager-submit">{{ t.mgrAssignBtn }}</button>
+          <p class="manager-hint" :style="{ color: hintErr ? '#dc2626' : '#0f766e' }">{{ hintText }}</p>
+        </section>
       </form>
     </div>
 

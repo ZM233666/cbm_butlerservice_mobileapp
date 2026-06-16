@@ -854,6 +854,23 @@ body.tl-page {
   opacity: 1;
 }
 
+.tl-reject-hint {
+  margin: 0 0 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(254, 243, 199, 0.9);
+  color: #92400e;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.tl-btn:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
 /* Apple-like polish (keep existing colors) */
 .tl-card {
   border-radius: 1.2rem;

@@ -210,8 +210,11 @@ function verifyAuthToken(token) {
 
 function authFromRequest(req) {
   const h = String(req.headers.authorization || "").trim();
-  if (!h.toLowerCase().startsWith("bearer ")) return null;
-  return h.slice(7).trim();
+  if (!h) return null;
+  const lower = h.toLowerCase();
+  if (lower.startsWith("bearer ")) return h.slice(7).trim();
+  if (lower.startsWith("jwt ")) return h.slice(4).trim();
+  return null;
 }
 
 function readWorkOrderStore() {
@@ -485,6 +488,46 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: cfg.bodyLimit }));
 app.use(express.urlencoded({ extended: true }));
 
+const REMOTE_API_BASE = String(process.env.REMOTE_API_BASE || "http://117.62.232.51:8004").replace(/\/$/, "");
+const REMOTE_PROXY_PREFIXES = ["/captcha/", "/login/", "/system/"];
+
+function shouldProxyToRemoteApi(apiPath) {
+  return REMOTE_PROXY_PREFIXES.some((prefix) => apiPath === prefix || apiPath.startsWith(prefix));
+}
+
+async function proxyToRemoteApi(req, res) {
+  const upstream = new URL(`${REMOTE_API_BASE}${req.originalUrl}`);
+  const headers = { ...req.headers, host: upstream.host, accept: req.headers.accept || "application/json" };
+  delete headers.connection;
+  delete headers["content-length"];
+  delete headers["transfer-encoding"];
+  const init = { method: req.method, headers };
+  if (req.method !== "GET" && req.method !== "HEAD" && req.body && Object.keys(req.body).length) {
+    init.body = JSON.stringify(req.body);
+    headers["content-type"] = headers["content-type"] || "application/json";
+  }
+  try {
+    const upstreamRes = await fetch(upstream, init);
+    res.status(upstreamRes.status);
+    upstreamRes.headers.forEach((value, key) => {
+      if (key.toLowerCase() === "transfer-encoding") return;
+      res.setHeader(key, value);
+    });
+    const payload = Buffer.from(await upstreamRes.arrayBuffer());
+    res.send(payload);
+  } catch (err) {
+    error("Remote API proxy failed", err);
+    res.status(502).json({ ok: false, error: "upstream_unavailable" });
+  }
+}
+
+app.use("/api", (req, res, next) => {
+  if (shouldProxyToRemoteApi(req.path)) {
+    return proxyToRemoteApi(req, res);
+  }
+  next();
+});
+
 app.use("/api", (req, res, next) => {
   if (req.path === "/users/login") return next();
   const token = authFromRequest(req);
@@ -647,6 +690,11 @@ app.post("/api/task-status", (req, res) => {
   const mainTaskId = normalizeTaskKeyPart(req.body && req.body.taskId);
   const title = normalizeTaskKeyPart(req.body && req.body.title);
   const deadline = normalizeTaskKeyPart(req.body && req.body.deadline);
+  const rejectedRaw = req.body && req.body.rejected;
+  const rejected =
+    rejectedRaw === true ||
+    rejectedRaw === 1 ||
+    String(rejectedRaw || "").trim().toLowerCase() === "true";
   if (!employeeId) {
     return res.status(400).json({ ok: false, error: "employee_id_required" });
   }
@@ -672,6 +720,7 @@ app.post("/api/task-status", (req, res) => {
     maint,
     taskKey: key,
     taskId: mainTaskId || undefined,
+    ...(status === "todo" && rejected ? { rejected: true } : {}),
   };
   all[employeeId] = user;
   writeJsonObject(cfg.taskStatusPath, all);

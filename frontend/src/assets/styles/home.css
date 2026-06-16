@@ -2505,6 +2505,13 @@ button.my-info-row.my-info-row--action {
   gap: 0.55rem;
 }
 
+.mgr-step .manager-field > span {
+  /* 统一两列标题高度，避免某列标题换行导致输入框不对齐 */
+  min-height: 2.15em;
+  display: flex;
+  align-items: flex-end;
+}
+
 .mgr-summary {
   border-radius: 0.85rem;
   border: 1px solid rgba(148, 163, 184, 0.35);
@@ -2547,12 +2554,21 @@ button.my-info-row.my-info-row--action {
   font-size: 0.8rem;
   color: #0f172a;
   padding: 0.45rem 0.58rem;
+  box-sizing: border-box;
 }
 
 .manager-field select {
   -webkit-appearance: none;
   appearance: none;
+  /* 固定高度，避免长文本把原生 select 撑高（iOS/WebView 常见） */
+  height: 2.35rem;
+  line-height: 2.35rem;
+  padding-top: 0;
+  padding-bottom: 0;
   padding-right: 2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   background-image:
     linear-gradient(45deg, transparent 50%, #334155 50%),
     linear-gradient(135deg, #334155 50%, transparent 50%);
@@ -2578,6 +2594,29 @@ button.my-info-row.my-info-row--action {
   width: 100%;
   display: block;
   margin-top: 0.55rem;
+}
+
+.manager-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.55rem;
+}
+
+.manager-actions .manager-submit {
+  grid-column: auto;
+  margin-top: 0;
+}
+
+.manager-submit--ghost {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  color: #00345e;
+  border-color: rgba(0, 70, 127, 0.35);
+}
+
+.manager-submit--ghost:active {
+  filter: brightness(0.98);
 }
 
 .manager-hint {
@@ -2657,6 +2696,10 @@ button.my-info-row.my-info-row--action {
   }
 
   .mgr-step__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-actions {
     grid-template-columns: 1fr;
   }
 

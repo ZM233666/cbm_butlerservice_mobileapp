@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPostForm } from './client'
+import { apiGet, apiPost, apiPostForm, apiPostPublic } from './client'
 import type { User } from '@/types/user'
 import type { UserCertificate } from '@/types/user'
 import { md5 } from '@/utils/md5'
@@ -8,6 +8,20 @@ export interface LoginPayload {
   password: string
   captcha?: string
   captchaKey?: string | number
+}
+
+export interface LocalLoginPayload {
+  username: string
+  employeeId: string
+  email: string
+  role: string
+}
+
+interface LocalLoginResponse {
+  ok: boolean
+  user?: User
+  token?: string
+  error?: string
 }
 
 export interface BackendOk<T> {
@@ -67,8 +81,21 @@ function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
   return undefined
 }
 
+export async function loginLocalUser(payload: LocalLoginPayload): Promise<{ user: Partial<User>; token: string }> {
+  const resp = await apiPostPublic<LocalLoginResponse>('/api/users/login', {
+    username: String(payload.username || '').trim(),
+    employeeId: String(payload.employeeId || '').trim(),
+    email: String(payload.email || '').trim(),
+    role: String(payload.role || '').trim(),
+  })
+  if (!resp?.ok || !resp.user || !resp.token) {
+    throw new Error(String(resp?.error || 'invalid_credentials'))
+  }
+  return { user: resp.user, token: resp.token }
+}
+
 export async function loginUser(payload: LoginPayload): Promise<{ user: Partial<User>; token: string }> {
-  const resp = await apiPost<BackendOk<LoginData>>('/api/login/', {
+  const resp = await apiPostPublic<BackendOk<LoginData>>('/api/login/', {
     username: payload.username,
     password: md5(payload.password),
     captcha: payload.captcha ?? '',
@@ -81,7 +108,7 @@ export async function loginUser(payload: LoginPayload): Promise<{ user: Partial<
   const token = String(resp.data?.access || '').trim()
   if (!token) throw new Error('missing_access_token')
   const username = String(resp.data?.username || payload.username).trim() || payload.username
-  return { user: { username }, token }
+  return { user: { username, employeeId: username }, token }
 }
 
 export async function fetchUserInfo(username: string) {

@@ -30,11 +30,12 @@
       "taskId": "MT-CCBII-88422"
     },
     "MT-CCBII-88421": {
-      "status": "done",
-      "updatedAt": "2026-04-21T09:13:02.081Z",
+      "status": "todo",
+      "updatedAt": "2026-06-16T01:52:46.803Z",
       "maint": "c4c6",
       "taskKey": "MT-CCBII-88421",
-      "taskId": "MT-CCBII-88421"
+      "taskId": "MT-CCBII-88421",
+      "rejected": true
     },
     "wo_1776407253145_30mqg": {
       "status": "doing",
@@ -43,6 +44,22 @@
       "taskKey": "wo_1776407253145_30mqg",
       "taskId": "wo_1776407253145_30mqg",
       "source": "work_order"
+    },
+    "wo_1781574358152_8n3ff": {
+      "status": "doing",
+      "updatedAt": "2026-06-16T01:45:58.166Z",
+      "maint": "c1c3",
+      "taskKey": "wo_1781574358152_8n3ff",
+      "taskId": "wo_1781574358152_8n3ff",
+      "source": "work_order"
+    },
+    "MT-CCBII-88424": {
+      "status": "todo",
+      "updatedAt": "2026-06-16T01:55:39.330Z",
+      "maint": "c1c3",
+      "taskKey": "MT-CCBII-88424",
+      "taskId": "MT-CCBII-88424",
+      "rejected": true
     }
   },
   "3": {

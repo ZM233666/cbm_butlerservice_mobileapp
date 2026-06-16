@@ -12,6 +12,7 @@ export interface CreateAssignmentPayload {
   maint: string
   vehicleNo: string
   depot: string
+  plannedStart: string
   deadline: string
   requiresSpecialWorkCertificate?: boolean
   requiredCertificateName?: string

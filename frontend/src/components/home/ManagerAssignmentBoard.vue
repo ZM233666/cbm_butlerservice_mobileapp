@@ -19,8 +19,10 @@ const fseMembers = ref<FseMember[]>([])
 const requiredCertificateName = ref('')
 const assignee = ref('')
 const maint = ref('c4c6')
+const region = ref('')
 const depot = ref('')
 const vehicleNo = ref('')
+const plannedStart = ref('')
 const deadline = ref('')
 
 const hintText = computed(() => {
@@ -64,12 +66,110 @@ const dispatchSummary = computed(() => {
   const v = vehicleNo.value.trim() || (lang.value === 'en' ? '—' : '—')
   const m = maintDisplay.value || (lang.value === 'en' ? '—' : '—')
   const who = selectedFseName.value || (lang.value === 'en' ? '—' : '—')
+  const s = String(plannedStart.value || '').trim() || (lang.value === 'en' ? '—' : '—')
   const d = String(deadline.value || '').trim() || (lang.value === 'en' ? '—' : '—')
   if (lang.value === 'en') {
-    return `You are assigning [${v}] [${m}] to [${who}] with deadline [${d}].`
+    return `You are assigning [${v}] [${m}] to [${who}] planned start [${s}] and deadline [${d}].`
   }
-  return `你正将 [${v}] 的 [${m}] 分配给 [${who}]，截止日期 [${d}]。`
+  return `你正将 [${v}] 的 [${m}] 分配给 [${who}]，计划开始 [${s}]，截止日期 [${d}]。`
 })
+
+const DRAFT_KEY = 'butler.manager.assignmentDraft'
+
+function saveDraft() {
+  try {
+    const payload = {
+      v: 1,
+      savedAt: new Date().toISOString(),
+      by: auth.user?.employeeId || '',
+      requiredCertificateName: requiredCertificateName.value,
+      assignee: assignee.value,
+      assigneeName: selectedFseName.value,
+      maint: maint.value,
+      region: region.value,
+      depot: depot.value,
+      vehicleNo: vehicleNo.value,
+      plannedStart: plannedStart.value,
+      deadline: deadline.value,
+    }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
+    syncDraftIntoAssignments()
+    hintKey.value = 'mgrHintDraftSaved'
+    hintErr.value = false
+  } catch {
+    // ignore draft save failures
+  }
+}
+
+function readDraft(): Partial<Record<string, unknown>> | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== 'object') return null
+    return data as Partial<Record<string, unknown>>
+  } catch {
+    return null
+  }
+}
+
+function buildDraftRow(): ManagerAssignment | null {
+  const data = readDraft()
+  if (!data) return null
+  const vehicleNo = String(data.vehicleNo || '').trim()
+  const maint = String(data.maint || '').trim()
+  const region = String(data.region || '').trim()
+  const depot = String(data.depot || '').trim()
+  const depotText = `${region} / ${depot}`.trim()
+  const deadline = String(data.deadline || '').trim()
+  if (!vehicleNo && !maint && !depotText && !deadline) return null
+
+  const assigneeId = String(data.assignee || '').trim()
+  const assigneeNameFromDraft = String(data.assigneeName || '').trim()
+  const assigneeNameFromList = assigneeId
+    ? fseMembers.value.find(m => String(m.employeeId) === assigneeId)?.name || ''
+    : ''
+  const assigneeName = assigneeNameFromDraft || assigneeNameFromList || ''
+
+  const savedAt = String(data.savedAt || '').trim()
+  const id = savedAt ? `draft:${savedAt}` : 'draft:local'
+
+  return {
+    id,
+    vehicleNo: vehicleNo || '-',
+    maint: maint || 'c4c6',
+    depot: depotText,
+    assignedTo: assigneeName ? { name: assigneeName, employeeId: assigneeId || undefined } : { employeeId: assigneeId || undefined },
+    status: 'draft',
+    deadline: deadline || '-',
+    requiresSpecialWorkCertificate: !!String(data.requiredCertificateName || '').trim(),
+    requiredCertificateName: String(data.requiredCertificateName || '').trim() || undefined,
+  }
+}
+
+function syncDraftIntoAssignments() {
+  const draft = buildDraftRow()
+  const rest = assignments.value.filter(a => !String(a.id || '').startsWith('draft:'))
+  assignments.value = draft ? [draft, ...rest] : rest
+}
+
+function applyDraftFromStorage() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return
+    const data = JSON.parse(raw) as Partial<Record<string, unknown>>
+    if (data.requiredCertificateName != null) requiredCertificateName.value = String(data.requiredCertificateName || '')
+    if (data.assignee != null) assignee.value = String(data.assignee || '')
+    if (data.maint != null) maint.value = String(data.maint || maint.value)
+    if (data.region != null) region.value = String(data.region || '')
+    if (data.depot != null) depot.value = String(data.depot || '')
+    if (data.vehicleNo != null) vehicleNo.value = String(data.vehicleNo || '')
+    if (data.plannedStart != null) plannedStart.value = String(data.plannedStart || '')
+    if (data.deadline != null) deadline.value = String(data.deadline || '')
+  } catch {
+    // ignore bad draft
+  }
+}
 
 watch([() => requiredCertificateName.value, () => fseMembers.value], () => {
   if (filteredFseMembers.value.some(member => member.employeeId === assignee.value)) return
@@ -79,6 +179,7 @@ watch([() => requiredCertificateName.value, () => fseMembers.value], () => {
 function managerStatusLabel(status: string): string {
   if (status === 'done') return t.value.tcStatusDone
   if (status === 'doing') return t.value.tcStatusDoing
+  if (status === 'draft') return (t.value as any).tcStatusDraft || 'Draft'
   return t.value.tcStatusTodo
 }
 
@@ -86,6 +187,7 @@ function applyData(data: ManagerDashboard) {
   month.value = data.month || month.value
   fseMembers.value = data.fseMembers || []
   assignments.value = data.assignments || []
+  syncDraftIntoAssignments()
 }
 
 async function load(m?: string) {
@@ -125,8 +227,10 @@ async function onAssign() {
   if (
     !assignee.value ||
     !maint.value ||
+    !region.value.trim() ||
     !depot.value.trim() ||
     !vehicleNo.value.trim() ||
+    !plannedStart.value ||
     !deadline.value
   ) {
     hintKey.value = 'mgrHintFillAll'
@@ -135,11 +239,13 @@ async function onAssign() {
   }
 
   try {
+    const depotText = `${region.value.trim()} / ${depot.value.trim()}`.trim()
     await postAssignment({
       assignedToEmployeeId: assignee.value,
       maint: maint.value,
-      depot: depot.value.trim(),
+      depot: depotText,
       vehicleNo: vehicleNo.value.trim(),
+      plannedStart: plannedStart.value,
       deadline: deadline.value,
       requiresSpecialWorkCertificate: !!requiredCertificateName.value,
       requiredCertificateName: requiredCertificateName.value,
@@ -150,9 +256,12 @@ async function onAssign() {
     })
     hintKey.value = 'mgrHintAssignOk'
     hintErr.value = false
+    try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
     requiredCertificateName.value = ''
+    region.value = ''
     depot.value = ''
     vehicleNo.value = ''
+    plannedStart.value = ''
     await load()
   } catch {
     hintKey.value = 'mgrHintAssignFail'
@@ -160,7 +269,10 @@ async function onAssign() {
   }
 }
 
-onMounted(() => load())
+onMounted(async () => {
+  await load()
+  applyDraftFromStorage()
+})
 </script>
 
 <template>
@@ -207,10 +319,14 @@ onMounted(() => load())
               </select>
             </label>
             <label class="manager-field">
-              <span>{{ t.tcServiceCity }}</span>
-              <input v-model="depot" type="text" :placeholder="t.tcServiceCity" required />
+              <span>{{ (t as any).mgrRegion }}</span>
+              <input v-model="region" type="text" :placeholder="(t as any).mgrRegion" required />
             </label>
             <label class="manager-field">
+              <span>{{ (t as any).mgrDepotName }}</span>
+              <input v-model="depot" type="text" :placeholder="(t as any).mgrDepotName" required />
+            </label>
+            <label class="manager-field manager-field--full">
               <span>{{ t.mgrVehicleNo }}</span>
               <input v-model="vehicleNo" type="text" :placeholder="t.mgrVehiclePlaceholder" required />
             </label>
@@ -246,6 +362,10 @@ onMounted(() => load())
           </header>
           <div class="mgr-step__fields">
             <label class="manager-field manager-field--full">
+              <span>{{ (t as any).mgrPlannedStart }}</span>
+              <input v-model="plannedStart" type="date" required />
+            </label>
+            <label class="manager-field manager-field--full">
               <span>{{ t.mgrDeadline }}</span>
               <input v-model="deadline" type="date" required />
             </label>
@@ -253,7 +373,12 @@ onMounted(() => load())
               <p class="mgr-summary__text">{{ dispatchSummary }}</p>
             </div>
           </div>
-          <button type="submit" class="manager-submit">{{ t.mgrAssignBtn }}</button>
+          <div class="manager-actions">
+            <button type="button" class="manager-submit manager-submit--ghost" @click="saveDraft">
+              {{ (t as any).mgrSaveDraft }}
+            </button>
+            <button type="submit" class="manager-submit">{{ t.mgrAssignBtn }}</button>
+          </div>
           <p class="manager-hint" :style="{ color: hintErr ? '#dc2626' : '#0f766e' }">{{ hintText }}</p>
         </section>
       </form>

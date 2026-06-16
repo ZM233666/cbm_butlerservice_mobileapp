@@ -28,6 +28,7 @@ export interface HomeConfig {
 export interface TaskStatusEntry {
   status: 'todo' | 'doing' | 'done'
   updatedAt?: string
+  rejected?: boolean
 }
 
 export type TaskStatusStore = Record<string, TaskStatusEntry>

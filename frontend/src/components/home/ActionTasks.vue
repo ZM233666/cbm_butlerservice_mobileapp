@@ -56,6 +56,19 @@ const maintCounts = computed(() => {
   return map
 })
 
+function getCardRejected(card: TaskCard): boolean {
+  const key = taskKey(card)
+  const entry = statusStore.value[key] as { status?: string; rejected?: boolean } | undefined
+  if (entry?.status === 'todo' && entry.rejected) return true
+
+  const maint = String(card.maint || '').toLowerCase()
+  if ((maintCounts.value[maint] || 0) <= 1) {
+    const byMaint = statusStore.value[maint] as { status?: string; rejected?: boolean } | undefined
+    if (byMaint?.status === 'todo' && byMaint.rejected) return true
+  }
+  return false
+}
+
 function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' {
   const key = taskKey(card)
   const byKey = getStatusFromEntry(statusStore.value[key])
@@ -82,8 +95,16 @@ function doneUploadText(card: TaskCard) {
   return `${p.uploaded || 0}/${p.required || 0}`
 }
 
+function isPendingTodo(card: TaskCard): boolean {
+  return getCardStatusByCard(card) === 'todo' && !getCardRejected(card)
+}
+
 const filteredCards = computed(() =>
-  allCards.value.filter(c => activeFilter.value === 'all' || getCardStatusByCard(c) === activeFilter.value)
+  allCards.value.filter((c) => {
+    if (activeFilter.value === 'all') return true
+    if (activeFilter.value === 'todo') return isPendingTodo(c)
+    return getCardStatusByCard(c) === activeFilter.value
+  }),
 )
 
 function urgencyRank(deadline: string, status: string) {
@@ -131,9 +152,11 @@ const counts = computed(() => {
   let todo = 0, doing = 0, done = 0
   allCards.value.forEach(c => {
     const s = getCardStatusByCard(c)
-    if (s === 'doing') doing++; else if (s === 'done') done++; else todo++
+    if (s === 'doing') doing++
+    else if (s === 'done') done++
+    else if (!getCardRejected(c)) todo++
   })
-  return { todo, doing, done, all: todo + doing + done }
+  return { todo, doing, done, all: allCards.value.length }
 })
 
 function deadlineText(deadline: string, status: string) {
@@ -288,6 +311,7 @@ watch(
               <span class="item-title">{{ card.meta }}</span>
               <span class="item-subtitle">
                 {{ card.title }} · {{ getDepot(card) }}
+                <template v-if="getCardRejected(card)"> · {{ (t as any).rejectedBtn || '已拒绝' }}</template>
                 <template v-if="getCardStatusByCard(card) === 'done' && doneUploadText(card)">
                   · {{ doneUploadText(card) }}
                 </template>

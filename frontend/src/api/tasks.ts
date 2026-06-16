@@ -20,7 +20,7 @@ export function postTaskStatus(
   maint: string,
   status: string,
   taskKey?: string,
-  meta?: { title?: string; deadline?: string; taskId?: string },
+  meta?: { title?: string; deadline?: string; taskId?: string; rejected?: boolean },
 ) {
   return apiPost('/api/task-status', {
     employeeId,
@@ -30,6 +30,7 @@ export function postTaskStatus(
     taskId: meta?.taskId,
     title: meta?.title,
     deadline: meta?.deadline,
+    rejected: meta?.rejected,
   })
 }
 

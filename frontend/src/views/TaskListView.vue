@@ -48,6 +48,7 @@ const issueRowId = ref('')
 const issueText = ref('')
 const submitConfirmOpen = ref(false)
 const currentTaskStatus = ref<'todo' | 'doing' | 'done'>('todo')
+const taskRejected = ref(false)
 const editRequestOpen = ref(false)
 const editRequestReason = ref('')
 const editRequestSubmitting = ref(false)
@@ -434,7 +435,7 @@ async function handleUpload(slotId: string, event: Event) {
   }
 }
 
-async function setTaskStatus(status: string): Promise<boolean> {
+async function setTaskStatus(status: string, opts?: { rejected?: boolean }): Promise<boolean> {
   const employeeId = auth.user?.employeeId || ''
   if (!employeeId) return false
   try {
@@ -447,6 +448,7 @@ async function setTaskStatus(status: string): Promise<boolean> {
         taskId: mainTaskId.value,
         title: String(route.query.title || '').trim(),
         deadline: String(route.query.deadline || '').trim(),
+        rejected: opts?.rejected,
       },
     ) as any
     if (data && data.ok === false) return false
@@ -465,17 +467,26 @@ async function onSave() {
 }
 
 async function onAccept() {
-  const ok = await setTaskStatus('doing')
+  const ok = await setTaskStatus('doing', { rejected: false })
   if (ok) {
     currentTaskStatus.value = 'doing'
+    taskRejected.value = false
     homeRefreshStamp.value = Date.now()
   }
   toast(ok ? (t.value as any).acceptedToDoing : t.value.saved)
 }
 
-function onReject() {
-  toast((t.value as any).rejected || (lang.value === 'zh' ? '已拒绝，该任务仍保留在 To Do' : 'Rejected. Task stays in To Do'))
+async function onReject() {
+  const ok = await setTaskStatus('todo', { rejected: true })
+  if (!ok) {
+    toast((t.value as any).rejectFailed || (lang.value === 'zh' ? '拒绝失败，请稍后重试' : 'Reject failed. Please try again.'))
+    return
+  }
+  taskRejected.value = true
+  currentTaskStatus.value = 'todo'
   homeRefreshStamp.value = Date.now()
+  toast((t.value as any).rejected || (lang.value === 'zh' ? '已拒绝，该任务仍保留在 To Do' : 'Rejected. Task stays in To Do'))
+  await wait(700)
   router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
 }
 
@@ -579,6 +590,7 @@ onMounted(async () => {
         : statusData?.statuses?.[maintType.value]
       if (entry && (entry.status === 'todo' || entry.status === 'doing' || entry.status === 'done')) {
         currentTaskStatus.value = entry.status
+        taskRejected.value = entry.status === 'todo' && Boolean((entry as any).rejected)
       }
     } catch { /* */ }
   }
@@ -655,12 +667,13 @@ onMounted(async () => {
           </table>
         </div>
         <div class="tl-actions tl-actions--sticky" :class="{ 'is-single': isTaskDone }">
+          <p v-if="isTaskTodo && taskRejected" class="tl-reject-hint">{{ (t as any).rejectedHint }}</p>
           <template v-if="isTaskDone">
             <button type="button" class="tl-btn tl-btn--primary tl-btn--full" @click="onEditRequest">{{ editRequestBtnText }}</button>
           </template>
           <template v-else>
             <template v-if="isTaskTodo">
-              <button type="button" class="tl-btn tl-btn--secondary" @click="onReject">{{ (t as any).reject || 'Reject' }}</button>
+              <button type="button" class="tl-btn tl-btn--secondary" :disabled="taskRejected" @click="onReject">{{ taskRejected ? ((t as any).rejectedBtn || '已拒绝') : ((t as any).reject || 'Reject') }}</button>
               <button type="button" class="tl-btn tl-btn--primary" @click="onAccept">{{ (t as any).accept || 'Accept' }}</button>
             </template>
             <template v-else-if="isTaskDoing">

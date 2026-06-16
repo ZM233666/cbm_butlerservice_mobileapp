@@ -1,4 +1,4 @@
-import { apiGet } from './client'
+import { apiGetPublic, apiPostPublic } from './client'
 
 export interface CaptchaData {
   key: number | string
@@ -12,7 +12,7 @@ export interface CaptchaResponse {
 }
 
 export async function fetchCaptcha(): Promise<CaptchaData> {
-  const resp = await apiGet<CaptchaResponse>('/api/captcha/')
+  const resp = await apiGetPublic<CaptchaResponse>('/api/captcha/')
   if (!resp || !resp.data || !resp.data.image_base) throw new Error('invalid_captcha_response')
   return resp.data
 }

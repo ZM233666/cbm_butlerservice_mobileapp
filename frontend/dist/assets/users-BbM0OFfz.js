@@ -1,1 +1,0 @@
-import{b as t,c as s,a as r}from"./client-D523nq2L.js";function o(a){const e={};return e.role=a,r("/api/users",e)}function f(a){return t("/api/users/self-certificates",{specialWorkCertificates:a})}function p(a){const e=new FormData;return e.append("file",a),s("/api/users/self-certificates/upload",e)}export{p as a,o as f,f as u};

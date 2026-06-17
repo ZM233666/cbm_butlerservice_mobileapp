@@ -103,8 +103,10 @@ body {
   max-width: 240px;
   height: auto;
   max-height: min(120px, 22vh);
+  aspect-ratio: 364 / 230;
   object-fit: contain;
   -webkit-user-drag: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -1838,8 +1840,10 @@ button.my-info-row.my-info-row--action {
   width: min(38vw, 8.6rem);
   height: auto;
   max-height: 1.9rem;
+  aspect-ratio: 364 / 230;
   object-fit: contain;
   -webkit-user-drag: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 

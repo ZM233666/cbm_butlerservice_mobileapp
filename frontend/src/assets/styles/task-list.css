@@ -346,6 +346,10 @@ body.tl-page {
   z-index: -1;
 }
 
+.tl-file.is-hidden {
+  display: none;
+}
+
 .tl-upload-btn {
   box-sizing: border-box;
   display: flex;

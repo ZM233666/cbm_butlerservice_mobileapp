@@ -48,6 +48,19 @@ const toast = ref('')
 const todayMin = computed(() => todayIso())
 const adding = ref(false)
 
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+
+function formatEndDateDisplay(iso: string) {
+  const text = String(iso || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return lang.value === 'zh' ? '请选择日期' : 'Select date'
+  }
+  const [y, m, d] = text.split('-').map((x) => Number(x))
+  if (!y || !m || !d) return text
+  if (lang.value === 'zh') return `${y}年${m}月${d}日`
+  return `${MONTHS_EN[m - 1]} ${d}, ${y}`
+}
+
 const form = ref({
   template: 'c1c3' as TaskTemplate,
   customName: '',
@@ -56,6 +69,8 @@ const form = ref({
   serviceCity: '',
   endDate: '',
 })
+
+const endDateDisplay = computed(() => formatEndDateDisplay(form.value.endDate))
 
 const TASK_KEY = computed(() => `butler.task-center.${auth.user?.employeeId || 'guest'}`)
 
@@ -442,7 +457,19 @@ async function addTask() {
               </div>
             </header>
             <div class="tc-step__fields">
-              <label><span>{{ t.tcEndDate }}</span><input v-model="form.endDate" type="date" :min="todayMin" /></label>
+              <label class="tc-date-field">
+                <span>{{ t.tcEndDate }}</span>
+                <div class="tc-date-field__wrap">
+                  <span class="tc-date-field__display" :class="{ 'is-placeholder': !form.endDate }">{{ endDateDisplay }}</span>
+                  <input
+                    v-model="form.endDate"
+                    class="tc-date-field__native"
+                    type="date"
+                    :min="todayMin"
+                    :lang="lang === 'en' ? 'en' : 'zh-CN'"
+                  />
+                </div>
+              </label>
             </div>
             <button
               type="button"
@@ -647,6 +674,45 @@ async function addTask() {
 
 .tc-step__fields label {
   font-size: 0.72rem;
+}
+
+.tc-date-field__wrap {
+  position: relative;
+  margin-top: 0.18rem;
+}
+
+.tc-date-field__display {
+  display: flex;
+  align-items: center;
+  min-height: 2.45rem;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  padding: 0.35rem 0.65rem;
+  font: inherit;
+  font-size: 0.88rem;
+  color: #0f172a;
+  background: #fff;
+  pointer-events: none;
+}
+
+.tc-date-field__display.is-placeholder {
+  color: #64748b;
+}
+
+.tc-date-field__native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  color: transparent;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .tc-step__fields--standard {

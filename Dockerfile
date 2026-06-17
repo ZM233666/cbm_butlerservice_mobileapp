@@ -23,6 +23,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY server ./server
 COPY public ./public
+COPY RVSChinaDT_Logo.png ./RVSChinaDT_Logo.png
 COPY PicSamples ./PicSamples
 COPY scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist

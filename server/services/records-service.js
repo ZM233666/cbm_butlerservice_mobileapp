@@ -9,9 +9,22 @@ function queryRecords(allRows, keyword, limit) {
   const nLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 200) : 50;
   if (!q) return [];
   const rows = Array.isArray(allRows) ? allRows : [];
-  const filtered = rows.filter((r) =>
-    normalize([r.id, r.code, r.taskSeq, r.trainNo, r.maintType, r.date, r.desc].join(" ")).includes(q)
-  );
+  const filtered = rows.filter((r) => {
+    const imageText = Array.isArray(r && r.images) ? r.images.join(" ") : "";
+    const text = [
+      r && r.id,
+      r && r.code,
+      r && r.taskId,
+      r && r.taskSeq,
+      r && r.trainNo,
+      r && r.maintType,
+      r && r.date,
+      r && r.desc,
+      r && r.employeeId,
+      imageText,
+    ].join(" ");
+    return normalize(text).includes(q);
+  });
   return filtered.slice(0, nLimit);
 }
 

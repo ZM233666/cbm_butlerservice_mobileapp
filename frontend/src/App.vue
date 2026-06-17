@@ -12,6 +12,10 @@ const showBottomNav = computed(() => auth.isLoggedIn && route.meta.guest !== tru
 
 <template>
   <ScreenshotWatermark />
-  <RouterView />
+  <RouterView v-slot="{ Component }">
+    <KeepAlive include="TaskListView">
+      <component :is="Component" />
+    </KeepAlive>
+  </RouterView>
   <BottomNav v-if="showBottomNav" />
 </template>

@@ -18,6 +18,15 @@ const placeholder = computed(() => {
 const showList = ref(false)
 const resultCount = computed(() => rows.value.length)
 
+function resolveImageUrl(url: string) {
+  const text = String(url || '').trim()
+  if (!text) return ''
+  if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('blob:') || text.startsWith('data:')) {
+    return text
+  }
+  return text.startsWith('/') ? text : `/${text}`
+}
+
 async function onSearch() {
   const q = query.value.trim().toLowerCase()
   if (!q) { rows.value = []; showList.value = false; placeholderState.value = 'default'; return }
@@ -101,6 +110,18 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
                   <p class="records-item__meta"><span>{{ t.recordsRowMaint }}</span><strong>{{ r.maintType }}</strong></p>
                 </div>
                 <p class="records-item__desc">{{ r.desc }}</p>
+                <div v-if="r.images && r.images.length" class="records-item__images" aria-label="Uploaded photos">
+                  <a
+                    v-for="(img, i) in r.images"
+                    :key="`${r.id}-${i}`"
+                    class="records-item__image-link"
+                    :href="resolveImageUrl(img)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img class="records-item__image" :src="resolveImageUrl(img)" :alt="`${r.code}-${i + 1}`" loading="lazy" decoding="async" />
+                  </a>
+                </div>
               </li>
             </ul>
           </section>
@@ -325,10 +346,30 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
   color: #273548;
   line-height: 1.55;
 }
+.records-item__images {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+.records-item__image-link {
+  display: block;
+  border: 1px solid #dbe4ee;
+  border-radius: 0.55rem;
+  overflow: hidden;
+  background: #fff;
+}
+.records-item__image {
+  display: block;
+  width: 100%;
+  height: 4.2rem;
+  object-fit: cover;
+}
 @media (max-width: 420px) {
   .records-search { grid-template-columns: 1fr; }
   .records-search__btn { width: 100%; }
   .records-item__top { flex-direction: column; gap: 0.38rem; }
   .records-item__meta-grid { grid-template-columns: 1fr; }
+  .records-item__image { height: 3.55rem; }
 }
 </style>

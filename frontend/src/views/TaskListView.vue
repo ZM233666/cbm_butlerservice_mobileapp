@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/composables/useI18n'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
-import { fetchGuidanceTasks, fetchTaskStatus, postTaskStatus, postTaskSubmit, postTaskEditRequest } from '@/api/tasks'
+import TaskUploadSlot from '@/components/task/TaskUploadSlot.vue'
+import { fetchGuidanceTasks, fetchTaskStatus, postTaskStatus, postTaskSubmit, postTaskEditRequest, fetchLatestTaskSubmit } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
 import type { GuidanceRow } from '@/types/task'
 import * as exifr from 'exifr'
+
+defineOptions({ name: 'TaskListView' })
+
+let guidanceRowsMemoryCache: GuidanceRow[] | null = null
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +26,8 @@ const SCHEMATIC_SEQS = new Set(['1','2','3','3.1','3.2','3.3','4','5','5.1','6',
 const maintType = ref<'c4c6' | 'c1c3'>('c4c6')
 const guidanceRows = ref<GuidanceRow[]>([])
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture'] }>>({})
+const localPreviewRecords = ref<Record<string, string>>({})
+const uploadingSlots = ref<Record<string, boolean>>({})
 const issueRecords = ref<Record<string, { text: string; updatedAt: string }>>({})
 const toastMsg = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -407,11 +414,200 @@ function captureLines(capture?: UploadResult['capture']) {
   return lines
 }
 
+function uploadMetaLines(slotId: string) {
+  return captureLines(uploadRecords.value[slotId]?.capture)
+}
+
+function taskListCacheKey() {
+  return `butler.task-list.${auth.user?.employeeId || 'guest'}.${mainTaskId.value}`
+}
+
+function readTaskListCache() {
+  try {
+    const raw = sessionStorage.getItem(taskListCacheKey())
+    return raw ? JSON.parse(raw) as {
+      uploadRecords?: Record<string, { url: string; capture?: UploadResult['capture'] }>
+      issueRecords?: Record<string, { text: string; updatedAt: string }>
+      currentTaskStatus?: 'todo' | 'doing' | 'done'
+      taskRejected?: boolean
+      maintType?: 'c4c6' | 'c1c3'
+    } : null
+  } catch {
+    return null
+  }
+}
+
+function persistTaskListCache() {
+  try {
+    sessionStorage.setItem(taskListCacheKey(), JSON.stringify({
+      uploadRecords: uploadRecords.value,
+      issueRecords: issueRecords.value,
+      currentTaskStatus: currentTaskStatus.value,
+      taskRejected: taskRejected.value,
+      maintType: maintType.value,
+    }))
+  } catch { /* ignore quota / private mode */ }
+}
+
+function clearTaskListCache() {
+  try {
+    sessionStorage.removeItem(taskListCacheKey())
+  } catch { /* ignore */ }
+}
+
+async function hydrateTaskPage() {
+  const m = route.query.maint as string
+  if (m === 'c1c3') maintType.value = 'c1c3'
+  else if (m === 'c4c6') maintType.value = 'c4c6'
+
+  uploadRecords.value = {}
+  issueRecords.value = {}
+  Object.keys(localPreviewRecords.value).forEach((slotId) => cleanupLocalPreview(slotId))
+
+  const cached = readTaskListCache()
+  if (cached) {
+    if (cached.uploadRecords && typeof cached.uploadRecords === 'object') {
+      uploadRecords.value = cached.uploadRecords
+    }
+    if (cached.issueRecords && typeof cached.issueRecords === 'object') {
+      issueRecords.value = cached.issueRecords
+    }
+    if (cached.currentTaskStatus === 'todo' || cached.currentTaskStatus === 'doing' || cached.currentTaskStatus === 'done') {
+      currentTaskStatus.value = cached.currentTaskStatus
+    }
+    if (typeof cached.taskRejected === 'boolean') taskRejected.value = cached.taskRejected
+    if (cached.maintType === 'c1c3' || cached.maintType === 'c4c6') maintType.value = cached.maintType
+  }
+
+  if (guidanceRowsMemoryCache?.length) {
+    guidanceRows.value = guidanceRowsMemoryCache
+  } else if (!guidanceRows.value.length) {
+    try {
+      const data = await fetchGuidanceTasks()
+      guidanceRows.value = data.rows || []
+      guidanceRowsMemoryCache = guidanceRows.value
+    } catch { toast('Load failed') }
+  }
+
+  if (auth.user?.employeeId) {
+    try {
+      const statusData = await fetchTaskStatus(auth.user.employeeId)
+      const entry = effectiveTaskKey.value
+        ? statusData?.statuses?.[effectiveTaskKey.value]
+        : statusData?.statuses?.[maintType.value]
+      if (entry && (entry.status === 'todo' || entry.status === 'doing' || entry.status === 'done')) {
+        currentTaskStatus.value = entry.status
+        taskRejected.value = entry.status === 'todo' && Boolean((entry as any).rejected)
+      }
+    } catch { /* */ }
+  }
+
+  if (mainTaskId.value && Object.keys(uploadRecords.value).length === 0) {
+    try {
+      const latest = await fetchLatestTaskSubmit(mainTaskId.value)
+      const uploads = latest && latest.found && latest.uploads && typeof latest.uploads === 'object' ? latest.uploads : {}
+      Object.entries(uploads).forEach(([slot, item]) => {
+        const url = String((item as any)?.url || '').trim()
+        if (!url) return
+        uploadRecords.value[slot] = {
+          url,
+          capture: (item as any)?.capture,
+        }
+      })
+      persistTaskListCache()
+    } catch {
+      // ignore: keep page usable even when no historical submit available
+    }
+  }
+}
+
+function displayedUploadUrl(slotId: string) {
+  return uploadRecords.value[slotId]?.url || localPreviewRecords.value[slotId] || ''
+}
+
+function cleanupLocalPreview(slotId: string) {
+  const previewUrl = localPreviewRecords.value[slotId]
+  if (previewUrl && previewUrl.startsWith('blob:')) {
+    URL.revokeObjectURL(previewUrl)
+  }
+  delete localPreviewRecords.value[slotId]
+}
+
+function imageBitmapToJpegFile(bitmap: ImageBitmap, filenameBase: string, quality = 0.82): Promise<File> {
+  const MAX_EDGE = 1920
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+  const width = Math.max(1, Math.round(bitmap.width * scale))
+  const height = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas_ctx_unavailable')
+  ctx.drawImage(bitmap, 0, 0, width, height)
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return reject(new Error('image_compress_failed'))
+      resolve(new File([blob], `${filenameBase}.jpg`, { type: 'image/jpeg', lastModified: Date.now() }))
+    }, 'image/jpeg', quality)
+  })
+}
+
+async function compressImageForUpload(file: File): Promise<File> {
+  if (!file.type.startsWith('image/')) return file
+  // 小文件直接上传，避免额外前处理开销
+  if (file.size <= 1.2 * 1024 * 1024) return file
+  try {
+    const filenameBase = String(file.name || 'upload').replace(/\.[^.]+$/, '') || 'upload'
+    if ('createImageBitmap' in window) {
+      const bitmap = await createImageBitmap(file)
+      try {
+        return await imageBitmapToJpegFile(bitmap, filenameBase)
+      } finally {
+        bitmap.close()
+      }
+    }
+    const srcUrl = URL.createObjectURL(file)
+    try {
+      const img = new Image()
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error('image_decode_failed'))
+        img.src = srcUrl
+      })
+      const MAX_EDGE = 1920
+      const scale = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth || 1, img.naturalHeight || 1))
+      const width = Math.max(1, Math.round((img.naturalWidth || 1) * scale))
+      const height = Math.max(1, Math.round((img.naturalHeight || 1) * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return file
+      ctx.drawImage(img, 0, 0, width, height)
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82))
+      if (!blob) return file
+      return new File([blob], `${filenameBase}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
+    } finally {
+      URL.revokeObjectURL(srcUrl)
+    }
+  } catch {
+    return file
+  }
+}
+
 async function handleUpload(slotId: string, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  const previewUrl = URL.createObjectURL(file)
+  cleanupLocalPreview(slotId)
+  localPreviewRecords.value[slotId] = previewUrl
+  uploadingSlots.value[slotId] = true
+  persistTaskListCache()
+  await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   try {
+    const uploadFile = await compressImageForUpload(file)
     const geoPromise = isGeoFresh() ? Promise.resolve(lastGeo) : getGeo(2500)
     const exifMeta = await readExifMeta(file)
     const geo = (exifMeta.latitude != null && exifMeta.longitude != null) ? null : await geoPromise
@@ -427,11 +623,16 @@ async function handleUpload(slotId: string, event: Event) {
       if (geo.accuracy != null) clientMeta.accuracy = geo.accuracy
     }
 
-    const data = await uploadImage(slotId, file, slotId, clientMeta)
+    const data = await uploadImage(slotId, uploadFile, slotId, clientMeta)
     uploadRecords.value[slotId] = { url: data.url, capture: data.capture }
+    cleanupLocalPreview(slotId)
+    persistTaskListCache()
   } catch {
     toast(t.value.uploadFail)
+    cleanupLocalPreview(slotId)
     input.value = ''
+  } finally {
+    uploadingSlots.value[slotId] = false
   }
 }
 
@@ -497,6 +698,7 @@ async function onSubmit() {
     const doneUpdated = await setTaskStatus('done')
     if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed'); return }
     currentTaskStatus.value = 'done'
+    clearTaskListCache()
     toast(t.value.submitted)
     await wait(900)
     homeRefreshStamp.value = Date.now()
@@ -511,6 +713,7 @@ async function confirmSubmitWithMissingUploads() {
     const doneUpdated = await setTaskStatus('done')
     if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed'); return }
     currentTaskStatus.value = 'done'
+    clearTaskListCache()
     toast(t.value.submitted)
     await wait(900)
     homeRefreshStamp.value = Date.now()
@@ -574,26 +777,20 @@ async function submitEditRequest() {
   }
 }
 
-onMounted(async () => {
-  const m = route.query.maint as string
-  if (m === 'c1c3') maintType.value = 'c1c3'
-  try {
-    const data = await fetchGuidanceTasks()
-    guidanceRows.value = data.rows || []
-  } catch { toast('Load failed') }
-  if (auth.user?.employeeId) {
-    try {
-      const statusData = await fetchTaskStatus(auth.user.employeeId)
-      // 关键：如果带了 taskKey（从首页任务卡进入），则只使用 taskKey 状态，避免回退到 maint 导致“同修程串状态”。
-      const entry = effectiveTaskKey.value
-        ? statusData?.statuses?.[effectiveTaskKey.value]
-        : statusData?.statuses?.[maintType.value]
-      if (entry && (entry.status === 'todo' || entry.status === 'doing' || entry.status === 'done')) {
-        currentTaskStatus.value = entry.status
-        taskRejected.value = entry.status === 'todo' && Boolean((entry as any).rejected)
-      }
-    } catch { /* */ }
-  }
+onMounted(() => {
+  hydrateTaskPage()
+})
+
+watch(mainTaskId, (next, prev) => {
+  if (next && next !== prev) hydrateTaskPage()
+})
+
+watch([uploadRecords, issueRecords, currentTaskStatus, taskRejected, maintType], () => {
+  persistTaskListCache()
+}, { deep: true })
+
+onUnmounted(() => {
+  Object.keys(localPreviewRecords.value).forEach((slotId) => cleanupLocalPreview(slotId))
 })
 </script>
 
@@ -640,18 +837,17 @@ onMounted(async () => {
                   <div class="tl-upload-stack">
                     <template v-if="row.buttons && row.buttons.length">
                       <div :class="row.buttons.length > 1 ? 'tl-upload-row' : ''">
-                        <div v-for="(btn, bi) in row.buttons" :key="bi" class="tl-upload-slot">
-                          <template v-if="!uploadRecords[btn.slot]?.url">
-                            <input :id="`f-${btn.slot}-${bi}`" class="tl-file" type="file" accept="image/*" @change="handleUpload(btn.slot, $event)" />
-                            <label class="tl-upload-btn" :for="`f-${btn.slot}-${bi}`">{{ btn.label }}</label>
-                          </template>
-                          <div v-else class="tl-thumb is-visible">
-                            <img :src="uploadRecords[btn.slot].url" alt="" />
-                            <div v-if="uploadRecords[btn.slot].capture" class="tl-thumb__meta">
-                              <span v-for="(line, li) in captureLines(uploadRecords[btn.slot].capture)" :key="li" class="tl-thumb__meta-line">{{ line }}</span>
-                            </div>
-                          </div>
-                        </div>
+                        <TaskUploadSlot
+                          v-for="(btn, bi) in row.buttons"
+                          :key="btn.slot"
+                          :slot-id="btn.slot"
+                          :label="btn.label"
+                          :input-id="`f-${btn.slot}-${bi}`"
+                          :image-url="displayedUploadUrl(btn.slot)"
+                          :uploading="!!uploadingSlots[btn.slot]"
+                          :meta-lines="uploadMetaLines(btn.slot)"
+                          @change="handleUpload(btn.slot, $event)"
+                        />
                       </div>
                     </template>
                     <span v-else class="tl-upload-na">{{ row.uploadHint || t.noUpload }}</span>

@@ -425,11 +425,73 @@ async function reverseGeocodeByNominatim(latitude, longitude) {
 async function reverseGeocodeLocation(latitude, longitude) {
   if (!cfg.reverseGeocodeEnabled) return null;
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  // 上传链路中优先保证响应速度：只有配置高德 key 时才执行逆地理编码。
+  if (!cfg.amapWebApiKey) return null;
   const amap = await reverseGeocodeByAmap(latitude, longitude);
   if (amap && (amap.address || amap.city || amap.district)) return amap;
-  const nominatim = await reverseGeocodeByNominatim(latitude, longitude);
-  if (nominatim && (nominatim.address || nominatim.city || nominatim.district)) return nominatim;
   return null;
+}
+
+function latestSubmitByTaskId(taskId) {
+  const targetTaskId = String(taskId || "").trim();
+  if (!targetTaskId) return null;
+  const events = safeReadJsonLines(cfg.manifestPath, 1200);
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (!e || e.type !== "submit") continue;
+    const payload = e.payload && typeof e.payload === "object" ? e.payload : {};
+    const basicInfo = payload.basicInfo && typeof payload.basicInfo === "object" ? payload.basicInfo : {};
+    const submitTaskId = String(basicInfo.taskId || basicInfo.mainTaskId || "").trim();
+    if (!submitTaskId || submitTaskId !== targetTaskId) continue;
+    return {
+      submittedAt: String(e.at || "").trim() || new Date().toISOString(),
+      payload,
+    };
+  }
+  return null;
+}
+
+function buildSubmitRecords(maxRows) {
+  const events = safeReadJsonLines(cfg.manifestPath, 1200);
+  const rows = [];
+  const seenTaskIds = new Set();
+  const nMax = Number.isFinite(maxRows) && maxRows > 0 ? maxRows : 80;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (rows.length >= nMax) break;
+    const e = events[i];
+    if (!e || e.type !== "submit") continue;
+    const payload = e.payload && typeof e.payload === "object" ? e.payload : {};
+    const basicInfo = payload.basicInfo && typeof payload.basicInfo === "object" ? payload.basicInfo : {};
+    const taskId = String(basicInfo.taskId || basicInfo.mainTaskId || "").trim();
+    if (!taskId || seenTaskIds.has(taskId)) continue;
+    seenTaskIds.add(taskId);
+
+    const uploads = payload.uploads && typeof payload.uploads === "object" ? payload.uploads : {};
+    const images = Object.values(uploads)
+      .map((v) => String(v && typeof v === "object" ? v.url : "").trim())
+      .filter(Boolean);
+    const maint = normalizeMaint(basicInfo.maintenanceType) || "";
+    const submittedAt = String(e.at || "").trim();
+    const submittedDate = submittedAt ? new Date(submittedAt) : new Date();
+    const date = Number.isNaN(submittedDate.getTime())
+      ? submittedAt
+      : submittedDate.toISOString().replace("T", " ").slice(0, 16);
+    rows.push({
+      id: `SUB-${taskId}`,
+      code: taskId,
+      taskId,
+      taskSeq: "done",
+      trainNo: String(basicInfo.trainNo || "").trim() || "-",
+      maintType: maint ? maint.toUpperCase().replace("C4C6", "C4/C6").replace("C1C3", "C1/C3") : "-",
+      date,
+      desc: `Task ${taskId} completed. Uploaded ${images.length} image(s).`,
+      images,
+      uploadCount: images.length,
+      employeeId: String(basicInfo.employeeId || "").trim(),
+      source: "task_submit",
+    });
+  }
+  return rows;
 }
 
 async function extractPhotoCaptureMeta(absFilePath) {
@@ -575,13 +637,44 @@ app.get("/api/records", (req, res) => {
   const keyword = String(req.query.keyword || "");
   const limitRaw = Number.parseInt(String(req.query.limit || "50"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 50;
-  const allRows = readJsonArray(cfg.recordsDataPath);
+  const staticRows = readJsonArray(cfg.recordsDataPath);
+  const submitRows = buildSubmitRecords(120);
+  const allRows = [...submitRows, ...staticRows];
   const rows = queryRecords(allRows, keyword, limit);
 
   res.json({
     ok: true,
     total: rows.length,
     rows,
+  });
+});
+
+app.get("/api/task-submit-latest", (req, res) => {
+  const taskId = String(req.query.taskId || "").trim();
+  if (!taskId) {
+    return res.status(400).json({ ok: false, error: "task_id_required" });
+  }
+  const latest = latestSubmitByTaskId(taskId);
+  if (!latest) {
+    return res.json({ ok: true, found: false });
+  }
+  const payload = latest.payload || {};
+  const uploads = payload.uploads && typeof payload.uploads === "object" ? payload.uploads : {};
+  const normalizedUploads = {};
+  Object.entries(uploads).forEach(([slot, val]) => {
+    const src = val && typeof val === "object" ? val : {};
+    const url = String(src.url || "").trim();
+    if (!url) return;
+    normalizedUploads[String(slot)] = {
+      url,
+      capture: src.capture && typeof src.capture === "object" ? src.capture : undefined,
+    };
+  });
+  return res.json({
+    ok: true,
+    found: true,
+    submittedAt: latest.submittedAt,
+    uploads: normalizedUploads,
   });
 });
 
@@ -1162,7 +1255,16 @@ app.post("/api/manager/assignments", (req, res) => {
 });
 
 app.get("/RVSChinaDT_Logo.png", (_req, res) => {
-  res.sendFile(path.join(projectRoot, "RVSChinaDT_Logo.png"));
+  const logoCandidates = [
+    path.join(projectRoot, "RVSChinaDT_Logo.png"),
+    path.join(projectRoot, "frontend", "dist", "RVSChinaDT_Logo.png"),
+    path.join(projectRoot, "frontend", "public", "RVSChinaDT_Logo.png"),
+  ];
+  const logoPath = logoCandidates.find((candidate) => fs.existsSync(candidate));
+  if (!logoPath) {
+    return res.status(404).json({ ok: false, error: "logo_not_found" });
+  }
+  res.sendFile(logoPath);
 });
 
 app.use("/PicSamples", express.static(cfg.picSamplesDir));

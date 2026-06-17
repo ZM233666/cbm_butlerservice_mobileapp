@@ -42,6 +42,15 @@ export function postTaskSubmit(body: unknown) {
   return apiPost('/api/task-submit', body)
 }
 
+export function fetchLatestTaskSubmit(taskId: string) {
+  return apiGet<{
+    ok: boolean
+    found?: boolean
+    submittedAt?: string
+    uploads?: Record<string, { url: string; capture?: { capturedAt?: string; location?: Record<string, unknown> } }>
+  }>('/api/task-submit-latest', { taskId })
+}
+
 export interface EditRequestPayload {
   employeeId: string
   maint: string

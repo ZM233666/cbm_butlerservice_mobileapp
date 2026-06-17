@@ -21,7 +21,7 @@ const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
   <header class="top-brand-bar" aria-label="品牌栏">
     <div class="top-brand-bar__left">
       <router-link v-if="backTo" class="top-brand-bar__back" :to="backTo">{{ backLabel }}</router-link>
-      <img v-else class="top-brand-bar__logo" src="/RVSChinaDT_Logo.png" width="180" height="40" alt="RVS-CHINA DIGITAL TEAM" decoding="async" />
+      <img v-else class="top-brand-bar__logo" src="/RVSChinaDT_Logo.png" width="364" height="230" alt="RVS-CHINA DIGITAL TEAM" decoding="async" />
     </div>
     <span class="top-brand-bar__title">{{ title ?? 'Digital CBM' }}</span>
     <button type="button" class="top-brand-bar__lang" :aria-label="toggleLabel" @click="i18n.toggleLang">
@@ -78,8 +78,10 @@ const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
   width: min(38vw, 8.6rem);
   height: auto;
   max-height: 1.9rem;
+  aspect-ratio: 364 / 230;
   object-fit: contain;
   -webkit-user-drag: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 

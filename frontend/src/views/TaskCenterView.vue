@@ -3,30 +3,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
-import { createClientId } from '@/utils/id'
-import { createWorkOrder, setWorkOrderStatus } from '@/api/workOrders'
-import { fetchHomeConfig, fetchTaskStatus } from '@/api/tasks'
-import type { TaskCard, TaskStatusStore } from '@/types/task'
+import DatePicker from '@/components/common/DatePicker.vue'
+import { createTaskCentreTask, fetchTaskCentre } from '@/api/tasks'
+import type { TaskCentreResponse } from '@/types/task'
 
 type TaskTemplate = 'c1c3' | 'c4c6' | 'custom'
-type TaskStatus = 'todo' | 'doing' | 'done'
-
-interface TaskCenterTask {
-  id: string
-  title: string
-  template: TaskTemplate
-  month: string
-  trainModel: string
-  requiredAttachments: number
-  uploadedAttachments: number
-  status: TaskStatus
-  createdAt: string
-  completedAt?: string
-  serviceCity?: string
-  endDate?: string
-}
 
 function nowMonth(): string {
   const d = new Date()
@@ -44,22 +28,10 @@ function todayIso(): string {
 const auth = useAuthStore()
 const { lang, t } = useI18n()
 const selectedMonth = ref(nowMonth())
-const toast = ref('')
+const toast = useToastStore()
 const todayMin = computed(() => todayIso())
 const adding = ref(false)
-
-const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
-
-function formatEndDateDisplay(iso: string) {
-  const text = String(iso || '').trim()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    return lang.value === 'zh' ? '请选择日期' : 'Select date'
-  }
-  const [y, m, d] = text.split('-').map((x) => Number(x))
-  if (!y || !m || !d) return text
-  if (lang.value === 'zh') return `${y}年${m}月${d}日`
-  return `${MONTHS_EN[m - 1]} ${d}, ${y}`
-}
+const loading = ref(false)
 
 const form = ref({
   template: 'c1c3' as TaskTemplate,
@@ -70,220 +42,75 @@ const form = ref({
   endDate: '',
 })
 
-const endDateDisplay = computed(() => formatEndDateDisplay(form.value.endDate))
+const centre = ref<TaskCentreResponse | null>(null)
+const checklistCounts = ref({ c1c3: 19, c4c6: 45 })
 
-const TASK_KEY = computed(() => `butler.task-center.${auth.user?.employeeId || 'guest'}`)
-
-function readTasks(): TaskCenterTask[] {
-  try {
-    const raw = localStorage.getItem(TASK_KEY.value)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function writeTasks(list: TaskCenterTask[]) {
-  try { localStorage.setItem(TASK_KEY.value, JSON.stringify(list)) } catch { /* ignore */ }
-}
-
-const tasks = ref<TaskCenterTask[]>(readTasks())
-
-function seedIfEmpty() {
-  if (tasks.value.length > 0) return
-  const m = nowMonth()
-  tasks.value = [
-    {
-      id: createClientId('seed'),
-      title: 'C1～C3 Service',
-      template: 'c1c3',
-      month: m,
-      trainModel: 'HXD1',
-      requiredAttachments: 19,
-      uploadedAttachments: 19,
-      status: 'done',
-      createdAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    },
-    {
-      id: createClientId('seed'),
-      title: 'C4～C6 Service',
-      template: 'c4c6',
-      month: m,
-      trainModel: 'HXD3',
-      requiredAttachments: 45,
-      uploadedAttachments: 26,
-      status: 'doing',
-      createdAt: new Date().toISOString(),
-    },
-  ]
-  writeTasks(tasks.value)
-}
-
-seedIfEmpty()
+const monthStatusByMonth = computed(() => centre.value?.monthStatusByMonth || {})
+const totalServices = computed(() => centre.value?.stats.all ?? 0)
+const todoServices = computed(() => centre.value?.stats.todo ?? 0)
+const doingServices = computed(() => centre.value?.stats.doing ?? 0)
+const completedServices = computed(() => centre.value?.stats.done ?? 0)
+const trainStats = computed(() => centre.value?.stats.byTrainModel ?? [])
+const attachmentStats = computed(() => centre.value?.stats.attachment ?? { uploaded: 0, required: 0, percent: 0 })
 
 watch(() => form.value.template, (v) => {
-  if (v === 'c1c3') form.value.requiredAttachments = 19
-  else if (v === 'c4c6') form.value.requiredAttachments = 45
+  if (v === 'c1c3') form.value.requiredAttachments = checklistCounts.value.c1c3
+  else if (v === 'c4c6') form.value.requiredAttachments = checklistCounts.value.c4c6
   else form.value.requiredAttachments = Math.max(0, form.value.requiredAttachments || 0)
 })
 
 watch(() => form.value.endDate, (v) => {
   const text = String(v || '').trim()
   if (!text) return
-  // yyyy-mm-dd 字符串可直接字典序比较
   if (text < todayMin.value) form.value.endDate = todayMin.value
 })
 
-const homeCards = ref<TaskCard[]>([])
-const statusStore = ref<TaskStatusStore>({})
-function taskKey(card: TaskCard) {
-  return String((card as any).taskId || '').trim() || `${card.maint}-${card.title}-${card.deadline}`
-}
-
-function getStatusFromEntry(entry: unknown): TaskStatus | null {
-  const e = entry as { status?: unknown } | null
-  const s = e?.status
-  if (s === 'todo' || s === 'doing' || s === 'done') return s
-  return null
-}
-
-const maintCounts = computed(() => {
-  const map: Record<string, number> = {}
-  homeCards.value.forEach((c) => {
-    const k = String(c.maint || '').toLowerCase()
-    map[k] = (map[k] || 0) + 1
-  })
-  return map
-})
-
-function getCardStatusByCard(card: TaskCard): TaskStatus {
-  const key = taskKey(card)
-  const byKey = getStatusFromEntry(statusStore.value[key])
-  if (byKey) return byKey
-  const maint = String(card.maint || '').toLowerCase()
-  if ((maintCounts.value[maint] || 0) <= 1) {
-    const byMaint = getStatusFromEntry(statusStore.value[maint])
-    if (byMaint) return byMaint
-  }
-  return 'todo'
-}
-
-function monthOfCard(card: TaskCard): string {
-  const text = String(card.deadline || '')
-  if (/^\d{4}-\d{2}/.test(text)) return text.slice(0, 7)
-  return ''
-}
-
-function formatModelLabel(raw: string): string {
-  const text = String(raw || '').trim()
-  if (!text) return 'N/A'
-  const k = text.replace(/[\s\-_/]/g, '').toUpperCase()
-  if (k === 'C1C3') return 'C1/C3'
-  if (k === 'C4C6') return 'C4/C6'
-  return text.toUpperCase()
-}
-
-const monthCards = computed(() => homeCards.value.filter((x) => monthOfCard(x) === selectedMonth.value))
-
-function guessTrainModel(card: TaskCard): string {
-  const title = String(card.title || '').trim()
-  const hit = title.match(/[A-Za-z]{2,}\d+(?:-\d+)?/)
-  if (hit) return formatModelLabel(hit[0])
-  return formatModelLabel(String(card.maint || ''))
-}
-
-const completedServices = computed(() => monthCards.value.filter(x => getCardStatusByCard(x) === 'done').length)
-const todoServices = computed(() => monthCards.value.filter(x => getCardStatusByCard(x) === 'todo').length)
-const doingServices = computed(() => monthCards.value.filter(x => getCardStatusByCard(x) === 'doing').length)
-const totalServices = computed(() => monthCards.value.length)
-
 const canAddTask = computed(() => {
   if (adding.value) return false
-  // 基础必填：修程、车号、服务城市、结束日期
   const templateOk = !!String(form.value.template || '').trim()
   const trainOk = !!String(form.value.trainModel || '').trim()
   const cityOk = !!String(form.value.serviceCity || '').trim()
   const endOk = !!String(form.value.endDate || '').trim()
   if (!templateOk || !trainOk || !cityOk || !endOk) return false
   if (String(form.value.endDate || '').trim() < todayMin.value) return false
-
-  // 自定义模板时，自定义名称也必须填写
   if (form.value.template === 'custom' && !String(form.value.customName || '').trim()) return false
-
   return true
 })
 
-const monthStatusByMonth = computed(() => {
-  const map: Record<string, 'none' | 'ok' | 'warn'> = {}
-  const byMonth = new Map<string, TaskCard[]>()
-  homeCards.value.forEach((t) => {
-    const key = monthOfCard(t)
-    if (!key) return
-    const arr = byMonth.get(key) || []
-    arr.push(t)
-    byMonth.set(key, arr)
-  })
-  byMonth.forEach((arr, key) => {
-    if (!arr.length) return
-    const hasIncomplete = arr.some((x) => getCardStatusByCard(x) !== 'done')
-    map[key] = hasIncomplete ? 'warn' : 'ok'
-  })
-  return map
-})
-
-const trainStats = computed(() => {
-  const map = new Map<string, number>()
-  monthCards.value.forEach((x) => {
-    const key = guessTrainModel(x)
-    map.set(key, (map.get(key) || 0) + 1)
-  })
-  return Array.from(map.entries()).map(([model, count]) => ({ model, count })).sort((a, b) => b.count - a.count)
-})
-
-const attachmentStats = computed(() => {
-  const uploaded = monthCards.value.reduce((s, x) => s + Number(x.uploadProgress?.uploaded || 0), 0)
-  const required = monthCards.value.reduce((s, x) => s + Number(x.uploadProgress?.required || 0), 0)
-  const percent = required > 0 ? Math.round((uploaded / required) * 100) : 0
-  return { uploaded, required, percent }
-})
-
-async function loadActionSource() {
+async function loadCentre() {
   const employeeId = String(auth.user?.employeeId || '').trim()
   if (!employeeId) {
-    homeCards.value = []
-    statusStore.value = {}
+    centre.value = null
     return
   }
+  loading.value = true
   try {
-    const [cfg, statusResp] = await Promise.all([
-      fetchHomeConfig(employeeId),
-      fetchTaskStatus(employeeId),
-    ])
-    homeCards.value = Array.isArray(cfg?.tasks) ? cfg.tasks : []
-    statusStore.value = statusResp?.statuses || {}
+    const data = await fetchTaskCentre(employeeId, selectedMonth.value)
+    centre.value = data
+    if (data?.checklistCounts) {
+      checklistCounts.value = data.checklistCounts
+      if (form.value.template === 'c1c3') form.value.requiredAttachments = data.checklistCounts.c1c3
+      else if (form.value.template === 'c4c6') form.value.requiredAttachments = data.checklistCounts.c4c6
+    }
   } catch {
-    homeCards.value = []
-    statusStore.value = {}
+    centre.value = null
+  } finally {
+    loading.value = false
   }
 }
 
 onMounted(() => {
-  loadActionSource()
+  loadCentre()
 })
 
 watch(
   () => auth.user?.employeeId || '',
-  () => { loadActionSource() },
-  { immediate: true },
+  () => { loadCentre() },
 )
 
-function taskStatusLabel(s: TaskStatus) {
-  if (s === 'done') return t.value.tcStatusDone
-  if (s === 'doing') return t.value.tcStatusDoing
-  return t.value.tcStatusTodo
-}
+watch(selectedMonth, () => {
+  loadCentre()
+})
 
 function templateTitle(tp: TaskTemplate) {
   if (tp === 'c1c3') return t.value.tcTemplateC1C3
@@ -291,13 +118,8 @@ function templateTitle(tp: TaskTemplate) {
   return t.value.tcTemplateCustom
 }
 
-function yesNoLabel(v?: boolean) {
-  return v ? t.value.tcYes : t.value.tcNo
-}
-
 async function addTask() {
-  if (adding.value) return
-  if (!canAddTask.value) return
+  if (adding.value || !canAddTask.value) return
   const employeeId = auth.user?.employeeId || ''
   if (!employeeId) return
   adding.value = true
@@ -305,56 +127,33 @@ async function addTask() {
     ? form.value.customName.trim()
     : `${templateTitle(form.value.template)} Service`
   if (!name) { adding.value = false; return }
-  const task: TaskCenterTask = {
-    id: createClientId('task'),
-    title: name,
-    template: form.value.template,
-    month: selectedMonth.value,
-    trainModel: form.value.trainModel.trim() || 'N/A',
-    requiredAttachments: Math.max(0, Number(form.value.requiredAttachments) || 0),
-    uploadedAttachments: 0,
-    // 需求：Task Centre 自建任务直接进入 Doing（跳过 To Do）
-    status: 'doing',
-    createdAt: new Date().toISOString(),
-    serviceCity: form.value.serviceCity.trim() || undefined,
-    endDate: form.value.endDate || undefined,
-  }
-  tasks.value = [task, ...tasks.value]
-  writeTasks(tasks.value)
   try {
-    const maint = form.value.template === 'c1c3' ? 'c1c3' : (form.value.template === 'c4c6' ? 'c4c6' : 'c4c6')
-    const vehicleNo = form.value.trainModel.trim()
-    const deadline = form.value.endDate
-    const depot = form.value.serviceCity.trim()
-    const resp = await createWorkOrder({
-      assignedToEmployeeId: employeeId,
+    const maint = form.value.template === 'c1c3' ? 'c1c3' : 'c4c6'
+    await createTaskCentreTask({
+      employeeId,
       maint,
-      vehicleNo,
-      deadline,
+      trainNo: form.value.trainModel.trim(),
+      depot: form.value.serviceCity.trim(),
+      deadline: form.value.endDate,
       title: name,
-      depot,
-      createdBy: { employeeId: auth.user?.employeeId || '', name: auth.user?.username || '' },
+      status: 'doing',
     })
-    const id = resp?.workOrder?.id
-    if (id) {
-      // 需求：Task Centre 自建任务直接进入 Doing（跳过 To Do）
-      await setWorkOrderStatus(id, 'doing')
+    const endMonth = String(form.value.endDate || '').slice(0, 7)
+    if (endMonth && endMonth !== selectedMonth.value) {
+      selectedMonth.value = endMonth
+    } else {
+      await loadCentre()
     }
-    await loadActionSource()
-    toast.value = t.value.tcAdded
-    setTimeout(() => { toast.value = '' }, 1800)
+    toast.show(t.value.tcAdded, 'success', 1800)
   } catch {
-    toast.value = lang.value === 'zh' ? '创建工单失败' : 'Failed to create work order'
-    setTimeout(() => { toast.value = '' }, 1800)
+    toast.show(lang.value === 'zh' ? '创建任务失败' : 'Failed to create task', 'error', 2200)
   }
   form.value.customName = ''
   form.value.trainModel = ''
   form.value.serviceCity = ''
   form.value.endDate = ''
-  // 稍微延迟释放锁，避免极端情况下的连点与视觉抖动
   setTimeout(() => { adding.value = false }, 450)
 }
-
 </script>
 
 <template>
@@ -389,7 +188,7 @@ async function addTask() {
           </article>
           <article class="tc-kpi tc-kpi--models">
             <p class="tc-kpi__label">{{ t.tcModelCount }}</p>
-            <p class="tc-kpi__value">{{ trainStats.length }}</p>
+            <p class="tc-kpi__value">{{ centre?.stats.modelCount ?? 0 }}</p>
           </article>
           <article class="tc-kpi tc-kpi--attach">
             <p class="tc-kpi__label">{{ t.tcAttachProgress }}</p>
@@ -459,16 +258,7 @@ async function addTask() {
             <div class="tc-step__fields">
               <label class="tc-date-field">
                 <span>{{ t.tcEndDate }}</span>
-                <div class="tc-date-field__wrap">
-                  <span class="tc-date-field__display" :class="{ 'is-placeholder': !form.endDate }">{{ endDateDisplay }}</span>
-                  <input
-                    v-model="form.endDate"
-                    class="tc-date-field__native"
-                    type="date"
-                    :min="todayMin"
-                    :lang="lang === 'en' ? 'en' : 'zh-CN'"
-                  />
-                </div>
+                <DatePicker v-model="form.endDate" :min="todayMin" />
               </label>
             </div>
             <button
@@ -487,7 +277,6 @@ async function addTask() {
       </section>
     </main>
 
-    <div class="tc-toast" :class="{ 'is-show': toast }" role="status">{{ toast }}</div>
   </PageShell>
 </template>
 
@@ -676,43 +465,8 @@ async function addTask() {
   font-size: 0.72rem;
 }
 
-.tc-date-field__wrap {
-  position: relative;
+.tc-date-field :deep(.dp) {
   margin-top: 0.18rem;
-}
-
-.tc-date-field__display {
-  display: flex;
-  align-items: center;
-  min-height: 2.45rem;
-  border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  padding: 0.35rem 0.65rem;
-  font: inherit;
-  font-size: 0.88rem;
-  color: #0f172a;
-  background: #fff;
-  pointer-events: none;
-}
-
-.tc-date-field__display.is-placeholder {
-  color: #64748b;
-}
-
-.tc-date-field__native {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  cursor: pointer;
-  color: transparent;
-  background: transparent;
-  -webkit-appearance: none;
-  appearance: none;
 }
 
 .tc-step__fields--standard {
@@ -768,8 +522,6 @@ async function addTask() {
   vertical-align: -2px;
 }
 @keyframes tc-spin { to { transform: rotate(360deg); } }
-.tc-toast { position: fixed; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) translateY(120%); background: rgba(24, 24, 27, 0.92); color: #fff; padding: 0.55rem 1rem; border-radius: 999px; font-size: 0.8rem; font-weight: 650; z-index: 10120; transition: transform 0.22s ease; pointer-events: none; opacity: 0; }
-.tc-toast.is-show { transform: translateX(-50%) translateY(0); opacity: 1; }
 @media (max-width: 420px) {
   .tc-step__fields { grid-template-columns: 1fr; }
   .tc-kpis--summary { grid-template-columns: 1fr; }

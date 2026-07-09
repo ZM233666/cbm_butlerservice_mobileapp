@@ -21,7 +21,8 @@
       "skillLevel": "T3",
       "skillTypes": [
         "EMU"
-      ]
+      ],
+      "updatedAt": "2026-07-09T06:06:55.191Z"
     },
     {
       "employeeId": "2",
@@ -29,7 +30,11 @@
       "email": "2@com",
       "department": "",
       "region": "Suzhou",
-      "role": "manager"
+      "role": "manager",
+      "specialWorkCertificates": [],
+      "qualifications": [],
+      "skillTypes": [],
+      "updatedAt": "2026-07-09T06:06:55.191Z"
     },
     {
       "employeeId": "3",
@@ -45,8 +50,44 @@
       "skillLevel": "T4",
       "skillTypes": [
         "LOCO"
-      ]
+      ],
+      "updatedAt": "2026-07-09T06:06:55.191Z"
+    },
+    {
+      "employeeId": "20005303",
+      "username": "陈明亮",
+      "email": "",
+      "department": "No department",
+      "region": "No department",
+      "role": "fse",
+      "specialWorkCertificates": [
+        {
+          "name": "登高证",
+          "id": "CQ20240101",
+          "validUntil": "2028.06.01",
+          "status": "valid"
+        }
+      ],
+      "qualifications": [
+        "工程师"
+      ],
+      "skillLevel": "T3",
+      "skillTypes": [
+        "EMU"
+      ],
+      "updatedAt": "2026-07-09T06:06:55.191Z"
+    },
+    {
+      "employeeId": "828057",
+      "username": "亢金平",
+      "email": "",
+      "department": "No department",
+      "region": "No department",
+      "role": "fse",
+      "specialWorkCertificates": [],
+      "qualifications": [],
+      "skillTypes": [],
+      "updatedAt": "2026-07-09T06:06:55.191Z"
     }
   ]
 }
-

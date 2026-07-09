@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPostForm, apiPostPublic } from './client'
+import { apiGet, apiGetPublic, apiPost, apiPostForm, apiPostPublic } from './client'
 import type { User } from '@/types/user'
 import type { UserCertificate } from '@/types/user'
 import { md5 } from '@/utils/md5'
@@ -10,19 +10,6 @@ export interface LoginPayload {
   captchaKey?: string | number
 }
 
-export interface LocalLoginPayload {
-  username: string
-  employeeId: string
-  email: string
-  role: string
-}
-
-interface LocalLoginResponse {
-  ok: boolean
-  user?: User
-  token?: string
-  error?: string
-}
 
 export interface BackendOk<T> {
   code: number
@@ -32,6 +19,7 @@ export interface BackendOk<T> {
 
 export interface LoginData {
   access: string
+  refresh?: string
   username?: string
   [k: string]: unknown
 }
@@ -53,13 +41,17 @@ function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
 
   if (roleKey === 'fse' || roleName === 'fieldserviceengineer') return 'fse'
 
-  // Regional Service Manager
+  // Regional Service Manager（admin/superadmin 也归入管理员视图）
   if (
     roleKey === 'rsmanager' ||
     roleKey === 'rsm' ||
-    roleKey === 'manager' || // 兼容旧后端/旧约定
+    roleKey === 'manager' ||
+    roleKey === 'admin' ||
+    roleKey === 'superadmin' ||
     roleKey === 'regionalservicemanager' ||
-    roleName === 'regionalservicemanager'
+    roleName === 'regionalservicemanager' ||
+    roleName === '管理员' ||
+    roleName === '超级管理员'
   )
     return 'rsmanager'
 
@@ -81,20 +73,8 @@ function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
   return undefined
 }
 
-export async function loginLocalUser(payload: LocalLoginPayload): Promise<{ user: Partial<User>; token: string }> {
-  const resp = await apiPostPublic<LocalLoginResponse>('/api/users/login', {
-    username: String(payload.username || '').trim(),
-    employeeId: String(payload.employeeId || '').trim(),
-    email: String(payload.email || '').trim(),
-    role: String(payload.role || '').trim(),
-  })
-  if (!resp?.ok || !resp.user || !resp.token) {
-    throw new Error(String(resp?.error || 'invalid_credentials'))
-  }
-  return { user: resp.user, token: resp.token }
-}
 
-export async function loginUser(payload: LoginPayload): Promise<{ user: Partial<User>; token: string }> {
+export async function loginUser(payload: LoginPayload): Promise<{ user: Partial<User>; token: string; refreshToken: string }> {
   const resp = await apiPostPublic<BackendOk<LoginData>>('/api/login/', {
     username: payload.username,
     password: md5(payload.password),
@@ -107,8 +87,9 @@ export async function loginUser(payload: LoginPayload): Promise<{ user: Partial<
   }
   const token = String(resp.data?.access || '').trim()
   if (!token) throw new Error('missing_access_token')
+  const refreshToken = String(resp.data?.refresh || '').trim()
   const username = String(resp.data?.username || payload.username).trim() || payload.username
-  return { user: { username, employeeId: username }, token }
+  return { user: { username, employeeId: username }, token, refreshToken }
 }
 
 export async function fetchUserInfo(username: string) {
@@ -127,7 +108,8 @@ export async function fetchUserInfo(username: string) {
   const displayName = String(data.name || '').trim()
   const email = data.email == null ? '' : String(data.email).trim()
   const deptName = String(data.dept_info?.dept_name || '').trim()
-  const role = mapRoleFromUserInfo(data)
+  // is_superuser 时兜底归入 rsmanager 视图
+  const role = mapRoleFromUserInfo(data) ?? ((data as any).is_superuser ? 'rsmanager' : undefined)
 
   const roleDisplayName = String(data.role_info?.[0]?.name || '').trim()
 
@@ -141,6 +123,27 @@ export async function fetchUserInfo(username: string) {
     ...(roleDisplayName ? { roleDisplayName } : {}),
   }
   return mapped
+}
+
+export interface CaptchaData {
+  key: number | string
+  image_base: string
+}
+
+export async function fetchCaptcha(): Promise<CaptchaData | null> {
+  const resp = await apiGetPublic<BackendOk<CaptchaData>>('/api/captcha/')
+  if (!resp || resp.code !== 2000) {
+    throw new Error('captcha_fetch_failed')
+  }
+  // 后端关闭验证码（base.captcha_state=false）时 data 为空，登录无需验证码
+  if (!resp.data?.key) return null
+  return resp.data
+}
+
+export function fetchLocalUserProfile(employeeId?: string) {
+  const id = String(employeeId || '').trim()
+  const params = id ? { employeeId: id } : undefined
+  return apiGet<{ ok: boolean; user: User }>('/api/users/self', params)
 }
 
 export function fetchUsers(role?: string) {

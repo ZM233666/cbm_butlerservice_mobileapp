@@ -2,14 +2,15 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 import { useI18n } from '@/composables/useI18n'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
 import TaskUploadSlot from '@/components/task/TaskUploadSlot.vue'
-import { fetchGuidanceTasks, fetchTaskStatus, postTaskStatus, postTaskSubmit, postTaskEditRequest, fetchLatestTaskSubmit } from '@/api/tasks'
+import { fetchGuidanceTasks, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
-import type { GuidanceRow } from '@/types/task'
+import type { GuidanceRow, TaskDetail } from '@/types/task'
 import * as exifr from 'exifr'
 
 defineOptions({ name: 'TaskListView' })
@@ -20,17 +21,17 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { lang, t } = useI18n()
+const toastStore = useToastStore()
 
 const SCHEMATIC_SEQS = new Set(['1','2','3','3.1','3.2','3.3','4','5','5.1','6','6.1','7','8','8.1','8.2','9','9.1','10','11','11.1','12','13','14','15','17.1','17.2','17.3','17.4','17.5','17.6'])
 
 const maintType = ref<'c4c6' | 'c1c3'>('c4c6')
+const taskDetail = ref<TaskDetail | null>(null)
 const guidanceRows = ref<GuidanceRow[]>([])
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture'] }>>({})
 const localPreviewRecords = ref<Record<string, string>>({})
 const uploadingSlots = ref<Record<string, boolean>>({})
 const issueRecords = ref<Record<string, { text: string; updatedAt: string }>>({})
-const toastMsg = ref('')
-let toastTimer: ReturnType<typeof setTimeout> | undefined
 
 const schematicOpen = ref(false)
 const schematicSrc = ref('')
@@ -54,11 +55,11 @@ const issueOpen = ref(false)
 const issueRowId = ref('')
 const issueText = ref('')
 const submitConfirmOpen = ref(false)
-const currentTaskStatus = ref<'todo' | 'doing' | 'done'>('todo')
-const taskRejected = ref(false)
+const currentTaskStatus = ref<'todo' | 'doing' | 'done' | 'rejected'>('todo')
 const editRequestOpen = ref(false)
 const editRequestReason = ref('')
 const editRequestSubmitting = ref(false)
+const savingDraft = ref(false)
 // taskKey：统一以 Main Task ID 作为唯一 key（来自 query.k / query.taskId）
 const taskKey = computed(() => String(route.query.k || route.query.taskId || '').trim())
 const fallbackTaskKey = computed(() => {
@@ -69,9 +70,24 @@ const fallbackTaskKey = computed(() => {
   return `${maintType.value.toLowerCase()}-${title}-${deadline}`
 })
 
-const mainTaskId = computed(() => String(route.query.taskId || '').trim() || 'MT-CCBII-88421')
+const mainTaskId = computed(() => String(route.query.taskId || '').trim())
 const effectiveTaskKey = computed(() => mainTaskId.value || taskKey.value || fallbackTaskKey.value)
-const deadlineTextRaw = computed(() => String(route.query.deadline || '2026-04-30').trim())
+const EMPTY_FIELD = '-'
+
+function displayField(value: string | undefined | null) {
+  const text = String(value || '').trim()
+  return text || EMPTY_FIELD
+}
+
+const basicDepot = computed(() => displayField(taskDetail.value?.depot))
+const basicTrainNo = computed(() => displayField(taskDetail.value?.trainNo))
+const basicEmployeeId = computed(() => displayField(taskDetail.value?.employeeId || auth.user?.employeeId))
+const basicMaintLabel = computed(() => {
+  const maint = String(taskDetail.value?.maint || maintType.value || '').trim()
+  return maint === 'c1c3' ? t.value.maintC1C3 : t.value.maintC4C6
+})
+const basicTaskId = computed(() => displayField(taskDetail.value?.taskId || mainTaskId.value))
+const basicDeadline = computed(() => displayField(taskDetail.value?.deadline || String(route.query.deadline || '')))
 const homeRefreshStamp = ref(0)
 const backToHome = computed(() => {
   if (!homeRefreshStamp.value) return '/'
@@ -164,6 +180,7 @@ const incompleteRows = computed(() => {
 const isTaskDone = computed(() => currentTaskStatus.value === 'done')
 const isTaskTodo = computed(() => currentTaskStatus.value === 'todo')
 const isTaskDoing = computed(() => currentTaskStatus.value === 'doing')
+const isTaskRejected = computed(() => currentTaskStatus.value === 'rejected')
 const editRequestBtnText = computed(() => {
   const dict = t.value as Record<string, string>
   return dict.editRequestBtn || (lang.value === 'zh' ? '编辑申请' : 'Edit Request')
@@ -173,10 +190,8 @@ const editRequestSentText = computed(() => {
   return dict.editRequestSent || (lang.value === 'zh' ? '编辑申请已提交' : 'Edit request submitted')
 })
 
-function toast(msg: string) {
-  toastMsg.value = msg
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
+function toast(msg: string, type: Parameters<typeof toastStore.show>[1] = 'info', duration = 2200) {
+  toastStore.show(msg, type, duration)
 }
 
 function wait(ms: number) {
@@ -418,6 +433,15 @@ function uploadMetaLines(slotId: string) {
   return captureLines(uploadRecords.value[slotId]?.capture)
 }
 
+function resolveTaskStatus(entry: unknown): 'todo' | 'doing' | 'done' | 'rejected' | null {
+  const e = entry as { status?: string; rejected?: boolean } | null
+  if (!e) return null
+  if (e.status === 'rejected') return 'rejected'
+  if (e.status === 'todo' && e.rejected) return 'rejected'
+  if (e.status === 'todo' || e.status === 'doing' || e.status === 'done') return e.status
+  return null
+}
+
 function taskListCacheKey() {
   return `butler.task-list.${auth.user?.employeeId || 'guest'}.${mainTaskId.value}`
 }
@@ -428,7 +452,7 @@ function readTaskListCache() {
     return raw ? JSON.parse(raw) as {
       uploadRecords?: Record<string, { url: string; capture?: UploadResult['capture'] }>
       issueRecords?: Record<string, { text: string; updatedAt: string }>
-      currentTaskStatus?: 'todo' | 'doing' | 'done'
+      currentTaskStatus?: 'todo' | 'doing' | 'done' | 'rejected'
       taskRejected?: boolean
       maintType?: 'c4c6' | 'c1c3'
     } : null
@@ -443,7 +467,6 @@ function persistTaskListCache() {
       uploadRecords: uploadRecords.value,
       issueRecords: issueRecords.value,
       currentTaskStatus: currentTaskStatus.value,
-      taskRejected: taskRejected.value,
       maintType: maintType.value,
     }))
   } catch { /* ignore quota / private mode */ }
@@ -460,6 +483,7 @@ async function hydrateTaskPage() {
   if (m === 'c1c3') maintType.value = 'c1c3'
   else if (m === 'c4c6') maintType.value = 'c4c6'
 
+  taskDetail.value = null
   uploadRecords.value = {}
   issueRecords.value = {}
   Object.keys(localPreviewRecords.value).forEach((slotId) => cleanupLocalPreview(slotId))
@@ -472,10 +496,11 @@ async function hydrateTaskPage() {
     if (cached.issueRecords && typeof cached.issueRecords === 'object') {
       issueRecords.value = cached.issueRecords
     }
-    if (cached.currentTaskStatus === 'todo' || cached.currentTaskStatus === 'doing' || cached.currentTaskStatus === 'done') {
+    if (cached.currentTaskStatus === 'todo' || cached.currentTaskStatus === 'doing' || cached.currentTaskStatus === 'done' || cached.currentTaskStatus === 'rejected') {
       currentTaskStatus.value = cached.currentTaskStatus
+    } else if (cached.taskRejected) {
+      currentTaskStatus.value = 'rejected'
     }
-    if (typeof cached.taskRejected === 'boolean') taskRejected.value = cached.taskRejected
     if (cached.maintType === 'c1c3' || cached.maintType === 'c4c6') maintType.value = cached.maintType
   }
 
@@ -491,32 +516,61 @@ async function hydrateTaskPage() {
 
   if (auth.user?.employeeId) {
     try {
-      const statusData = await fetchTaskStatus(auth.user.employeeId)
-      const entry = effectiveTaskKey.value
-        ? statusData?.statuses?.[effectiveTaskKey.value]
-        : statusData?.statuses?.[maintType.value]
-      if (entry && (entry.status === 'todo' || entry.status === 'doing' || entry.status === 'done')) {
-        currentTaskStatus.value = entry.status
-        taskRejected.value = entry.status === 'todo' && Boolean((entry as any).rejected)
+      if (mainTaskId.value) {
+        const detailData = await fetchTaskDetail(mainTaskId.value)
+        if (detailData?.task) {
+          taskDetail.value = detailData.task
+          if (detailData.task.maint === 'c1c3' || detailData.task.maint === 'c4c6') {
+            maintType.value = detailData.task.maint
+          }
+          if (
+            detailData.task.status === 'todo'
+            || detailData.task.status === 'doing'
+            || detailData.task.status === 'done'
+            || detailData.task.status === 'rejected'
+          ) {
+            currentTaskStatus.value = detailData.task.status
+          }
+        }
+      }
+
+      if (!taskDetail.value) {
+        const statusData = await fetchTaskStatus(auth.user.employeeId)
+        const entry = effectiveTaskKey.value
+          ? statusData?.statuses?.[effectiveTaskKey.value]
+          : statusData?.statuses?.[maintType.value]
+        const resolved = entry ? resolveTaskStatus(entry) : null
+        if (resolved) currentTaskStatus.value = resolved
       }
     } catch { /* */ }
   }
 
-  if (mainTaskId.value && Object.keys(uploadRecords.value).length === 0) {
+  if (mainTaskId.value) {
     try {
       const latest = await fetchLatestTaskSubmit(mainTaskId.value)
-      const uploads = latest && latest.found && latest.uploads && typeof latest.uploads === 'object' ? latest.uploads : {}
-      Object.entries(uploads).forEach(([slot, item]) => {
-        const url = String((item as any)?.url || '').trim()
-        if (!url) return
-        uploadRecords.value[slot] = {
-          url,
-          capture: (item as any)?.capture,
-        }
-      })
-      persistTaskListCache()
+      if (latest && latest.found) {
+        const uploads = latest.uploads && typeof latest.uploads === 'object' ? latest.uploads : {}
+        Object.entries(uploads).forEach(([slot, item]) => {
+          const url = String((item as any)?.url || '').trim()
+          if (!url) return
+          uploadRecords.value[slot] = {
+            url,
+            capture: (item as any)?.capture,
+          }
+        })
+        const issues = latest.issues && typeof latest.issues === 'object' ? latest.issues : {}
+        Object.entries(issues).forEach(([rowId, item]) => {
+          const text = String((item as any)?.text || '').trim()
+          if (!text) return
+          issueRecords.value[rowId] = {
+            text,
+            updatedAt: String((item as any)?.updatedAt || new Date().toISOString()),
+          }
+        })
+        persistTaskListCache()
+      }
     } catch {
-      // ignore: keep page usable even when no historical submit available
+      // ignore: keep page usable even when no historical draft available
     }
   }
 }
@@ -623,7 +677,10 @@ async function handleUpload(slotId: string, event: Event) {
       if (geo.accuracy != null) clientMeta.accuracy = geo.accuracy
     }
 
-    const data = await uploadImage(slotId, uploadFile, slotId, clientMeta)
+    const data = await uploadImage(slotId, uploadFile, slotId, clientMeta, {
+      taskId: mainTaskId.value,
+      employeeId: auth.user?.employeeId || '',
+    })
     uploadRecords.value[slotId] = { url: data.url, capture: data.capture }
     cleanupLocalPreview(slotId)
     persistTaskListCache()
@@ -636,7 +693,7 @@ async function handleUpload(slotId: string, event: Event) {
   }
 }
 
-async function setTaskStatus(status: string, opts?: { rejected?: boolean }): Promise<boolean> {
+async function setTaskStatus(status: 'todo' | 'doing' | 'done' | 'rejected'): Promise<boolean> {
   const employeeId = auth.user?.employeeId || ''
   if (!employeeId) return false
   try {
@@ -649,11 +706,13 @@ async function setTaskStatus(status: string, opts?: { rejected?: boolean }): Pro
         taskId: mainTaskId.value,
         title: String(route.query.title || '').trim(),
         deadline: String(route.query.deadline || '').trim(),
-        rejected: opts?.rejected,
       },
     ) as any
     if (data && data.ok === false) return false
-    if (data && data.status && data.status !== status) return false
+    const returned = typeof data?.status === 'string'
+      ? data.status
+      : resolveTaskStatus(data?.status || data?.statuses?.[effectiveTaskKey.value || ''])
+    if (returned && returned !== status) return false
     return true
   } catch {
     return false
@@ -661,64 +720,92 @@ async function setTaskStatus(status: string, opts?: { rejected?: boolean }): Pro
 }
 
 async function onSave() {
-  const ok = await setTaskStatus('doing')
-  if (ok) currentTaskStatus.value = 'doing'
-  toast(ok ? t.value.savedToDoing : t.value.saved)
-  if (ok) homeRefreshStamp.value = Date.now()
+  if (savingDraft.value) return
+  savingDraft.value = true
+  try {
+    await postTaskDraft(buildTaskSubmitPayload(true))
+    persistTaskListCache()
+    toast(t.value.saved, 'success')
+  } catch {
+    toast(t.value.saveFail, 'error')
+  } finally {
+    savingDraft.value = false
+  }
 }
 
 async function onAccept() {
-  const ok = await setTaskStatus('doing', { rejected: false })
+  const ok = await setTaskStatus('doing')
   if (ok) {
     currentTaskStatus.value = 'doing'
-    taskRejected.value = false
     homeRefreshStamp.value = Date.now()
   }
-  toast(ok ? (t.value as any).acceptedToDoing : t.value.saved)
+  toast(ok ? (t.value as any).acceptedToDoing : t.value.saved, ok ? 'success' : 'warn')
 }
 
 async function onReject() {
-  const ok = await setTaskStatus('todo', { rejected: true })
+  const ok = await setTaskStatus('rejected')
   if (!ok) {
-    toast((t.value as any).rejectFailed || (lang.value === 'zh' ? '拒绝失败，请稍后重试' : 'Reject failed. Please try again.'))
+    toast((t.value as any).rejectFailed || (lang.value === 'zh' ? '拒绝失败，请稍后重试' : 'Reject failed. Please try again.'), 'error')
     return
   }
-  taskRejected.value = true
-  currentTaskStatus.value = 'todo'
+  currentTaskStatus.value = 'rejected'
   homeRefreshStamp.value = Date.now()
-  toast((t.value as any).rejected || (lang.value === 'zh' ? '已拒绝，该任务仍保留在 To Do' : 'Rejected. Task stays in To Do'))
+  toast((t.value as any).rejected || (lang.value === 'zh' ? '已拒绝，该任务仍保留在 To Do' : 'Rejected. Task stays in To Do'), 'info')
   await wait(700)
   router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
+}
+
+function buildTaskSubmitPayload(allowEmptyUploads = false) {
+  const uploads: Record<string, { url: string; capture?: UploadResult['capture'] }> = {}
+  Object.entries(uploadRecords.value).forEach(([slot, meta]) => {
+    const url = String(meta?.url || '').trim()
+    if (!url) return
+    uploads[slot] = {
+      url,
+      ...(meta?.capture ? { capture: meta.capture } : {}),
+    }
+  })
+  return {
+    basicInfo: {
+      maintenanceType: maintType.value,
+      employeeId: auth.user?.employeeId,
+      taskId: mainTaskId.value,
+    },
+    uploads,
+    issues: issueRecords.value,
+    ...(allowEmptyUploads ? { allowEmptyUploads: true } : {}),
+  }
 }
 
 async function onSubmit() {
   if (!isSubmitReady.value) { submitConfirmOpen.value = true; return }
   try {
-    await postTaskSubmit({ basicInfo: { maintenanceType: maintType.value, employeeId: auth.user?.employeeId, taskId: mainTaskId.value }, uploads: uploadRecords.value, issues: issueRecords.value })
+    await postTaskSubmit(buildTaskSubmitPayload())
     const doneUpdated = await setTaskStatus('done')
-    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed'); return }
+    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed', 'warn'); return }
     currentTaskStatus.value = 'done'
     clearTaskListCache()
-    toast(t.value.submitted)
+    toast(t.value.submitted, 'success')
     await wait(900)
     homeRefreshStamp.value = Date.now()
     router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
-  } catch { toast('Submit failed') }
+  } catch { toast('Submit failed', 'error') }
 }
 
 async function confirmSubmitWithMissingUploads() {
   submitConfirmOpen.value = false
   try {
-    await postTaskSubmit({ basicInfo: { maintenanceType: maintType.value, employeeId: auth.user?.employeeId, taskId: mainTaskId.value }, uploads: uploadRecords.value, issues: issueRecords.value })
+    const hasAnyUpload = Object.values(uploadRecords.value).some((row) => String(row?.url || '').trim())
+    await postTaskSubmit(buildTaskSubmitPayload(!hasAnyUpload))
     const doneUpdated = await setTaskStatus('done')
-    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed'); return }
+    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed', 'warn'); return }
     currentTaskStatus.value = 'done'
     clearTaskListCache()
-    toast(t.value.submitted)
+    toast(t.value.submitted, 'success')
     await wait(900)
     homeRefreshStamp.value = Date.now()
     router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
-  } catch { toast('Submit failed') }
+  } catch { toast('Submit failed', 'error') }
 }
 
 function onEditRequest() {
@@ -729,12 +816,12 @@ function onEditRequest() {
 async function submitEditRequest() {
   const reason = editRequestReason.value.trim()
   if (!reason) {
-    toast(lang.value === 'zh' ? '请先填写修改原因' : 'Please provide a reason')
+    toast(lang.value === 'zh' ? '请先填写修改原因' : 'Please provide a reason', 'warn')
     return
   }
   const employeeId = auth.user?.employeeId || ''
   if (!employeeId) {
-    toast(lang.value === 'zh' ? '缺少员工信息，无法提交申请' : 'Missing employee info')
+    toast(lang.value === 'zh' ? '缺少员工信息，无法提交申请' : 'Missing employee info', 'error')
     return
   }
   if (editRequestSubmitting.value) return
@@ -758,9 +845,9 @@ async function submitEditRequest() {
       currentTaskStatus.value = 'doing'
       editRequestOpen.value = false
       if (requestSaved) {
-        toast(lang.value === 'zh' ? '编辑申请已提交，任务状态已切换为 Doing' : 'Edit request submitted. Task moved to Doing.')
+        toast(lang.value === 'zh' ? '编辑申请已提交，任务状态已切换为 Doing' : 'Edit request submitted. Task moved to Doing.', 'success')
       } else {
-        toast(lang.value === 'zh' ? '编辑申请接口不可用，已按测试流程切换为 Doing' : 'Edit API unavailable. Task moved to Doing for testing.')
+        toast(lang.value === 'zh' ? '编辑申请接口不可用，已按测试流程切换为 Doing' : 'Edit API unavailable. Task moved to Doing for testing.', 'warn')
       }
       return
     }
@@ -769,9 +856,10 @@ async function submitEditRequest() {
       requestSaved
         ? (lang.value === 'zh' ? '编辑申请已提交，但状态切换失败' : 'Edit request submitted, but failed to switch status.')
         : (lang.value === 'zh' ? '编辑申请与状态切换均失败' : 'Edit request and status switch both failed.'),
+      'error',
     )
   } catch {
-    toast(lang.value === 'zh' ? '处理失败，请稍后重试' : 'Process failed, please try again.')
+    toast(lang.value === 'zh' ? '处理失败，请稍后重试' : 'Process failed, please try again.', 'error')
   } finally {
     editRequestSubmitting.value = false
   }
@@ -785,7 +873,7 @@ watch(mainTaskId, (next, prev) => {
   if (next && next !== prev) hydrateTaskPage()
 })
 
-watch([uploadRecords, issueRecords, currentTaskStatus, taskRejected, maintType], () => {
+watch([uploadRecords, issueRecords, currentTaskStatus, maintType], () => {
   persistTaskListCache()
 }, { deep: true })
 
@@ -802,12 +890,12 @@ onUnmounted(() => {
       <section class="tl-card">
         <h2 class="tl-card__head">{{ t.basicInfo }}</h2>
         <dl class="tl-basic">
-          <div class="tl-basic__row"><dt>{{ t.depot }}</dt><dd><input class="tl-readonly" value="Shanghai" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.train }}</dt><dd><input class="tl-readonly" value="HXD1-1234" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="auth.user?.employeeId || ''" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.maint }}</dt><dd><input class="tl-readonly" :value="maintType === 'c1c3' ? t.maintC1C3 : t.maintC4C6" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" :value="mainTaskId" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.deadline }}</dt><dd><input class="tl-readonly" :value="deadlineTextRaw" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.depot }}</dt><dd><input class="tl-readonly" :value="basicDepot" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.train }}</dt><dd><input class="tl-readonly" :value="basicTrainNo" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="basicEmployeeId" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.maint }}</dt><dd><input class="tl-readonly" :value="basicMaintLabel" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" :value="basicTaskId" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.deadline }}</dt><dd><input class="tl-readonly" :value="basicDeadline" readonly /></dd></div>
         </dl>
       </section>
 
@@ -862,20 +950,21 @@ onUnmounted(() => {
             </tbody>
           </table>
         </div>
-        <div class="tl-actions tl-actions--sticky" :class="{ 'is-single': isTaskDone }">
-          <p v-if="isTaskTodo && taskRejected" class="tl-reject-hint">{{ (t as any).rejectedHint }}</p>
+        <div class="tl-actions tl-actions--sticky" :class="{ 'is-single': isTaskDone || isTaskRejected }">
           <template v-if="isTaskDone">
             <button type="button" class="tl-btn tl-btn--primary tl-btn--full" @click="onEditRequest">{{ editRequestBtnText }}</button>
           </template>
-          <template v-else>
-            <template v-if="isTaskTodo">
-              <button type="button" class="tl-btn tl-btn--secondary" :disabled="taskRejected" @click="onReject">{{ taskRejected ? ((t as any).rejectedBtn || '已拒绝') : ((t as any).reject || 'Reject') }}</button>
-              <button type="button" class="tl-btn tl-btn--primary" @click="onAccept">{{ (t as any).accept || 'Accept' }}</button>
-            </template>
-            <template v-else-if="isTaskDoing">
-              <button type="button" class="tl-btn tl-btn--secondary" @click="onSave">{{ t.save }}</button>
-              <button type="button" class="tl-btn tl-btn--primary" @click="onSubmit">{{ t.submit }}</button>
-            </template>
+          <template v-else-if="isTaskRejected">
+            <p class="tl-reject-hint">{{ (t as any).rejectedHint }}</p>
+            <button type="button" class="tl-btn tl-btn--primary tl-btn--full" @click="onAccept">{{ (t as any).accept || 'Accept' }}</button>
+          </template>
+          <template v-else-if="isTaskTodo">
+            <button type="button" class="tl-btn tl-btn--secondary" @click="onReject">{{ (t as any).reject || 'Reject' }}</button>
+            <button type="button" class="tl-btn tl-btn--primary" @click="onAccept">{{ (t as any).accept || 'Accept' }}</button>
+          </template>
+          <template v-else-if="isTaskDoing">
+            <button type="button" class="tl-btn tl-btn--secondary" :disabled="savingDraft" @click="onSave">{{ savingDraft ? (lang === 'zh' ? '保存中...' : 'Saving...') : t.save }}</button>
+            <button type="button" class="tl-btn tl-btn--primary" @click="onSubmit">{{ t.submit }}</button>
           </template>
         </div>
       </section>
@@ -974,7 +1063,6 @@ onUnmounted(() => {
     </div>
   </Teleport>
 
-  <div class="tl-toast" :class="{ 'is-show': toastMsg }" role="status" aria-live="polite">{{ toastMsg }}</div>
 </template>
 
 <style scoped>

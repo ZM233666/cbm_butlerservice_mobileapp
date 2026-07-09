@@ -10,21 +10,13 @@ function mustBeJson(filePath, expectArrayOrRows) {
   if (expectArrayOrRows === "rows" && (!data || !Array.isArray(data.rows))) {
     throw new Error(`${filePath} must contain { rows: [] }`);
   }
-  if (expectArrayOrRows === "tasks" && (!data || !Array.isArray(data.tasks))) {
-    throw new Error(`${filePath} must contain { tasks: [] }`);
-  }
 }
 
 function main() {
   const root = path.resolve(__dirname, "..");
   const tasksPath = path.join(root, "public", "data", "brake-guidance-tasks.json");
-  const recordsPath = path.join(root, "server", "data", "records.json");
-  const homeConfigPath = path.join(root, "server", "data", "home-config.json");
-
   mustBeJson(tasksPath, "rows");
-  mustBeJson(recordsPath, "array");
-  mustBeJson(homeConfigPath, "tasks");
-  console.log("Data files are valid JSON.");
+  console.log("Static guidance data is valid JSON.");
 }
 
 main();

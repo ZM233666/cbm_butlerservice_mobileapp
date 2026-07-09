@@ -6,7 +6,41 @@ export interface TaskCard {
   deadline: string
   taskId?: string
   depot?: string
+  trainNo?: string
   uploadProgress?: { uploaded: number; required: number; percent: number }
+}
+
+export interface TaskDetail {
+  taskId: string
+  employeeId: string
+  title: string
+  maint: string
+  depot: string
+  trainNo: string
+  deadline: string
+  status: 'todo' | 'doing' | 'done' | 'rejected'
+  meta?: string
+}
+
+export interface TaskCentreStats {
+  all: number
+  todo: number
+  doing: number
+  done: number
+  rejected: number
+  modelCount: number
+  attachment: { uploaded: number; required: number; percent: number }
+  byTrainModel: { model: string; count: number }[]
+}
+
+export interface TaskCentreResponse {
+  ok: boolean
+  month: string
+  employeeId: string
+  stats: TaskCentreStats
+  monthStatusByMonth: Record<string, 'ok' | 'warn'>
+  checklistCounts: { c1c3: number; c4c6: number }
+  tasks: TaskCard[]
 }
 
 export interface TaskSummaryMaint {
@@ -26,8 +60,9 @@ export interface HomeConfig {
 }
 
 export interface TaskStatusEntry {
-  status: 'todo' | 'doing' | 'done'
+  status: 'todo' | 'doing' | 'done' | 'rejected'
   updatedAt?: string
+  /** @deprecated 旧数据兼容，请使用 status=rejected */
   rejected?: boolean
 }
 

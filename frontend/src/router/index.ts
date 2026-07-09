@@ -1,6 +1,40 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+const TOKEN_KEY = 'butler.auth.token'
+const REFRESH_KEY = 'butler.auth.refresh'
+
+// 冷启动时尝试用 refresh token 续期 access token（只跑一次）
+let _bootRefreshDone = false
+async function tryBootRefresh(): Promise<void> {
+  if (_bootRefreshDone) return
+  _bootRefreshDone = true
+  const access = localStorage.getItem(TOKEN_KEY)
+  const refresh = localStorage.getItem(REFRESH_KEY)
+  if (!access || !refresh) return
+  try {
+    const res = await fetch('/token/refresh/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh }),
+    })
+    if (!res.ok) {
+      // 远端不可用/连接池打满时：不强制登出，保留本地会话继续开发
+      if (res.status >= 500) return
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(REFRESH_KEY)
+      localStorage.removeItem('butler.auth.user')
+      window.dispatchEvent(new CustomEvent('auth:session-expired'))
+      return
+    }
+    const data = await res.json()
+    const newAccess = String(data?.access || data?.data?.access || '').trim()
+    if (newAccess) localStorage.setItem(TOKEN_KEY, newAccess)
+  } catch {
+    // 网络异常时静默失败，让后续 API 请求触发 401 重试流程
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -47,8 +81,14 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
+
+  // 冷启动时主动续期并刷新用户信息（只执行一次）
+  if (auth.isLoggedIn) {
+    await tryBootRefresh()
+    await auth.refreshProfile().catch(() => {})
+  }
 
   if (to.meta.guest) {
     if (auth.isLoggedIn) return { path: '/' }

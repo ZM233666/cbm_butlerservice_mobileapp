@@ -20,8 +20,6 @@ const cards = ref<TaskCard[]>([])
 const statusStore = ref<TaskStatusStore>({})
 const activeFilter = ref<'todo' | 'doing' | 'done' | 'all'>('todo')
 
-const DEFAULT_DEPOT = 'Shanghai'
-
 const allCards = computed<TaskCard[]>(() => {
   const merged = [...cards.value, ...(props.extraCards || [])]
   const seen = new Set<string>()
@@ -35,9 +33,11 @@ const allCards = computed<TaskCard[]>(() => {
   return out
 })
 
-function getStatusFromEntry(entry: unknown): 'todo' | 'doing' | 'done' | null {
-  const e = entry as { status?: unknown } | null
+function getStatusFromEntry(entry: unknown): 'todo' | 'doing' | 'done' | 'rejected' | null {
+  const e = entry as { status?: unknown; rejected?: boolean } | null
   const s = e?.status
+  if (s === 'rejected') return 'rejected'
+  if (s === 'todo' && e?.rejected) return 'rejected'
   if (s === 'todo' || s === 'doing' || s === 'done') return s
   return null
 }
@@ -57,19 +57,10 @@ const maintCounts = computed(() => {
 })
 
 function getCardRejected(card: TaskCard): boolean {
-  const key = taskKey(card)
-  const entry = statusStore.value[key] as { status?: string; rejected?: boolean } | undefined
-  if (entry?.status === 'todo' && entry.rejected) return true
-
-  const maint = String(card.maint || '').toLowerCase()
-  if ((maintCounts.value[maint] || 0) <= 1) {
-    const byMaint = statusStore.value[maint] as { status?: string; rejected?: boolean } | undefined
-    if (byMaint?.status === 'todo' && byMaint.rejected) return true
-  }
-  return false
+  return getCardStatusByCard(card) === 'rejected'
 }
 
-function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' {
+function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' | 'rejected' {
   const key = taskKey(card)
   const byKey = getStatusFromEntry(statusStore.value[key])
   if (byKey) return byKey
@@ -85,8 +76,7 @@ function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' {
 }
 
 function getDepot(_card: TaskCard) {
-  // TODO: 后续如果后端 home-config 提供 depot，可在此处直接读取 card.depot
-  return String((_card as any).depot || '').trim() || DEFAULT_DEPOT
+  return String((_card as any).depot || '').trim() || '-'
 }
 
 function doneUploadText(card: TaskCard) {
@@ -96,7 +86,8 @@ function doneUploadText(card: TaskCard) {
 }
 
 function isPendingTodo(card: TaskCard): boolean {
-  return getCardStatusByCard(card) === 'todo' && !getCardRejected(card)
+  const s = getCardStatusByCard(card)
+  return s === 'todo' || s === 'rejected'
 }
 
 const filteredCards = computed(() =>
@@ -154,7 +145,7 @@ const counts = computed(() => {
     const s = getCardStatusByCard(c)
     if (s === 'doing') doing++
     else if (s === 'done') done++
-    else if (!getCardRejected(c)) todo++
+    else if (s === 'todo') todo++
   })
   return { todo, doing, done, all: allCards.value.length }
 })
@@ -241,12 +232,12 @@ async function boot() {
   await loadStatuses()
 }
 
-function onFocus() { loadStatuses() }
+function onFocus() { boot() }
 
 onMounted(() => {
   boot()
   window.addEventListener('focus', onFocus)
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadStatuses() })
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) boot() })
 })
 onUnmounted(() => { window.removeEventListener('focus', onFocus) })
 

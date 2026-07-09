@@ -13,9 +13,11 @@ export interface RecordRow {
   uploadCount?: number
 }
 
-export function searchRecords(keyword: string, limit = 100) {
-  return apiGet<{ ok: boolean; rows: RecordRow[] }>('/api/records', {
+export function searchRecords(keyword: string, employeeId?: string, limit = 100) {
+  const params: Record<string, string> = {
     keyword,
     limit: String(limit),
-  })
+  }
+  if (employeeId) params.employeeId = employeeId
+  return apiGet<{ ok: boolean; rows: RecordRow[]; total?: number }>('/api/records', params)
 }

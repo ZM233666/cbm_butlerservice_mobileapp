@@ -34,6 +34,15 @@ test("queryRecords should return empty when keyword blank", () => {
   assert.deepEqual(res, []);
 });
 
+test("queryRecords should match issueText", () => {
+  const res = queryRecords(
+    [{ id: "SUB-1", code: "MT-1", taskSeq: "1", trainNo: "-", maintType: "C4/C6", date: "", desc: "x", issueText: "r1: 看不清车号" }],
+    "看不清车号",
+    50
+  );
+  assert.equal(res.length, 1);
+});
+
 test("queryRecords should cap results by limit", () => {
   const res = queryRecords(rows, "hxd1", 1);
   assert.equal(res.length, 1);

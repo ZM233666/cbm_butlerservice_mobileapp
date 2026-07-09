@@ -223,20 +223,22 @@ onMounted(() => {
     </header>
 
     <main class="main main--my">
-      <section v-if="isFseProfile && hasProfileData" class="my-profile-card" aria-labelledby="my-profile-heading">
+      <section v-if="isFseProfile" class="my-profile-card" aria-labelledby="my-profile-heading">
         <div class="my-profile-card__head">
           <div class="my-profile-card__intro">
             <p class="my-profile-card__eyebrow">{{ t.myCapabilitySummary }}</p>
             <h2 id="my-profile-heading" class="my-profile-card__title">{{ t.myProfessionalProfile }}</h2>
             <p class="my-profile-card__sub">{{ t.myProfessionalProfileSub }}</p>
           </div>
-          <div class="my-skill-level">
+          <div v-if="hasProfileData" class="my-skill-level">
             <span class="my-skill-level__label">{{ t.mySkillLevel }}</span>
             <strong class="my-skill-level__value">{{ skillLevel }}</strong>
           </div>
         </div>
 
-        <div class="my-metrics">
+        <p v-if="!hasProfileData" class="my-profile-empty">{{ t.myProfileEmpty }}</p>
+
+        <div v-if="hasProfileData" class="my-metrics">
           <article v-for="item in profileMetrics" :key="item.label" class="my-metric">
             <span class="my-metric__label">{{ item.label }}</span>
             <strong class="my-metric__value">{{ item.value }}</strong>
@@ -511,6 +513,16 @@ onMounted(() => {
   font-weight: 800;
   letter-spacing: -0.03em;
   color: #0b4a82;
+}
+.my-profile-empty {
+  margin: 0.6rem 0 0.4rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  background: #f1f5f9;
+  font-size: 0.78rem;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.5;
 }
 .my-profile-card__sub {
   margin: 0.26rem 0 0;

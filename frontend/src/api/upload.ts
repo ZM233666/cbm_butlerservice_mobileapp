@@ -30,11 +30,19 @@ export function uploadImage(
     longitude?: number
     accuracy?: number
   },
+  context?: {
+    taskId?: string
+    employeeId?: string
+  },
 ): Promise<UploadResult> {
   const fd = new FormData()
   fd.append('file', file)
   fd.append('slotId', slotId)
   fd.append('clientDisplayName', displayName)
+  const taskId = String(context?.taskId || '').trim()
+  const employeeId = String(context?.employeeId || '').trim()
+  if (taskId) fd.append('taskId', taskId)
+  if (employeeId) fd.append('employeeId', employeeId)
   if (clientMeta) {
     fd.append('clientCapturedAt', clientMeta.capturedAt)
     if (clientMeta.latitude != null) fd.append('clientLatitude', String(clientMeta.latitude))

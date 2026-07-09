@@ -4,10 +4,14 @@ import type { TaskCard } from '@/types/task'
 import { useI18n } from '@/composables/useI18n'
 import { useAuthStore } from '@/stores/auth'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   tasks: TaskCard[]
   onAccept?: (card: TaskCard) => Promise<void> | void
-}>()
+  /** 功能未上线时置灰展示，不可点击 */
+  comingSoon?: boolean
+}>(), {
+  comingSoon: true,
+})
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -20,7 +24,10 @@ const selected = ref<TaskCard | null>(null)
 const modalOpen = computed(() => selected.value !== null)
 const acceptState = ref<'idle' | 'loading' | 'success'>('idle')
 
-function openCard(card: TaskCard) { selected.value = card }
+function openCard(card: TaskCard) {
+  if (props.comingSoon) return
+  selected.value = card
+}
 function closeModal() {
   selected.value = null
   acceptState.value = 'idle'
@@ -45,7 +52,7 @@ async function acceptSelected() {
 </script>
 
 <template>
-  <section class="home-section" aria-label="CBM Recommendations">
+  <section class="home-section" :class="{ 'is-coming-soon': comingSoon }" aria-label="CBM Recommendations">
     <div class="home-section__header">
       <h2 class="home-section__title">
         <span class="home-section__icon" aria-hidden="true">
@@ -56,12 +63,21 @@ async function acceptSelected() {
           </svg>
         </span>
         {{ t.homeCbmTitle }}
+        <span v-if="comingSoon" class="coming-soon-badge">{{ t.homeCbmComingSoon }}</span>
       </h2>
     </div>
 
-    <div class="ios-list-group" aria-label="CBM recommendation list">
+    <div class="ios-list-group" aria-label="CBM recommendation list" :aria-disabled="comingSoon ? 'true' : undefined">
       <div class="ios-list-scroll" :class="{ 'is-empty': !tasks.length }">
-        <button v-for="card in tasks" :key="`${card.maint}-${card.title}-${card.deadline}`" type="button" class="ios-list-item" @click="openCard(card)">
+        <component
+          :is="comingSoon ? 'div' : 'button'"
+          v-for="card in tasks"
+          :key="`${card.maint}-${card.title}-${card.deadline}`"
+          :type="comingSoon ? undefined : 'button'"
+          class="ios-list-item"
+          :class="{ 'is-disabled': comingSoon }"
+          @click="openCard(card)"
+        >
           <span class="item-icon-area" aria-hidden="true">
             <span class="ai-icon">✦</span>
           </span>
@@ -73,13 +89,13 @@ async function acceptSelected() {
             <span class="priority-indicator" :class="card.maint.toLowerCase() === 'c4c6' ? 'bg-high' : 'bg-med'"></span>
             <span class="chevron">›</span>
           </span>
-        </button>
+        </component>
         <p v-if="!tasks.length" class="ios-list-empty">{{ t.homeNoTasksFound }}</p>
       </div>
     </div>
 
     <div class="home-cbm-meta" role="note">
-      <p class="home-section__subtitle home-cbm-meta__hint">{{ t.homeCbmSubtitle }}</p>
+      <p class="home-section__subtitle home-cbm-meta__hint">{{ comingSoon ? t.homeCbmComingSoonHint : t.homeCbmSubtitle }}</p>
       <div class="home-legend home-cbm-meta__legend" aria-label="priority legend">
         <span class="home-legend__item"><i class="home-legend__dot bg-low"></i>{{ t.legendLow }}</span>
         <span class="home-legend__item"><i class="home-legend__dot bg-med"></i>{{ t.legendMedium }}</span>
@@ -126,6 +142,57 @@ async function acceptSelected() {
 </template>
 
 <style scoped>
+.home-section.is-coming-soon {
+  opacity: 0.62;
+  filter: grayscale(0.35);
+}
+
+.home-section.is-coming-soon .home-section__icon {
+  opacity: 0.75;
+}
+
+.coming-soon-badge {
+  margin-left: 0.45rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  background: rgba(226, 232, 240, 0.95);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  vertical-align: middle;
+}
+
+.ios-list-item.is-disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ios-list-item.is-disabled .item-title,
+.ios-list-item.is-disabled .item-subtitle,
+.ios-list-item.is-disabled .ai-icon {
+  color: #94a3b8;
+}
+
+.ios-list-item.is-disabled .priority-indicator {
+  opacity: 0.45;
+}
+
+.ios-list-item.is-disabled .chevron {
+  opacity: 0.35;
+}
+
+.home-section.is-coming-soon .home-cbm-meta__hint {
+  color: #94a3b8;
+}
+
+.home-section.is-coming-soon .home-legend__item {
+  opacity: 0.55;
+}
+
 .reco-sheet-backdrop {
   position: fixed;
   inset: 0;

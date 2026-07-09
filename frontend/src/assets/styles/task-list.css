@@ -832,34 +832,8 @@ body.tl-page {
   color: #fff;
 }
 
-.tl-toast {
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--bottom-nav-h, 3.5rem) + 5.8rem + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%) translateY(120%);
-  background: rgba(24, 24, 27, 0.92);
-  color: #fff;
-  padding: 0.55rem 1rem;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  z-index: 10120;
-  transition: transform 0.25s ease;
-  pointer-events: none;
-  opacity: 0;
-}
-
-.tl-toast:empty {
-  display: none;
-}
-
-.tl-toast.is-show {
-  transform: translateX(-50%) translateY(0);
-  opacity: 1;
-}
-
 .tl-reject-hint {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.55rem;
   padding: 0.55rem 0.7rem;
   border-radius: 10px;
   background: rgba(254, 243, 199, 0.9);
@@ -868,6 +842,12 @@ body.tl-page {
   font-weight: 600;
   line-height: 1.35;
   text-align: center;
+  grid-column: 1 / -1;
+}
+
+.tl-actions.is-single .tl-btn--full {
+  min-height: calc(var(--ui-btn-h) + 0.15rem);
+  font-size: 0.875rem;
 }
 
 .tl-btn:disabled {

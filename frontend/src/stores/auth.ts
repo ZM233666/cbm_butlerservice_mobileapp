@@ -10,11 +10,12 @@ import {
   ROLE_RS_MANAGER,
   isValidRole,
 } from '@/types/user'
-import { fetchUserInfo } from '@/api/users'
+import { fetchUserInfo, fetchLocalUserProfile } from '@/api/users'
 import { useI18nStore } from './i18n'
 
 const USER_KEY = 'butler.auth.user'
 const TOKEN_KEY = 'butler.auth.token'
+const REFRESH_KEY = 'butler.auth.refresh'
 
 const PAGE_ACCESS: Record<string, UserRole[]> = {
   '/': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
@@ -115,6 +116,7 @@ export const useAuthStore = defineStore('auth', () => {
   const i18n = useI18nStore()
   const user = ref<User | null>(readFromStorage())
   const token = ref<string>(localStorage.getItem(TOKEN_KEY) || '')
+  const refreshToken = ref<string>(localStorage.getItem(REFRESH_KEY) || '')
 
   const isLoggedIn = computed(() => user.value !== null && !!token.value)
   const role = computed<UserRole>(() => user.value?.role ?? ROLE_FSE)
@@ -127,7 +129,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isFse = computed(() => role.value === ROLE_FSE)
   const isThirdParty = computed(() => role.value === ROLE_EXTERNAL_CONTRACTOR)
 
-  function login(input: Partial<User>, accessToken?: string) {
+  function login(input: Partial<User>, accessToken?: string, refresh?: string) {
     const normalized = normalizeUser(input)
     const t = String(accessToken || '').trim()
     if (!normalized || !t) throw new Error('invalid_user_data')
@@ -135,13 +137,20 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = t
     localStorage.setItem(USER_KEY, JSON.stringify(normalized))
     localStorage.setItem(TOKEN_KEY, t)
+    const rt = String(refresh || '').trim()
+    if (rt) {
+      refreshToken.value = rt
+      localStorage.setItem(REFRESH_KEY, rt)
+    }
   }
 
   function logout() {
     user.value = null
     token.value = ''
+    refreshToken.value = ''
     localStorage.removeItem(USER_KEY)
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(REFRESH_KEY)
   }
 
   function canAccess(path: string): boolean {
@@ -153,21 +162,46 @@ export const useAuthStore = defineStore('auth', () => {
   async function refreshProfile() {
     const current = user.value
     const currentToken = String(token.value || '').trim()
+    const currentRefresh = String(refreshToken.value || '').trim()
     if (!current || !currentToken) return false
     try {
       const key = String(current.employeeId || current.username || '').trim()
       if (!key) return false
-      const info = await fetchUserInfo(key)
-      const rawRole = String((info as any).role || '').trim().toLowerCase()
+
+      const localProfile = await fetchLocalUserProfile(key).catch(() => null)
+      const dbUser = localProfile?.ok ? localProfile.user : null
+      if (!dbUser) {
+        const info = await fetchUserInfo(key).catch(() => ({} as Partial<User>))
+        if (!Object.keys(info || {}).length) return false
+        login({ ...current, ...info }, currentToken, currentRefresh || undefined)
+        return true
+      }
+
+      const rawRole = String(dbUser.role || '').trim().toLowerCase()
       const safeRole: UserRole | undefined = rawRole && isValidRole(rawRole) ? (rawRole as UserRole) : undefined
-      const { role: _ignoredRole, ...rest } = (info as any) || {}
-      const merged: Partial<User> = { ...current, ...rest, ...(safeRole ? { role: safeRole } : {}) }
-      login(merged, currentToken)
+      const merged: Partial<User> = {
+        ...current,
+        ...dbUser,
+        ...(safeRole ? { role: safeRole } : {}),
+        employeeId: String(dbUser.employeeId || current.employeeId || '').trim() || current.employeeId,
+        username: String(dbUser.username || current.username || '').trim() || current.username,
+        email: String(dbUser.email ?? current.email ?? '').trim(),
+        department: String(dbUser.department || current.department || '').trim(),
+        region: String(dbUser.region || current.region || '').trim(),
+        specialWorkCertificates: Array.isArray(dbUser.specialWorkCertificates)
+          ? dbUser.specialWorkCertificates
+          : current.specialWorkCertificates,
+        qualifications: Array.isArray(dbUser.qualifications) ? dbUser.qualifications : current.qualifications,
+        skillLevel: dbUser.skillLevel || current.skillLevel,
+        skillTypes: Array.isArray(dbUser.skillTypes) ? dbUser.skillTypes : current.skillTypes,
+        roleDisplayName: String(dbUser.roleDisplayName || current.roleDisplayName || '').trim() || undefined,
+      }
+      login(merged, currentToken, currentRefresh || undefined)
       return true
     } catch {
       return false
     }
   }
 
-  return { user, token, isLoggedIn, role, roleLabel, isManager, isFse, isThirdParty, login, logout, canAccess, refreshProfile }
+  return { user, token, refreshToken, isLoggedIn, role, roleLabel, isManager, isFse, isThirdParty, login, logout, canAccess, refreshProfile }
 })

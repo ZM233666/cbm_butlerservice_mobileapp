@@ -1,3 +1,6 @@
+const dotenv = require("dotenv");
+dotenv.config();
+
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
@@ -6,14 +9,24 @@ const http = require("http");
 const https = require("https");
 const express = require("express");
 const multer = require("multer");
-const dotenv = require("dotenv");
 const exifr = require("exifr");
 const { buildConfig } = require("./config");
 const { info, error } = require("./lib/logger");
 const { ensureDir, appendJsonLine, readJsonArray, readJsonObject, writeJsonObject } = require("./lib/fs-store");
-const { queryRecords } = require("./services/records-service");
 const { buildTaskSummary } = require("./services/task-summary");
-const { buildHomeConfig } = require("./services/home-config");
+const {
+  isTaskDataFromDb,
+  fetchHomeConfigFromDb,
+  fetchTaskStatusFromDb,
+  fetchTaskDetailFromDb,
+  fetchTaskCentreFromDb,
+  createTaskCentreTaskInDb,
+  fetchRecordsFromDb,
+  postTaskStatusToDb,
+  fetchSubmitLatestFromDb,
+  postTaskSubmitToDb,
+  postTaskDraftToDb,
+} = require("./services/django-task");
 const {
   normalizeAssignmentsStore,
   buildManagerDashboard,
@@ -30,8 +43,22 @@ const {
   buildWorkOrderStats,
   toTaskCard,
 } = require("./services/work-order-center");
-
-dotenv.config();
+const {
+  mapDjangoUserInfoToLocalUser,
+  mergeIdentityWithLocalProfile,
+  isLocalAuthAllowed,
+  isRemoteAuthSkipped,
+  createAuthCache,
+  isRemoteDbSaturationError,
+  isManagerRole,
+} = require("./services/django-auth");
+const {
+  fetchH5ProfileFromDb,
+  postH5CertificatesToDb,
+  isProfileDataFromDb,
+} = require("./services/django-user");
+const { buildNormalizedTaskFilename, buildLegacyUploadFilename } = require("./upload-filename");
+const { validateTaskSubmitPayload, validateTaskDraftPayload } = require("./task-submit-payload");
 
 const projectRoot = path.resolve(__dirname, "..");
 const cfg = buildConfig(projectRoot);
@@ -39,9 +66,6 @@ const cfg = buildConfig(projectRoot);
 ensureDir(cfg.uploadsDir);
 ensureDir(cfg.certUploadsDir);
 ensureDir(path.dirname(cfg.manifestPath));
-ensureDir(path.dirname(cfg.recordsDataPath));
-ensureDir(path.dirname(cfg.homeConfigPath));
-ensureDir(path.dirname(cfg.taskStatusPath));
 ensureDir(path.dirname(cfg.taskEditRequestPath));
 ensureDir(path.dirname(cfg.managerAssignmentsPath));
 ensureDir(path.dirname(cfg.usersDataPath));
@@ -88,7 +112,7 @@ function normalizeMaint(raw) {
 
 function normalizeStatus(raw) {
   const v = String(raw || "").trim().toLowerCase();
-  if (v === "todo" || v === "doing" || v === "done") return v;
+  if (v === "todo" || v === "doing" || v === "done" || v === "rejected") return v;
   return "";
 }
 
@@ -208,6 +232,64 @@ function verifyAuthToken(token) {
   }
 }
 
+function decodeJwtPayload(token) {
+  const raw = String(token || "").trim();
+  if (!raw || !raw.includes(".")) return null;
+  const parts = raw.split(".");
+  if (parts.length < 2) return null;
+  const payload = String(parts[1] || "").trim();
+  if (!payload) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!decoded || typeof decoded !== "object") return null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (decoded.exp && Number.isFinite(Number(decoded.exp)) && nowSec >= Number(decoded.exp)) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function pickFirstString(values) {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function resolveSkipModeJwtUser(req, token) {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+
+  const usersStore = readUsersStore();
+  const hintedEmployeeId = pickFirstString([
+    payload.employeeId,
+    payload.employee_id,
+    payload.employee_no,
+    payload.employeeNo,
+    payload.username,
+    payload.user_name,
+    payload.account,
+    req.headers && (req.headers["x-employee-id"] || req.headers["X-Employee-Id"]),
+    req.query && req.query.employeeId,
+    req.body && req.body.employeeId,
+  ]);
+
+  if (hintedEmployeeId) {
+    const byEmployeeId = usersStore.users.find((u) => u.employeeId === hintedEmployeeId);
+    if (byEmployeeId) return byEmployeeId;
+  }
+
+  const hintedUsername = pickFirstString([payload.username, payload.user_name, payload.name, payload.nickname]);
+  if (hintedUsername) {
+    const byUsername = usersStore.users.find((u) => u.username === hintedUsername);
+    if (byUsername) return byUsername;
+  }
+
+  return null;
+}
+
 function authFromRequest(req) {
   const h = String(req.headers.authorization || "").trim();
   if (!h) return null;
@@ -229,6 +311,7 @@ function writeWorkOrderStore(store) {
 }
 
 function syncTaskStatusByWorkOrder(assignment) {
+  if (isTaskDataFromDb()) return;
   if (!assignment || !assignment.id) return;
   const allTaskStatus = readJsonObject(cfg.taskStatusPath);
   const assigneeId = String(assignment.assignedTo && assignment.assignedTo.employeeId || "").trim();
@@ -327,34 +410,6 @@ function requiredUploadSlotsByMaint() {
   return { c1c3: setC1.size, c4c6: setC4.size };
 }
 
-function buildUploadProgress(taskId, maint) {
-  const id = String(taskId || "").trim();
-  const m = normalizeMaint(maint);
-  if (!id || !m) return null;
-
-  const requiredMap = requiredUploadSlotsByMaint();
-  const required = requiredMap[m] || 0;
-  if (!required) return { uploaded: 0, required: 0, percent: 0 };
-
-  const events = safeReadJsonLines(cfg.manifestPath, 800);
-  let lastSubmit = null;
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i];
-    if (!e || e.type !== "submit") continue;
-    const p = e.payload || {};
-    const basic = p.basicInfo || {};
-    const tid = String(basic.taskId || basic.mainTaskId || "").trim();
-    if (tid && tid === id) {
-      lastSubmit = p;
-      break;
-    }
-  }
-  const uploads = lastSubmit && lastSubmit.uploads && typeof lastSubmit.uploads === "object" ? lastSubmit.uploads : {};
-  const uploaded = Object.values(uploads).filter((v) => v && typeof v === "object" && v.url).length;
-  const percent = required > 0 ? Math.round((uploaded / required) * 100) : 0;
-  return { uploaded, required, percent };
-}
-
 async function requestJson(url, headers) {
   if (typeof fetch !== "function") return null;
   const ctrl = new AbortController();
@@ -432,68 +487,6 @@ async function reverseGeocodeLocation(latitude, longitude) {
   return null;
 }
 
-function latestSubmitByTaskId(taskId) {
-  const targetTaskId = String(taskId || "").trim();
-  if (!targetTaskId) return null;
-  const events = safeReadJsonLines(cfg.manifestPath, 1200);
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i];
-    if (!e || e.type !== "submit") continue;
-    const payload = e.payload && typeof e.payload === "object" ? e.payload : {};
-    const basicInfo = payload.basicInfo && typeof payload.basicInfo === "object" ? payload.basicInfo : {};
-    const submitTaskId = String(basicInfo.taskId || basicInfo.mainTaskId || "").trim();
-    if (!submitTaskId || submitTaskId !== targetTaskId) continue;
-    return {
-      submittedAt: String(e.at || "").trim() || new Date().toISOString(),
-      payload,
-    };
-  }
-  return null;
-}
-
-function buildSubmitRecords(maxRows) {
-  const events = safeReadJsonLines(cfg.manifestPath, 1200);
-  const rows = [];
-  const seenTaskIds = new Set();
-  const nMax = Number.isFinite(maxRows) && maxRows > 0 ? maxRows : 80;
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (rows.length >= nMax) break;
-    const e = events[i];
-    if (!e || e.type !== "submit") continue;
-    const payload = e.payload && typeof e.payload === "object" ? e.payload : {};
-    const basicInfo = payload.basicInfo && typeof payload.basicInfo === "object" ? payload.basicInfo : {};
-    const taskId = String(basicInfo.taskId || basicInfo.mainTaskId || "").trim();
-    if (!taskId || seenTaskIds.has(taskId)) continue;
-    seenTaskIds.add(taskId);
-
-    const uploads = payload.uploads && typeof payload.uploads === "object" ? payload.uploads : {};
-    const images = Object.values(uploads)
-      .map((v) => String(v && typeof v === "object" ? v.url : "").trim())
-      .filter(Boolean);
-    const maint = normalizeMaint(basicInfo.maintenanceType) || "";
-    const submittedAt = String(e.at || "").trim();
-    const submittedDate = submittedAt ? new Date(submittedAt) : new Date();
-    const date = Number.isNaN(submittedDate.getTime())
-      ? submittedAt
-      : submittedDate.toISOString().replace("T", " ").slice(0, 16);
-    rows.push({
-      id: `SUB-${taskId}`,
-      code: taskId,
-      taskId,
-      taskSeq: "done",
-      trainNo: String(basicInfo.trainNo || "").trim() || "-",
-      maintType: maint ? maint.toUpperCase().replace("C4C6", "C4/C6").replace("C1C3", "C1/C3") : "-",
-      date,
-      desc: `Task ${taskId} completed. Uploaded ${images.length} image(s).`,
-      images,
-      uploadCount: images.length,
-      employeeId: String(basicInfo.employeeId || "").trim(),
-      source: "task_submit",
-    });
-  }
-  return rows;
-}
-
 async function extractPhotoCaptureMeta(absFilePath) {
   try {
     const exif = await exifr.parse(absFilePath, {
@@ -551,10 +544,156 @@ app.use(express.json({ limit: cfg.bodyLimit }));
 app.use(express.urlencoded({ extended: true }));
 
 const REMOTE_API_BASE = String(process.env.REMOTE_API_BASE || "http://117.62.232.51:8004").replace(/\/$/, "");
-const REMOTE_PROXY_PREFIXES = ["/captcha/", "/login/", "/system/"];
+const REMOTE_PROXY_PREFIXES = String(process.env.REMOTE_PROXY_PREFIXES || "/captcha/,/login/,/system/,/token/")
+  .split(",")
+  .map((x) => String(x || "").trim())
+  .filter(Boolean)
+  .map((x) => (x.startsWith("/") ? x : `/${x}`))
+  .map((x) => (x.endsWith("/") ? x : `${x}/`));
+const ALLOW_LOCAL_AUTH = isLocalAuthAllowed();
+const SKIP_REMOTE_AUTH = isRemoteAuthSkipped();
+const AUTH_CACHE_TTL_MS = Number.parseInt(String(process.env.AUTH_CACHE_TTL_MS || "300000"), 10);
+const djangoAuthCache = createAuthCache({
+  ttlMs: Number.isFinite(AUTH_CACHE_TTL_MS) && AUTH_CACHE_TTL_MS > 0 ? AUTH_CACHE_TTL_MS : 300000,
+  negativeTtlMs: 60 * 1000,
+});
+let remoteAuthCircuitOpenUntil = 0;
 
 function shouldProxyToRemoteApi(apiPath) {
   return REMOTE_PROXY_PREFIXES.some((prefix) => apiPath === prefix || apiPath.startsWith(prefix));
+}
+
+function tokenCacheKey(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+async function fetchDjangoUserInfo(token) {
+  const raw = String(token || "").trim();
+  if (!raw) return null;
+  if (Date.now() < remoteAuthCircuitOpenUntil) return null;
+
+  const cacheKey = tokenCacheKey(raw);
+  const cached = djangoAuthCache.get(cacheKey);
+  if (cached) return cached;
+
+  const upstream = `${REMOTE_API_BASE}/api/system/user/user_info/`;
+  try {
+    const upstreamRes = await fetch(upstream, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        Authorization: `JWT ${raw}`,
+      },
+    });
+    const payload = await upstreamRes.json().catch(() => null);
+    if (isRemoteDbSaturationError(payload)) {
+      remoteAuthCircuitOpenUntil = Date.now() + 60 * 1000;
+      error("Django auth circuit open: remote DB saturated");
+      return null;
+    }
+    if (!upstreamRes.ok) return null;
+    if (!payload || payload.code !== 2000 || !payload.data) return null;
+    djangoAuthCache.set(cacheKey, payload.data);
+    return payload.data;
+  } catch (err) {
+    error("Django user_info lookup failed", err);
+    remoteAuthCircuitOpenUntil = Date.now() + 30 * 1000;
+    return null;
+  }
+}
+
+function resolveLocalAuthUser(token) {
+  if (!ALLOW_LOCAL_AUTH) return null;
+  const localPayload = verifyAuthToken(token);
+  if (!localPayload || !localPayload.employeeId || !localPayload.role) return null;
+  const usersStore = readUsersStore();
+  const user = usersStore.users.find((u) => u.employeeId === localPayload.employeeId);
+  if (!user || user.role !== localPayload.role) return null;
+  return user;
+}
+
+function resolveCachedDjangoIdentityUser(token) {
+  const cacheKey = tokenCacheKey(token);
+  const cachedInfo = djangoAuthCache.get(cacheKey);
+  if (!cachedInfo) return null;
+  const identity = mapDjangoUserInfoToLocalUser(cachedInfo);
+  if (!identity) return null;
+  const usersStore = readUsersStore();
+  const existing = usersStore.users.find((u) => u.employeeId === identity.employeeId);
+  return mergeIdentityWithLocalProfile(existing, identity);
+}
+
+async function resolveDjangoAuthUser(token) {
+  const djangoInfo = await fetchDjangoUserInfo(token);
+  const identity = mapDjangoUserInfoToLocalUser(djangoInfo);
+  if (!identity) return null;
+
+  if (isProfileDataFromDb()) {
+    try {
+      const profile = await fetchH5ProfileFromDb(identity.employeeId, token);
+      if (profile && profile.employeeId) {
+        return {
+          employeeId: String(profile.employeeId).trim(),
+          username: String(profile.username || profile.employeeId).trim(),
+          email: String(profile.email || "").trim(),
+          department: String(profile.department || "").trim(),
+          region: String(profile.region || "").trim(),
+          role: String(profile.role || identity.role || "fse").trim().toLowerCase(),
+          roleDisplayName: String(profile.roleDisplayName || "").trim() || undefined,
+          specialWorkCertificates: Array.isArray(profile.specialWorkCertificates)
+            ? profile.specialWorkCertificates
+            : [],
+          qualifications: Array.isArray(profile.qualifications) ? profile.qualifications : [],
+          skillLevel: profile.skillLevel ? String(profile.skillLevel) : undefined,
+          skillTypes: Array.isArray(profile.skillTypes) ? profile.skillTypes : [],
+        };
+      }
+    } catch (err) {
+      error("Django H5 profile lookup failed", err);
+    }
+  }
+
+  const usersStore = readUsersStore();
+  const existing = usersStore.users.find((u) => u.employeeId === identity.employeeId);
+  if (!existing) {
+    const upserted = upsertUser(usersStore, identity);
+    if (upserted.error) return null;
+    writeUsersStore(upserted.store);
+    return upserted.user;
+  }
+
+  const merged = mergeIdentityWithLocalProfile(existing, identity);
+  if (
+    merged.username !== existing.username ||
+    merged.email !== existing.email ||
+    merged.department !== existing.department ||
+    merged.region !== existing.region ||
+    merged.role !== existing.role
+  ) {
+    const upserted = upsertUser(usersStore, merged);
+    if (!upserted.error) writeUsersStore(upserted.store);
+    return upserted.error ? merged : upserted.user;
+  }
+  return merged;
+}
+
+async function resolveAuthUser(req) {
+  const token = authFromRequest(req);
+  if (!token) return null;
+
+  // 开发期临时开关：完全跳过远程鉴权，只用本地 token/档案
+  if (SKIP_REMOTE_AUTH) {
+    return resolveLocalAuthUser(token) || resolveCachedDjangoIdentityUser(token) || resolveSkipModeJwtUser(req, token);
+  }
+
+  // 优先 Django JWT（带短缓存）；远端 DB 爆了时熔断并降级本地
+  const djangoUser = await resolveDjangoAuthUser(token);
+  if (djangoUser) return djangoUser;
+
+  const cached = resolveCachedDjangoIdentityUser(token);
+  if (cached) return cached;
+
+  return resolveLocalAuthUser(token);
 }
 
 async function proxyToRemoteApi(req, res) {
@@ -590,29 +729,37 @@ app.use("/api", (req, res, next) => {
   next();
 });
 
-app.use("/api", (req, res, next) => {
+// /token/refresh/ 和 /token/* 直接转发到 Django（不在 /api 前缀下）
+app.use("/token", (req, res) => proxyToRemoteApi(req, res));
+
+app.use("/api", async (req, res, next) => {
   if (req.path === "/users/login") return next();
-  const token = authFromRequest(req);
-  const tokenPayload = verifyAuthToken(token);
-  if (!tokenPayload || !tokenPayload.employeeId || !tokenPayload.role) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
+  try {
+    const user = await resolveAuthUser(req);
+    if (!user) {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    req.authUser = user;
+    next();
+  } catch (err) {
+    error("Auth middleware failed", err);
+    return res.status(502).json({ ok: false, error: "auth_upstream_unavailable" });
   }
-  const usersStore = readUsersStore();
-  const user = usersStore.users.find((u) => u.employeeId === tokenPayload.employeeId);
-  if (!user || user.role !== tokenPayload.role) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
-  req.authUser = user;
-  next();
 });
 
-function createUpload(dir) {
+function createUpload(dir, { filenameBuilder } = {}) {
   const storage = multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, dir),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || ".jpg";
-      const base = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      cb(null, `${base}${ext}`);
+    filename: (req, file, cb) => {
+      try {
+        if (typeof filenameBuilder === "function") {
+          return cb(null, filenameBuilder(req, file));
+        }
+        const ext = path.extname(file.originalname) || ".jpg";
+        return cb(null, buildLegacyUploadFilename(ext));
+      } catch (err) {
+        return cb(err);
+      }
     },
   });
   return multer({
@@ -621,7 +768,48 @@ function createUpload(dir) {
   });
 }
 
-const upload = createUpload(cfg.uploadsDir);
+function buildTaskUploadFilename(req, file) {
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const ext = path.extname(file.originalname) || ".jpg";
+  return buildNormalizedTaskFilename({
+    taskId: body.taskId || body.mainTaskId,
+    slotId: body.slotId,
+    employeeId: body.employeeId,
+    ext,
+  });
+}
+
+/** multer 写盘时 req.body 可能尚未解析，上传完成后按表单字段重命名。 */
+function finalizeTaskUploadFilename(req, file) {
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const taskId = String(body.taskId || body.mainTaskId || "").trim();
+  const slotId = String(body.slotId || "").trim();
+  const employeeId = String(body.employeeId || "").trim();
+  if (!taskId && !slotId && !employeeId) return file.filename;
+
+  const ext = path.extname(file.filename) || path.extname(file.originalname) || ".jpg";
+  const desired = buildNormalizedTaskFilename({ taskId, slotId, employeeId, ext });
+  if (desired === file.filename) return file.filename;
+
+  const currentPath = file.path || path.join(cfg.uploadsDir, file.filename);
+  let targetName = desired;
+  let targetPath = path.join(cfg.uploadsDir, targetName);
+  let attempt = 0;
+  while (fs.existsSync(targetPath) && path.resolve(targetPath) !== path.resolve(currentPath)) {
+    attempt += 1;
+    const rand = Math.random().toString(36).slice(2, 6);
+    targetName = desired.replace(/(\.[^.]+)$/, `_${rand}$1`);
+    targetPath = path.join(cfg.uploadsDir, targetName);
+    if (attempt >= 5) break;
+  }
+  if (path.resolve(targetPath) !== path.resolve(currentPath)) {
+    fs.renameSync(currentPath, targetPath);
+    file.path = targetPath;
+  }
+  return targetName;
+}
+
+const upload = createUpload(cfg.uploadsDir, { filenameBuilder: buildTaskUploadFilename });
 const certificateUpload = createUpload(cfg.certUploadsDir);
 
 app.get("/health", (_req, res) => {
@@ -633,49 +821,53 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.get("/api/records", (req, res) => {
+app.get("/api/records", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const keyword = String(req.query.keyword || "");
   const limitRaw = Number.parseInt(String(req.query.limit || "50"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 50;
-  const staticRows = readJsonArray(cfg.recordsDataPath);
-  const submitRows = buildSubmitRecords(120);
-  const allRows = [...submitRows, ...staticRows];
-  const rows = queryRecords(allRows, keyword, limit);
-
-  res.json({
-    ok: true,
-    total: rows.length,
-    rows,
-  });
+  const employeeId = resolveTaskEmployeeId(req);
+  if (!assertEmployeeAccess(req, res, employeeId)) return;
+  if (!String(keyword || "").trim()) {
+    return res.json({ ok: true, total: 0, rows: [] });
+  }
+  try {
+    const token = authFromRequest(req);
+    const data = await fetchRecordsFromDb(keyword, employeeId, limit, token);
+    const rows = Array.isArray(data && data.rows) ? data.rows : [];
+    return res.json({ ok: true, total: rows.length, rows });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django records search");
+  }
 });
 
-app.get("/api/task-submit-latest", (req, res) => {
+app.get("/api/task-submit-latest", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const taskId = String(req.query.taskId || "").trim();
   if (!taskId) {
     return res.status(400).json({ ok: false, error: "task_id_required" });
   }
-  const latest = latestSubmitByTaskId(taskId);
-  if (!latest) {
-    return res.json({ ok: true, found: false });
+  try {
+    const token = authFromRequest(req);
+    const data = await fetchSubmitLatestFromDb(taskId, token);
+    if (!data || !data.found) {
+      return res.json({ ok: true, found: false });
+    }
+    return res.json({
+      ok: true,
+      found: true,
+      submittedAt: data.submittedAt,
+      uploads: data.uploads && typeof data.uploads === "object" ? data.uploads : {},
+      issues: data.issues && typeof data.issues === "object" ? data.issues : {},
+    });
+  } catch (err) {
+    const code = err && err.payload && err.payload.code;
+    const msg = String((err && err.message) || "");
+    if (code === 4030 || code === 4040 || msg === "forbidden" || msg === "task_not_found") {
+      return res.json({ ok: true, found: false });
+    }
+    return respondTaskDbUpstreamError(res, err, "Django submit-latest");
   }
-  const payload = latest.payload || {};
-  const uploads = payload.uploads && typeof payload.uploads === "object" ? payload.uploads : {};
-  const normalizedUploads = {};
-  Object.entries(uploads).forEach(([slot, val]) => {
-    const src = val && typeof val === "object" ? val : {};
-    const url = String(src.url || "").trim();
-    if (!url) return;
-    normalizedUploads[String(slot)] = {
-      url,
-      capture: src.capture && typeof src.capture === "object" ? src.capture : undefined,
-    };
-  });
-  return res.json({
-    ok: true,
-    found: true,
-    submittedAt: latest.submittedAt,
-    uploads: normalizedUploads,
-  });
 });
 
 app.get("/api/task-summary", (_req, res) => {
@@ -685,55 +877,59 @@ app.get("/api/task-summary", (_req, res) => {
   res.json({ ok: true, ...summary });
 });
 
-app.get("/api/home-config", (req, res) => {
-  const raw = readJsonObject(cfg.homeConfigPath);
-  const config = buildHomeConfig(raw);
-  const employeeId = String(req.query.employeeId || "").trim();
-  if (employeeId) {
-    const actor = req.authUser || {};
-    const isManager = String(actor.role || "").toLowerCase() === "manager";
-    if (!isManager && employeeId !== String(actor.employeeId || "").trim()) {
-      return res.status(403).json({ ok: false, error: "forbidden" });
-    }
-    const workOrderStore = readWorkOrderStore();
-    const assignedCards = filterWorkOrders(workOrderStore, { assigneeId: employeeId })
-      .map((a) => {
-        const c = toTaskCard(a);
-        if (!c) return null;
-        const taskId = String(c.taskId || "").trim();
-        if (taskId) {
-          const progress = buildUploadProgress(taskId, c.maint);
-          if (progress) c.uploadProgress = progress;
-        }
-        return c;
-      })
-      .filter(Boolean);
+function respondTaskDbRequired(res) {
+  return res.status(503).json({
+    ok: false,
+    error: "task_data_source_db_required",
+    detail: "Set TASK_DATA_SOURCE=db and ensure Django API is running.",
+  });
+}
 
-    // 合并策略：优先使用工单库生成的 task card（含 meta / uploadProgress），覆盖 home-config 中同 taskId 项
-    const existing = Array.isArray(config.tasks) ? config.tasks : [];
-    const existingById = new Map();
-    existing.forEach((c) => {
-      const id = String(c && c.taskId || "").trim();
-      if (!id) return;
-      existingById.set(id, c);
-    });
+function assertTaskDbConfigured(res) {
+  if (isTaskDataFromDb()) return true;
+  respondTaskDbRequired(res);
+  return false;
+}
 
-    const merged = [];
-    const added = new Set();
-    assignedCards.forEach((c) => {
-      const id = String(c && c.taskId || "").trim();
-      if (!id || added.has(id)) return;
-      added.add(id);
-      merged.push(c);
-    });
-    existing.forEach((c) => {
-      const id = String(c && c.taskId || "").trim();
-      if (id && added.has(id)) return; // 被工单库覆盖
-      merged.push(c);
-    });
-    if (merged.length) config.tasks = merged;
+function respondTaskDbUpstreamError(res, err, label) {
+  error(`${label} failed`, err);
+  const upstreamStatus = Number(err && err.status);
+  const httpStatus = upstreamStatus >= 400 && upstreamStatus < 600 ? upstreamStatus : 502;
+  return res.status(httpStatus).json({
+    ok: false,
+    error: "task_db_upstream_unavailable",
+    detail: String((err && err.message) || "upstream_error"),
+  });
+}
 
-    // 从推荐数据库读取该用户未接受的推荐（用于 CBM Recommendations）
+function resolveTaskEmployeeId(req) {
+  const queryId = String(req.query.employeeId || "").trim();
+  const actorId = String((req.authUser && req.authUser.employeeId) || "").trim();
+  return queryId || actorId;
+}
+
+function assertEmployeeAccess(req, res, employeeId) {
+  const id = String(employeeId || "").trim();
+  if (!id) {
+    res.status(400).json({ ok: false, error: "employee_id_required" });
+    return false;
+  }
+  const actor = req.authUser || {};
+  const isManager = isManagerRole(actor.role);
+  if (!isManager && id !== String(actor.employeeId || "").trim()) {
+    res.status(403).json({ ok: false, error: "forbidden" });
+    return false;
+  }
+  return true;
+}
+
+app.get("/api/home-config", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
+  const employeeId = resolveTaskEmployeeId(req);
+  if (!assertEmployeeAccess(req, res, employeeId)) return;
+  try {
+    const token = authFromRequest(req);
+    const dbConfig = await fetchHomeConfigFromDb(employeeId, token);
     const recStore = readRecommendationsStore();
     const acceptedIds = Array.isArray(recStore.accepted[employeeId]) ? recStore.accepted[employeeId] : [];
     const acceptedSet = new Set(acceptedIds.map((x) => String(x || "").trim()).filter(Boolean));
@@ -751,48 +947,105 @@ app.get("/api/home-config", (req, res) => {
         taskId: c.workOrderId || c.taskId,
         href: `/task-list?maint=${c.maint}`,
       }));
-    if (recCards.length) {
-      config.recommendations = recCards;
-    } else {
-      config.recommendations = [];
-    }
+    return res.json({
+      ok: true,
+      tasks: dbConfig.tasks || [],
+      recommendations: recCards.length ? recCards : dbConfig.recommendations || [],
+    });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django home-config");
   }
-  res.json({ ok: true, ...config });
 });
 
-app.get("/api/task-status", (req, res) => {
-  const employeeId = String(req.query.employeeId || "").trim();
+app.get("/api/task-status", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
+  const employeeId = resolveTaskEmployeeId(req);
+  if (!assertEmployeeAccess(req, res, employeeId)) return;
+  try {
+    const token = authFromRequest(req);
+    const data = await fetchTaskStatusFromDb(employeeId, token);
+    return res.json({ ok: true, employeeId: data.employeeId, statuses: data.statuses });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django task-status GET");
+  }
+});
+
+app.get("/api/tasks/:taskId", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
+  const taskId = String(req.params.taskId || "").trim();
+  if (!taskId) {
+    return res.status(400).json({ ok: false, error: "task_id_required" });
+  }
+  try {
+    const token = authFromRequest(req);
+    const task = await fetchTaskDetailFromDb(taskId, token);
+    return res.json({ ok: true, task });
+  } catch (err) {
+    const code = err && err.payload && err.payload.code;
+    const msg = String((err && err.message) || "");
+    if (code === 4030 || msg === "forbidden") {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+    if (code === 4040 || msg === "task_not_found") {
+      return res.status(404).json({ ok: false, error: "task_not_found" });
+    }
+    return respondTaskDbUpstreamError(res, err, "Django task-detail");
+  }
+});
+
+app.get("/api/task-centre", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
+  const employeeId = resolveTaskEmployeeId(req);
+  if (!assertEmployeeAccess(req, res, employeeId)) return;
+  const month = String(req.query.month || "").trim();
+  try {
+    const token = authFromRequest(req);
+    const data = await fetchTaskCentreFromDb(employeeId, month, token);
+    return res.json({ ok: true, ...data });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django task-centre GET");
+  }
+});
+
+app.post("/api/task-centre", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
+  const employeeId = String((req.body && req.body.employeeId) || "").trim();
   if (!employeeId) {
     return res.status(400).json({ ok: false, error: "employee_id_required" });
   }
-  const actor = req.authUser || {};
-  const isManager = String(actor.role || "").toLowerCase() === "manager";
-  if (!isManager && employeeId !== String(actor.employeeId || "").trim()) {
-    return res.status(403).json({ ok: false, error: "forbidden" });
+  if (!assertEmployeeAccess(req, res, employeeId)) return;
+  try {
+    const token = authFromRequest(req);
+    const data = await createTaskCentreTaskInDb(req.body, token);
+    return res.status(201).json({ ok: true, ...data });
+  } catch (err) {
+    const code = err && err.payload && err.payload.code;
+    const msg = String((err && err.message) || "");
+    if (code === 4000 || msg.includes("required") || msg.includes("invalid")) {
+      return res.status(400).json({ ok: false, error: msg || "bad_request" });
+    }
+    return respondTaskDbUpstreamError(res, err, "Django task-centre POST");
   }
-  const all = readJsonObject(cfg.taskStatusPath);
-  const statuses = all[employeeId] && typeof all[employeeId] === "object" ? all[employeeId] : {};
-  res.json({ ok: true, employeeId, statuses });
 });
 
-app.post("/api/task-status", (req, res) => {
+app.post("/api/task-status", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const employeeId = String((req.body && req.body.employeeId) || "").trim();
   const maint = normalizeMaint(req.body && req.body.maint);
   const status = normalizeStatus(req.body && req.body.status);
   const taskKey = String((req.body && req.body.taskKey) || "").trim();
   const mainTaskId = normalizeTaskKeyPart(req.body && req.body.taskId);
-  const title = normalizeTaskKeyPart(req.body && req.body.title);
-  const deadline = normalizeTaskKeyPart(req.body && req.body.deadline);
   const rejectedRaw = req.body && req.body.rejected;
   const rejected =
     rejectedRaw === true ||
     rejectedRaw === 1 ||
     String(rejectedRaw || "").trim().toLowerCase() === "true";
+  const effectiveStatus = rejected && status === "todo" ? "rejected" : status;
   if (!employeeId) {
     return res.status(400).json({ ok: false, error: "employee_id_required" });
   }
   const actor = req.authUser || {};
-  const isManager = String(actor.role || "").toLowerCase() === "manager";
+  const isManager = isManagerRole(actor.role);
   if (!isManager && employeeId !== String(actor.employeeId || "").trim()) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
@@ -802,45 +1055,23 @@ app.post("/api/task-status", (req, res) => {
   if (!status) {
     return res.status(400).json({ ok: false, error: "status_invalid" });
   }
-  const all = readJsonObject(cfg.taskStatusPath);
-  const user = all[employeeId] && typeof all[employeeId] === "object" ? all[employeeId] : {};
-  // 任务唯一状态 key：优先使用每条任务独立的 Main Task ID
-  const derivedKey = title && deadline ? `${maint}-${title}-${deadline}` : "";
-  const key = taskKey || mainTaskId || derivedKey || maint;
-  user[key] = {
-    status,
-    updatedAt: new Date().toISOString(),
-    maint,
-    taskKey: key,
-    taskId: mainTaskId || undefined,
-    ...(status === "todo" && rejected ? { rejected: true } : {}),
-  };
-  all[employeeId] = user;
-  writeJsonObject(cfg.taskStatusPath, all);
-
-  let syncedWorkOrder = null;
-  if (mainTaskId || key) {
-    const targetId = mainTaskId || key;
-    const workOrderStore = readWorkOrderStore();
-    const found = workOrderStore.assignments.find((x) => x.id === targetId);
-    if (found) {
-      const updated = updateWorkOrderStatus(workOrderStore, targetId, status);
-      if (!updated.error) {
-        writeWorkOrderStore(updated.store);
-        syncedWorkOrder = updated.assignment;
-      }
-    }
+  try {
+    const token = authFromRequest(req);
+    const data = await postTaskStatusToDb(req.body, token);
+    const entry = data && data.status ? data.status : {};
+    const key = String((data && data.taskKey) || taskKey || mainTaskId || "").trim();
+    const user = { [key]: entry };
+    return res.json({
+      ok: true,
+      employeeId,
+      maint,
+      taskKey: key,
+      status: entry.status || effectiveStatus,
+      statuses: user,
+    });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django task-status POST");
   }
-
-  res.json({
-    ok: true,
-    employeeId,
-    maint,
-    taskKey: key,
-    status,
-    statuses: user,
-    syncedWorkOrderId: syncedWorkOrder && syncedWorkOrder.id ? syncedWorkOrder.id : undefined,
-  });
 });
 
 app.post("/api/task-edit-request", (req, res, next) => {
@@ -882,9 +1113,31 @@ app.post("/api/task-edit-request", (req, res, next) => {
   });
 });
 
+app.get("/api/users/self", async (req, res) => {
+  const actor = req.authUser || {};
+  const employeeId = String(actor.employeeId || "").trim();
+  if (!employeeId) {
+    return res.status(401).json({ ok: false, error: "unauthorized" });
+  }
+  if (isProfileDataFromDb()) {
+    try {
+      const token = authFromRequest(req);
+      const profile = await fetchH5ProfileFromDb(employeeId, token);
+      return res.json({ ok: true, user: profile });
+    } catch (err) {
+      if (actor && actor.employeeId) {
+        error("Django user profile failed; falling back to auth user", err);
+        return res.json({ ok: true, user: actor });
+      }
+      return respondTaskDbUpstreamError(res, err, "Django user profile");
+    }
+  }
+  return res.json({ ok: true, user: actor });
+});
+
 app.get("/api/users", (req, res) => {
   const actor = req.authUser || {};
-  if (String(actor.role || "").toLowerCase() !== "manager") {
+  if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const role = String(req.query.role || "").trim().toLowerCase();
@@ -900,7 +1153,7 @@ app.get("/api/users", (req, res) => {
 
 app.post("/api/users", (req, res) => {
   const actor = req.authUser || {};
-  if (String(actor.role || "").toLowerCase() !== "manager") {
+  if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const current = readUsersStore();
@@ -912,7 +1165,7 @@ app.post("/api/users", (req, res) => {
   res.status(201).json({ ok: true, user: upserted.user, total: saved.users.length });
 });
 
-app.post("/api/users/self-certificates", (req, res) => {
+app.post("/api/users/self-certificates", async (req, res) => {
   const actor = req.authUser || {};
   const employeeId = String(actor.employeeId || "").trim();
   if (!employeeId) {
@@ -922,6 +1175,24 @@ app.post("/api/users/self-certificates", (req, res) => {
   const specialWorkCertificates = Array.isArray(body.specialWorkCertificates)
     ? body.specialWorkCertificates
     : [];
+
+  if (isProfileDataFromDb()) {
+    try {
+      const token = authFromRequest(req);
+      const data = await postH5CertificatesToDb(
+        { employeeId, specialWorkCertificates },
+        token,
+      );
+      const user = data && data.user ? data.user : null;
+      if (!user) {
+        return res.status(502).json({ ok: false, error: "profile_update_failed" });
+      }
+      return res.json({ ok: true, user });
+    } catch (err) {
+      return respondTaskDbUpstreamError(res, err, "Django user certificates");
+    }
+  }
+
   const current = readUsersStore();
   const existing = current.users.find((x) => x.employeeId === employeeId);
   if (!existing) {
@@ -1077,7 +1348,7 @@ app.post("/api/recommendations/:id/accept", (req, res) => {
 
 app.get("/api/work-orders", (req, res) => {
   const actor = req.authUser || {};
-  const isManager = String(actor.role || "").toLowerCase() === "manager";
+  const isManager = isManagerRole(actor.role);
   const actorEmployeeId = String(actor.employeeId || "").trim();
   const assigneeIdRaw = String(req.query.assigneeId || "").trim();
   const assigneeId = isManager ? assigneeIdRaw : (assigneeIdRaw || actorEmployeeId);
@@ -1096,7 +1367,7 @@ app.get("/api/work-orders", (req, res) => {
 
 app.get("/api/work-orders/stats", (req, res) => {
   const actor = req.authUser || {};
-  const isManager = String(actor.role || "").toLowerCase() === "manager";
+  const isManager = isManagerRole(actor.role);
   const actorEmployeeId = String(actor.employeeId || "").trim();
   const assigneeIdRaw = String(req.query.assigneeId || "").trim();
   const assigneeId = isManager ? assigneeIdRaw : (assigneeIdRaw || actorEmployeeId);
@@ -1114,7 +1385,7 @@ app.get("/api/work-orders/stats", (req, res) => {
 
 app.post("/api/work-orders", (req, res) => {
   const actor = req.authUser || {};
-  const isManager = String(actor.role || "").toLowerCase() === "manager";
+  const isManager = isManagerRole(actor.role);
   const actorEmployeeId = String(actor.employeeId || "").trim();
   const assignedToEmployeeId = String(req.body && req.body.assignedToEmployeeId || "").trim();
   if (!isManager && assignedToEmployeeId !== actorEmployeeId) {
@@ -1148,7 +1419,7 @@ app.post("/api/work-orders", (req, res) => {
 
 app.post("/api/work-orders/:id/dispatch", (req, res) => {
   const actor = req.authUser || {};
-  if (String(actor.role || "").toLowerCase() !== "manager") {
+  if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const id = String(req.params.id || "").trim();
@@ -1202,7 +1473,7 @@ app.post("/api/work-orders/:id/status", (req, res) => {
 
 app.get("/api/manager/dashboard", (req, res) => {
   const actor = req.authUser || {};
-  if (String(actor.role || "").toLowerCase() !== "manager") {
+  if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const month = String(req.query.month || "").trim();
@@ -1213,7 +1484,7 @@ app.get("/api/manager/dashboard", (req, res) => {
   if (fromUsers.length) {
     store.fseMembers = fromUsers;
   }
-  const records = readJsonArray(cfg.recordsDataPath);
+  const records = [];
   const dashboard = buildManagerDashboard({
     store,
     records,
@@ -1225,7 +1496,7 @@ app.get("/api/manager/dashboard", (req, res) => {
 
 app.post("/api/manager/assignments", (req, res) => {
   const actor = req.authUser || {};
-  if (String(actor.role || "").toLowerCase() !== "manager") {
+  if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const body = req.body && typeof req.body === "object" ? req.body : {};
@@ -1278,11 +1549,20 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
     return res.status(400).json({ ok: false, error: "no_file" });
   }
   const slotId = (req.body && req.body.slotId) || "";
+  const taskId = String((req.body && (req.body.taskId || req.body.mainTaskId)) || "").trim();
+  const employeeId = String((req.body && req.body.employeeId) || "").trim();
   const clientDisplayName = String((req.body && req.body.clientDisplayName) || "").trim();
-  const displayName = clientDisplayName || req.file.originalname || req.file.filename;
+  let storedName = req.file.filename;
+  try {
+    storedName = finalizeTaskUploadFilename(req, req.file);
+    req.file.filename = storedName;
+  } catch (renameErr) {
+    error("upload rename failed", renameErr);
+  }
+  const displayName = clientDisplayName || req.file.originalname || storedName;
   const uploadedAt = new Date().toISOString();
-  const publicUrl = `/uploads/task/${req.file.filename}`;
-  const absFilePath = path.join(cfg.uploadsDir, req.file.filename);
+  const publicUrl = `/uploads/task/${storedName}`;
+  const absFilePath = path.join(cfg.uploadsDir, storedName);
   const captureMeta = await extractPhotoCaptureMeta(absFilePath);
   const fallbackClientCaptureAt = normalizeIsoTime(req.body && req.body.clientCapturedAt);
   const fallbackClientLatitude = parseFiniteNumber(req.body && req.body.clientLatitude);
@@ -1323,8 +1603,10 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
     type: "upload",
     at: uploadedAt,
     slotId,
+    taskId: taskId || undefined,
+    employeeId: employeeId || undefined,
     url: publicUrl,
-    storedName: req.file.filename,
+    storedName,
     originalname: req.file.originalname,
     displayName,
     mimetype: req.file.mimetype,
@@ -1339,7 +1621,7 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
       ok: true,
       slotId,
       url: publicUrl,
-      storedName: req.file.filename,
+      storedName,
       originalname: req.file.originalname,
       displayName,
       mimetype: req.file.mimetype,
@@ -1353,30 +1635,75 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
   });
 });
 
-app.post("/api/task-submit", (req, res, next) => {
-  const payload = req.body || {};
-  appendJsonLine(
-    cfg.manifestPath,
-    {
-      type: "submit",
-      at: new Date().toISOString(),
-      payload,
-    },
-    (err) => {
-      if (err) return next(err);
-      res.json({ ok: true });
-    }
-  );
+app.post("/api/task-draft", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
+  const validated = validateTaskDraftPayload(req.body || {});
+  if (!validated.ok) {
+    return res.status(400).json({ ok: false, error: validated.error });
+  }
+  const payload = validated.body;
+  try {
+    const token = authFromRequest(req);
+    const data = await postTaskDraftToDb(payload, token, projectRoot);
+    return res.json({
+      ok: true,
+      status: data && data.status ? data.status : undefined,
+      uploads: data && data.uploads ? data.uploads : undefined,
+      issues: data && data.issues ? data.issues : undefined,
+      updatedSeqCount: data && data.updatedSeqCount != null ? data.updatedSeqCount : undefined,
+    });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django task-draft");
+  }
+});
+
+app.post("/api/task-submit", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
+  const allowEmptyUploads = Boolean(req.body && req.body.allowEmptyUploads);
+  const validated = validateTaskSubmitPayload(req.body || {}, {
+    requireContent: !allowEmptyUploads,
+  });
+  if (!validated.ok) {
+    return res.status(400).json({ ok: false, error: validated.error });
+  }
+  const payload = validated.body;
+  try {
+    const token = authFromRequest(req);
+    const data = await postTaskSubmitToDb(payload, token, projectRoot);
+    return res.json({
+      ok: true,
+      status: data && data.status ? data.status : undefined,
+      uploads: data && data.uploads ? data.uploads : undefined,
+      issues: data && data.issues ? data.issues : undefined,
+      updatedSeqCount: data && data.updatedSeqCount != null ? data.updatedSeqCount : undefined,
+    });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django task-submit");
+  }
 });
 
 const spaDistDir = path.join(projectRoot, "frontend", "dist");
 const spaIndexFile = path.join(spaDistDir, "index.html");
 if (fs.existsSync(spaIndexFile)) {
   info("Serving Vue SPA from frontend/dist (run `npm run build` in frontend/ to update)");
-  app.use(express.static(spaDistDir));
+  app.use(express.static(spaDistDir, {
+    // 避免把旧 hashed 资源缓存死；开发期更新 dist 后更容易刷到新包
+    etag: true,
+    maxAge: 0,
+  }));
   app.use((req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
     if (req.path.startsWith("/api")) return next();
+    // 静态资源缺失必须 404，不能回退成 index.html（否则浏览器会报 MIME text/html）
+    if (
+      req.path.startsWith("/assets/") ||
+      req.path.startsWith("/uploads/") ||
+      req.path.startsWith("/PicSamples/") ||
+      req.path.startsWith("/data/") ||
+      /\.[a-zA-Z0-9]+$/.test(req.path)
+    ) {
+      return res.status(404).type("text/plain").send("Not Found");
+    }
     res.sendFile(spaIndexFile, (err) => next(err));
   });
 } else {
@@ -1413,6 +1740,11 @@ function createServer() {
 const { server, protocol } = createServer();
 server.listen(cfg.port, cfg.host, () => {
   info(`ButlerService listening on ${protocol}://127.0.0.1:${cfg.port}`);
+  info(`Remote API base: ${REMOTE_API_BASE}`);
+  info(`Local HMAC auth: ${ALLOW_LOCAL_AUTH ? "enabled" : "disabled"}`);
+  info(`Skip remote auth: ${SKIP_REMOTE_AUTH ? "enabled" : "disabled"}`);
+  info(`Task data source: ${isTaskDataFromDb() ? "db" : "json"}`);
+  info(`Auth cache TTL: ${djangoAuthCache.ttlMs}ms`);
   const lanUrls = getLanIPv4Urls(cfg.port);
   if (lanUrls.length) {
     info("LAN access URLs:");

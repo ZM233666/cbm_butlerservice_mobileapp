@@ -20,6 +20,7 @@ function queryRecords(allRows, keyword, limit) {
       r && r.maintType,
       r && r.date,
       r && r.desc,
+      r && r.issueText,
       r && r.employeeId,
       imageText,
     ].join(" ");

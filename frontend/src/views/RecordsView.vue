@@ -2,11 +2,13 @@
 import { computed, ref, watch } from 'vue'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
+import { useAuthStore } from '@/stores/auth'
 import { searchRecords, type RecordRow } from '@/api/records'
 import { useI18n } from '@/composables/useI18n'
 
 const query = ref('')
 const rows = ref<RecordRow[]>([])
+const auth = useAuthStore()
 const { t } = useI18n()
 const placeholderState = ref<'default' | 'loading' | 'empty' | 'fail'>('default')
 const placeholder = computed(() => {
@@ -33,7 +35,7 @@ async function onSearch() {
   placeholderState.value = 'loading'
   showList.value = false
   try {
-    const data = await searchRecords(q)
+    const data = await searchRecords(q, auth.user?.employeeId)
     if (data.rows.length) { rows.value = data.rows; showList.value = true }
     else { rows.value = []; placeholderState.value = 'empty' }
   } catch {

@@ -26,6 +26,13 @@ const {
   fetchSubmitLatestFromDb,
   postTaskSubmitToDb,
   postTaskDraftToDb,
+  fetchManagerDashboardFromDb,
+  postManagerAssignmentToDb,
+  fetchWorkOrdersFromDb,
+  fetchWorkOrderStatsFromDb,
+  createWorkOrderInDb,
+  postWorkOrderStatusToDb,
+  postWorkOrderDispatchToDb,
 } = require("./services/django-task");
 const {
   normalizeAssignmentsStore,
@@ -55,6 +62,7 @@ const {
 const {
   fetchH5ProfileFromDb,
   postH5CertificatesToDb,
+  fetchUsersFromDb,
   isProfileDataFromDb,
 } = require("./services/django-user");
 const { buildNormalizedTaskFilename, buildLegacyUploadFilename } = require("./upload-filename");
@@ -1135,10 +1143,23 @@ app.get("/api/users/self", async (req, res) => {
   return res.json({ ok: true, user: actor });
 });
 
-app.get("/api/users", (req, res) => {
+app.get("/api/users", async (req, res) => {
   const actor = req.authUser || {};
   if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+  if (isProfileDataFromDb()) {
+    try {
+      const token = authFromRequest(req);
+      const data = await fetchUsersFromDb(req.query, token);
+      return res.json({
+        ok: true,
+        total: Number(data && data.total) || 0,
+        users: Array.isArray(data && data.users) ? data.users : [],
+      });
+    } catch (err) {
+      return respondTaskDbUpstreamError(res, err, "Django users list");
+    }
   }
   const role = String(req.query.role || "").trim().toLowerCase();
   const employeeId = String(req.query.employeeId || "").trim();
@@ -1271,7 +1292,7 @@ app.get("/api/recommendations", (req, res) => {
   res.json({ ok: true, total: rows.length, rows });
 });
 
-app.post("/api/recommendations/:id/accept", (req, res) => {
+app.post("/api/recommendations/:id/accept", async (req, res) => {
   const actor = req.authUser || {};
   if (String(actor.role || "").toLowerCase() !== "fse") {
     return res.status(403).json({ ok: false, error: "forbidden" });
@@ -1289,12 +1310,28 @@ app.post("/api/recommendations/:id/accept", (req, res) => {
   if (!rec) return res.status(404).json({ ok: false, error: "recommendation_not_found" });
 
   const acceptedIds = Array.isArray(store.accepted[employeeId]) ? store.accepted[employeeId] : [];
-  const usersStore = readUsersStore();
-  const workOrderStore = readWorkOrderStore();
   const targetWorkOrderId = String(rec.workOrderId || rec.taskId || "").trim();
-  const existingWorkOrder = targetWorkOrderId
-    ? workOrderStore.assignments.find((x) => String(x.id || "").trim() === targetWorkOrderId)
-    : null;
+  const token = authFromRequest(req);
+
+  let existingWorkOrder = null;
+  if (isTaskDataFromDb() && targetWorkOrderId) {
+    try {
+      const task = await fetchTaskDetailFromDb(targetWorkOrderId, token);
+      if (task && task.taskId) {
+        existingWorkOrder = {
+          id: task.taskId,
+          assignedTo: { employeeId: String(task.employeeId || "").trim() },
+        };
+      }
+    } catch (_err) {
+      existingWorkOrder = null;
+    }
+  } else {
+    const workOrderStore = readWorkOrderStore();
+    existingWorkOrder = targetWorkOrderId
+      ? workOrderStore.assignments.find((x) => String(x.id || "").trim() === targetWorkOrderId)
+      : null;
+  }
 
   if (acceptedIds.includes(id)) {
     return res.json({
@@ -1312,32 +1349,48 @@ app.post("/api/recommendations/:id/accept", (req, res) => {
 
   let workOrder = existingWorkOrder;
   if (!workOrder) {
-    const created = createWorkOrder(
-      {
-        id: targetWorkOrderId,
-        source: "cbm_ai",
-        assignedToEmployeeId: employeeId,
-        maint: rec.maint,
-        vehicleNo: "HXD1-1234",
-        deadline: rec.deadline || new Date().toISOString().slice(0, 10),
-        title: `${rec.title} Recommended Inspection`,
-        depot: rec.depot || "",
-        createdBy: { employeeId: "cbm_ai", name: "CBM AI" },
-      },
-      usersStore
-    );
-    if (created.error) {
-      return res.status(400).json({ ok: false, error: created.error });
-    }
-
-    const nextWoStore = {
-      ...workOrderStore,
-      assignments: [created.assignment, ...workOrderStore.assignments],
-      fseMembers: buildFseMembersFromUsers(usersStore),
+    const payload = {
+      id: targetWorkOrderId,
+      source: "cbm_ai",
+      assignedToEmployeeId: employeeId,
+      maint: rec.maint,
+      vehicleNo: "HXD1-1234",
+      deadline: rec.deadline || new Date().toISOString().slice(0, 10),
+      title: `${rec.title} Recommended Inspection`,
+      depot: rec.depot || "",
+      createdBy: { employeeId: "cbm_ai", name: "CBM AI" },
     };
-    writeWorkOrderStore(nextWoStore);
-    syncTaskStatusByWorkOrder(created.assignment);
-    workOrder = created.assignment;
+    if (isTaskDataFromDb()) {
+      try {
+        const data = await createWorkOrderInDb(payload, token);
+        workOrder = data && data.workOrder ? data.workOrder : null;
+        if (!workOrder) {
+          return res.status(502).json({ ok: false, error: "work_order_create_failed" });
+        }
+      } catch (err) {
+        const msg = String((err && err.message) || "");
+        if (msg === "task_no_exists") {
+          workOrder = existingWorkOrder;
+        } else {
+          return respondTaskDbUpstreamError(res, err, "Django recommendation work-order");
+        }
+      }
+    } else {
+      const usersStore = readUsersStore();
+      const created = createWorkOrder(payload, usersStore);
+      if (created.error) {
+        return res.status(400).json({ ok: false, error: created.error });
+      }
+      const workOrderStore = readWorkOrderStore();
+      const nextWoStore = {
+        ...workOrderStore,
+        assignments: [created.assignment, ...workOrderStore.assignments],
+        fseMembers: buildFseMembersFromUsers(usersStore),
+      };
+      writeWorkOrderStore(nextWoStore);
+      syncTaskStatusByWorkOrder(created.assignment);
+      workOrder = created.assignment;
+    }
   }
 
   store.accepted[employeeId] = [...acceptedIds, id];
@@ -1346,7 +1399,8 @@ app.post("/api/recommendations/:id/accept", (req, res) => {
   res.status(201).json({ ok: true, accepted: true, workOrder, recommendationId: id });
 });
 
-app.get("/api/work-orders", (req, res) => {
+app.get("/api/work-orders", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const actor = req.authUser || {};
   const isManager = isManagerRole(actor.role);
   const actorEmployeeId = String(actor.employeeId || "").trim();
@@ -1355,17 +1409,26 @@ app.get("/api/work-orders", (req, res) => {
   if (!isManager && assigneeId !== actorEmployeeId) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
-  const store = readWorkOrderStore();
-  const rows = filterWorkOrders(store, {
-    status: req.query.status,
-    assigneeId,
-    month: req.query.month,
-    maint: req.query.maint,
-  });
-  res.json({ ok: true, total: rows.length, rows });
+  try {
+    const token = authFromRequest(req);
+    const data = await fetchWorkOrdersFromDb(
+      {
+        status: req.query.status,
+        assigneeId,
+        month: req.query.month,
+        maint: req.query.maint,
+      },
+      token
+    );
+    const rows = Array.isArray(data && data.rows) ? data.rows : [];
+    return res.json({ ok: true, total: Number(data && data.total) || rows.length, rows });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django work-orders list");
+  }
 });
 
-app.get("/api/work-orders/stats", (req, res) => {
+app.get("/api/work-orders/stats", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const actor = req.authUser || {};
   const isManager = isManagerRole(actor.role);
   const actorEmployeeId = String(actor.employeeId || "").trim();
@@ -1374,16 +1437,24 @@ app.get("/api/work-orders/stats", (req, res) => {
   if (!isManager && assigneeId !== actorEmployeeId) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
-  const store = readWorkOrderStore();
-  const stats = buildWorkOrderStats(store, {
-    month: req.query.month,
-    assigneeId,
-    maint: req.query.maint,
-  });
-  res.json({ ok: true, ...stats });
+  try {
+    const token = authFromRequest(req);
+    const stats = await fetchWorkOrderStatsFromDb(
+      {
+        month: req.query.month,
+        assigneeId,
+        maint: req.query.maint,
+      },
+      token
+    );
+    return res.json({ ok: true, ...(stats && typeof stats === "object" ? stats : {}) });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django work-orders stats");
+  }
 });
 
-app.post("/api/work-orders", (req, res) => {
+app.post("/api/work-orders", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const actor = req.authUser || {};
   const isManager = isManagerRole(actor.role);
   const actorEmployeeId = String(actor.employeeId || "").trim();
@@ -1391,33 +1462,31 @@ app.post("/api/work-orders", (req, res) => {
   if (!isManager && assignedToEmployeeId !== actorEmployeeId) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
-  const usersStore = readUsersStore();
-  const workOrderStore = readWorkOrderStore();
   const body = req.body && typeof req.body === "object" ? req.body : {};
-  const created = createWorkOrder(
-    {
-      ...body,
-      createdBy: {
-        employeeId: actorEmployeeId,
-        name: String(actor.username || "").trim() || actorEmployeeId,
+  try {
+    const token = authFromRequest(req);
+    const data = await createWorkOrderInDb(
+      {
+        ...body,
+        createdBy: {
+          employeeId: actorEmployeeId,
+          name: String(actor.username || "").trim() || actorEmployeeId,
+        },
       },
-    },
-    usersStore
-  );
-  if (created.error) {
-    return res.status(400).json({ ok: false, error: created.error });
+      token
+    );
+    const workOrder = data && data.workOrder ? data.workOrder : null;
+    if (!workOrder) {
+      return res.status(502).json({ ok: false, error: "work_order_create_failed" });
+    }
+    return res.status(201).json({ ok: true, workOrder });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django work-orders create");
   }
-  const next = {
-    ...workOrderStore,
-    assignments: [created.assignment, ...workOrderStore.assignments],
-    fseMembers: buildFseMembersFromUsers(usersStore),
-  };
-  writeWorkOrderStore(next);
-  syncTaskStatusByWorkOrder(created.assignment);
-  res.status(201).json({ ok: true, workOrder: created.assignment });
 });
 
-app.post("/api/work-orders/:id/dispatch", (req, res) => {
+app.post("/api/work-orders/:id/dispatch", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const actor = req.authUser || {};
   if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
@@ -1426,103 +1495,101 @@ app.post("/api/work-orders/:id/dispatch", (req, res) => {
   if (!id) {
     return res.status(400).json({ ok: false, error: "work_order_id_required" });
   }
-  const workOrderStore = readWorkOrderStore();
-  const usersStore = readUsersStore();
-  const result = dispatchWorkOrder(
-    workOrderStore,
-    usersStore,
-    id,
-    req.body && req.body.assignedToEmployeeId,
-    req.body
-  );
-  if (result.error) {
-    const statusCode = result.error === "work_order_not_found" ? 404 : 400;
-    return res.status(statusCode).json({ ok: false, error: result.error });
+  try {
+    const token = authFromRequest(req);
+    const data = await postWorkOrderDispatchToDb(id, req.body, token);
+    const workOrder = data && data.workOrder ? data.workOrder : null;
+    if (!workOrder) {
+      return res.status(502).json({ ok: false, error: "work_order_dispatch_failed" });
+    }
+    return res.json({ ok: true, workOrder });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django work-orders dispatch");
   }
-  writeWorkOrderStore(result.store);
-  syncTaskStatusByWorkOrder(result.assignment);
-  res.json({ ok: true, workOrder: result.assignment });
 });
 
-app.post("/api/work-orders/:id/status", (req, res) => {
+app.post("/api/work-orders/:id/status", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const id = String(req.params.id || "").trim();
   const status = String(req.body && req.body.status || "").trim().toLowerCase();
   if (!id) {
     return res.status(400).json({ ok: false, error: "work_order_id_required" });
   }
-  const workOrderStore = readWorkOrderStore();
   const actor = req.authUser || {};
   const actorRole = String(actor.role || "").toLowerCase();
   const actorEmployeeId = String(actor.employeeId || "").trim();
-  const target = workOrderStore.assignments.find((x) => String(x.id || "").trim() === id);
-  if (!target) {
-    return res.status(404).json({ ok: false, error: "work_order_not_found" });
+  if (!isManagerRole(actorRole)) {
+    try {
+      const token = authFromRequest(req);
+      const listed = await fetchWorkOrdersFromDb({ assigneeId: actorEmployeeId }, token);
+      const rows = Array.isArray(listed && listed.rows) ? listed.rows : [];
+      const target = rows.find((x) => String(x.id || "").trim() === id);
+      if (!target) {
+        return res.status(404).json({ ok: false, error: "work_order_not_found" });
+      }
+      if (String(target.assignedTo && target.assignedTo.employeeId || "") !== actorEmployeeId) {
+        return res.status(403).json({ ok: false, error: "forbidden" });
+      }
+    } catch (err) {
+      return respondTaskDbUpstreamError(res, err, "Django work-orders status precheck");
+    }
   }
-  if (actorRole !== "manager" && String(target.assignedTo && target.assignedTo.employeeId || "") !== actorEmployeeId) {
-    return res.status(403).json({ ok: false, error: "forbidden" });
+  try {
+    const token = authFromRequest(req);
+    const data = await postWorkOrderStatusToDb(id, { status }, token);
+    const workOrder = data && data.workOrder ? data.workOrder : null;
+    if (!workOrder) {
+      return res.status(502).json({ ok: false, error: "work_order_status_failed" });
+    }
+    return res.json({ ok: true, workOrder });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django work-orders status");
   }
-  const result = updateWorkOrderStatus(workOrderStore, id, status);
-  if (result.error) {
-    const statusCode = result.error === "work_order_not_found" ? 404 : 400;
-    return res.status(statusCode).json({ ok: false, error: result.error });
-  }
-  writeWorkOrderStore(result.store);
-  syncTaskStatusByWorkOrder(result.assignment);
-  res.json({ ok: true, workOrder: result.assignment });
 });
 
-app.get("/api/manager/dashboard", (req, res) => {
+app.get("/api/manager/dashboard", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const actor = req.authUser || {};
   if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const month = String(req.query.month || "").trim();
-  const storeRaw = readJsonObject(cfg.managerAssignmentsPath);
-  const usersStore = readUsersStore();
-  const store = normalizeAssignmentsStore(storeRaw);
-  const fromUsers = buildFseMembersFromUsers(usersStore);
-  if (fromUsers.length) {
-    store.fseMembers = fromUsers;
+  try {
+    const token = authFromRequest(req);
+    const dashboard = await fetchManagerDashboardFromDb(month, token);
+    return res.json({ ok: true, ...(dashboard && typeof dashboard === "object" ? dashboard : {}) });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django manager dashboard");
   }
-  const records = [];
-  const dashboard = buildManagerDashboard({
-    store,
-    records,
-    month,
-    actorEmployeeId: String(actor.employeeId || "").trim(),
-  });
-  res.json({ ok: true, ...dashboard });
 });
 
-app.post("/api/manager/assignments", (req, res) => {
+app.post("/api/manager/assignments", async (req, res) => {
+  if (!assertTaskDbConfigured(res)) return;
   const actor = req.authUser || {};
   if (!isManagerRole(actor.role)) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const body = req.body && typeof req.body === "object" ? req.body : {};
-  const usersStore = readUsersStore();
-  const workOrderStore = readWorkOrderStore();
-  const created = createWorkOrder(
-    {
-      ...body,
-      createdBy: {
-        employeeId: String(actor.employeeId || "").trim(),
-        name: String(actor.username || "").trim() || String(actor.employeeId || "").trim(),
+  try {
+    const token = authFromRequest(req);
+    const data = await postManagerAssignmentToDb(
+      {
+        ...body,
+        createdBy: {
+          employeeId: String(actor.employeeId || "").trim(),
+          name: String(actor.username || "").trim() || String(actor.employeeId || "").trim(),
+        },
       },
-    },
-    usersStore
-  );
-  if (created.error) {
-    return res.status(400).json({ ok: false, error: created.error });
+      token
+    );
+    const assignment = data && data.assignment ? data.assignment : null;
+    if (!assignment) {
+      return res.status(502).json({ ok: false, error: "assignment_create_failed" });
+    }
+    return res.status(201).json({ ok: true, assignment });
+  } catch (err) {
+    return respondTaskDbUpstreamError(res, err, "Django manager assignments");
   }
-  const next = {
-    ...workOrderStore,
-    assignments: [created.assignment, ...workOrderStore.assignments],
-    fseMembers: buildFseMembersFromUsers(usersStore),
-  };
-  writeWorkOrderStore(next);
-  syncTaskStatusByWorkOrder(created.assignment);
-  res.status(201).json({ ok: true, assignment: created.assignment });
 });
 
 app.get("/RVSChinaDT_Logo.png", (_req, res) => {

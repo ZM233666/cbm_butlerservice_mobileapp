@@ -178,6 +178,75 @@ async function postTaskDraftToDb(body, token, projectRoot) {
   });
 }
 
+async function fetchManagerDashboardFromDb(month, token) {
+  const monthQ = String(month || "").trim();
+  const qs = monthQ ? `?month=${encodeURIComponent(monthQ)}` : "";
+  return fetchDjangoJson(`/api/business/task/h5/manager/dashboard/${qs}`, { token });
+}
+
+async function postManagerAssignmentToDb(body, token) {
+  return fetchDjangoJson("/api/business/task/h5/manager/assignments/", {
+    token,
+    method: "POST",
+    body: body && typeof body === "object" ? body : {},
+  });
+}
+
+function workOrderQueryString(query) {
+  const q = query && typeof query === "object" ? query : {};
+  const qs = new URLSearchParams();
+  ["status", "assigneeId", "month", "maint"].forEach((key) => {
+    const val = String(q[key] || "").trim();
+    if (val) qs.set(key, val);
+  });
+  const text = qs.toString();
+  return text ? `?${text}` : "";
+}
+
+async function fetchWorkOrdersFromDb(query, token) {
+  return fetchDjangoJson(`/api/business/task/h5/work-orders/${workOrderQueryString(query)}`, { token });
+}
+
+async function fetchWorkOrderStatsFromDb(query, token) {
+  return fetchDjangoJson(`/api/business/task/h5/work-orders/stats/${workOrderQueryString(query)}`, { token });
+}
+
+async function createWorkOrderInDb(body, token) {
+  return fetchDjangoJson("/api/business/task/h5/work-orders/", {
+    token,
+    method: "POST",
+    body: body && typeof body === "object" ? body : {},
+  });
+}
+
+async function postWorkOrderStatusToDb(taskNo, body, token) {
+  const id = String(taskNo || "").trim();
+  if (!id) {
+    const err = new Error("work_order_id_required");
+    err.status = 400;
+    throw err;
+  }
+  return fetchDjangoJson(`/api/business/task/h5/work-orders/${encodeURIComponent(id)}/status/`, {
+    token,
+    method: "POST",
+    body: body && typeof body === "object" ? body : {},
+  });
+}
+
+async function postWorkOrderDispatchToDb(taskNo, body, token) {
+  const id = String(taskNo || "").trim();
+  if (!id) {
+    const err = new Error("work_order_id_required");
+    err.status = 400;
+    throw err;
+  }
+  return fetchDjangoJson(`/api/business/task/h5/work-orders/${encodeURIComponent(id)}/dispatch/`, {
+    token,
+    method: "POST",
+    body: body && typeof body === "object" ? body : {},
+  });
+}
+
 function isTaskDataFromDb() {
   const raw = String(process.env.TASK_DATA_SOURCE || "db").trim().toLowerCase();
   if (raw === "json" || raw === "file" || raw === "local") return false;
@@ -197,5 +266,12 @@ module.exports = {
   fetchSubmitLatestFromDb,
   postTaskSubmitToDb,
   postTaskDraftToDb,
+  fetchManagerDashboardFromDb,
+  postManagerAssignmentToDb,
+  fetchWorkOrdersFromDb,
+  fetchWorkOrderStatsFromDb,
+  createWorkOrderInDb,
+  postWorkOrderStatusToDb,
+  postWorkOrderDispatchToDb,
   buildSlotSeqMap,
 };

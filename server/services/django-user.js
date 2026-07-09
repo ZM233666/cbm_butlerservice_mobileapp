@@ -20,8 +20,20 @@ async function postH5CertificatesToDb(body, token) {
   });
 }
 
+async function fetchUsersFromDb(query, token) {
+  const q = query && typeof query === "object" ? query : {};
+  const qs = new URLSearchParams();
+  const role = String(q.role || "").trim();
+  const employeeId = String(q.employeeId || "").trim();
+  if (role) qs.set("role", role);
+  if (employeeId) qs.set("employeeId", employeeId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return fetchDjangoJson(`/api/business/engineer/h5/users/${suffix}`, { token });
+}
+
 module.exports = {
   fetchH5ProfileFromDb,
   postH5CertificatesToDb,
+  fetchUsersFromDb,
   isProfileDataFromDb: isTaskDataFromDb,
 };

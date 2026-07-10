@@ -16,6 +16,9 @@ import { useI18nStore } from './i18n'
 const USER_KEY = 'butler.auth.user'
 const TOKEN_KEY = 'butler.auth.token'
 const REFRESH_KEY = 'butler.auth.refresh'
+const PROFILE_REFRESH_TTL_MS = 5 * 60 * 1000
+
+let _lastProfileRefreshAt = 0
 
 const PAGE_ACCESS: Record<string, UserRole[]> = {
   '/': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
@@ -142,12 +145,14 @@ export const useAuthStore = defineStore('auth', () => {
       refreshToken.value = rt
       localStorage.setItem(REFRESH_KEY, rt)
     }
+    _lastProfileRefreshAt = Date.now()
   }
 
   function logout() {
     user.value = null
     token.value = ''
     refreshToken.value = ''
+    _lastProfileRefreshAt = 0
     localStorage.removeItem(USER_KEY)
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REFRESH_KEY)
@@ -159,11 +164,14 @@ export const useAuthStore = defineStore('auth', () => {
     return allowed.includes(role.value)
   }
 
-  async function refreshProfile() {
+  async function refreshProfile(force = false) {
     const current = user.value
     const currentToken = String(token.value || '').trim()
     const currentRefresh = String(refreshToken.value || '').trim()
     if (!current || !currentToken) return false
+    if (!force && _lastProfileRefreshAt > 0 && Date.now() - _lastProfileRefreshAt < PROFILE_REFRESH_TTL_MS) {
+      return true
+    }
     try {
       const key = String(current.employeeId || current.username || '').trim()
       if (!key) return false
@@ -197,6 +205,7 @@ export const useAuthStore = defineStore('auth', () => {
         roleDisplayName: String(dbUser.roleDisplayName || current.roleDisplayName || '').trim() || undefined,
       }
       login(merged, currentToken, currentRefresh || undefined)
+      _lastProfileRefreshAt = Date.now()
       return true
     } catch {
       return false

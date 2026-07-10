@@ -1,10 +1,12 @@
 import { apiGet, apiPost } from './client'
 import type { HomeConfig, TaskSummary, TaskStatusStore, TaskDetail, TaskCentreResponse } from '@/types/task'
+import { cachedRequest, clearRequestCache } from './requestCache'
 
 export function fetchHomeConfig(employeeId?: string): Promise<HomeConfig> {
   const params: Record<string, string> = {}
   if (employeeId) params.employeeId = employeeId
-  return apiGet<HomeConfig>('/api/home-config', params)
+  const cacheKey = `home-config:${employeeId || 'self'}`
+  return cachedRequest(cacheKey, () => apiGet<HomeConfig>('/api/home-config', params), 30_000)
 }
 
 export function fetchTaskSummary(): Promise<TaskSummary> {
@@ -12,7 +14,8 @@ export function fetchTaskSummary(): Promise<TaskSummary> {
 }
 
 export function fetchTaskStatus(employeeId: string): Promise<{ ok: boolean; statuses: TaskStatusStore }> {
-  return apiGet('/api/task-status', { employeeId })
+  const cacheKey = `task-status:${employeeId}`
+  return cachedRequest(cacheKey, () => apiGet('/api/task-status', { employeeId }), 15_000)
 }
 
 export function fetchTaskDetail(taskId: string): Promise<{ ok: boolean; task: TaskDetail }> {
@@ -22,7 +25,8 @@ export function fetchTaskDetail(taskId: string): Promise<{ ok: boolean; task: Ta
 export function fetchTaskCentre(employeeId: string, month?: string): Promise<TaskCentreResponse> {
   const params: Record<string, string> = { employeeId }
   if (month) params.month = month
-  return apiGet<TaskCentreResponse>('/api/task-centre', params)
+  const cacheKey = `task-centre:${employeeId}:${month || 'current'}`
+  return cachedRequest(cacheKey, () => apiGet<TaskCentreResponse>('/api/task-centre', params), 30_000)
 }
 
 export interface CreateTaskCentrePayload {
@@ -36,7 +40,11 @@ export interface CreateTaskCentrePayload {
 }
 
 export function createTaskCentreTask(payload: CreateTaskCentrePayload) {
-  return apiPost<{ ok: boolean; task?: unknown; card?: TaskCentreResponse['tasks'][0] }>('/api/task-centre', payload)
+  return apiPost<{ ok: boolean; task?: unknown; card?: TaskCentreResponse['tasks'][0] }>('/api/task-centre', payload).then((data) => {
+    clearRequestCache(`task-centre:${payload.employeeId}`)
+    clearRequestCache(`home-config:${payload.employeeId}`)
+    return data
+  })
 }
 
 export function postTaskStatus(
@@ -54,6 +62,10 @@ export function postTaskStatus(
     taskId: meta?.taskId,
     title: meta?.title,
     deadline: meta?.deadline,
+  }).then((data) => {
+    clearRequestCache(`task-status:${employeeId}`)
+    clearRequestCache(`home-config:${employeeId}`)
+    return data
   })
 }
 
@@ -62,11 +74,30 @@ export function fetchGuidanceTasks() {
 }
 
 export function postTaskSubmit(body: unknown) {
-  return apiPost('/api/task-submit', body)
+  return apiPost('/api/task-submit', body).then((data) => {
+    const employeeId = String(
+      (body as any)?.basicInfo?.employeeId || (body as any)?.employeeId || '',
+    ).trim()
+    if (employeeId) {
+      clearRequestCache(`task-status:${employeeId}`)
+      clearRequestCache(`home-config:${employeeId}`)
+      clearRequestCache(`task-centre:${employeeId}`)
+    }
+    return data
+  })
 }
 
 export function postTaskDraft(body: unknown) {
-  return apiPost('/api/task-draft', body)
+  return apiPost('/api/task-draft', body).then((data) => {
+    const employeeId = String(
+      (body as any)?.basicInfo?.employeeId || (body as any)?.employeeId || '',
+    ).trim()
+    if (employeeId) {
+      clearRequestCache(`task-status:${employeeId}`)
+      clearRequestCache(`home-config:${employeeId}`)
+    }
+    return data
+  })
 }
 
 export function fetchLatestTaskSubmit(taskId: string) {

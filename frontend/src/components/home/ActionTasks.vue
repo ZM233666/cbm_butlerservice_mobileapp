@@ -224,13 +224,19 @@ async function loadStatuses() {
   } catch { /* keep local */ }
 }
 
-async function boot() {
+async function boot(force = false) {
+  const now = Date.now()
+  if (!force && now - lastBootAt < BOOT_MIN_INTERVAL_MS) return
+  lastBootAt = now
   try {
     const cfg = await fetchHomeConfig(auth.user?.employeeId || '')
     if (cfg.tasks) cards.value = cfg.tasks
   } catch { /* keep empty */ }
   await loadStatuses()
 }
+
+const BOOT_MIN_INTERVAL_MS = 60_000
+let lastBootAt = 0
 
 function onFocus() { boot() }
 
@@ -253,7 +259,7 @@ watch(
 watch(
   () => props.refreshSignal || 0,
   () => {
-    boot()
+    boot(true)
   },
 )
 </script>

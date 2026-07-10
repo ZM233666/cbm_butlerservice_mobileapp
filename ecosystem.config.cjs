@@ -1,16 +1,19 @@
 const path = require("path");
 
+const clusterWorkers = Number.parseInt(process.env.NODE_CLUSTER_WORKERS || "8", 10);
+const instances = Number.isFinite(clusterWorkers) && clusterWorkers > 0 ? Math.min(clusterWorkers, 16) : 8;
+
 module.exports = {
   apps: [
     {
       name: "butler-service",
       cwd: __dirname,
       script: "server/server.js",
-      instances: 1,
-      exec_mode: "fork",
+      instances,
+      exec_mode: "cluster",
       autorestart: true,
       watch: false,
-      max_memory_restart: "512M",
+      max_memory_restart: "384M",
       time: true,
       env: {
         NODE_ENV: "production",

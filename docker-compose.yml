@@ -12,8 +12,18 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3100
+      NODE_CLUSTER_ENABLED: "1"
+      NODE_CLUSTER_WORKERS: "${NODE_CLUSTER_WORKERS:-8}"
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 768M
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      - "${APP_PORT:-3100}:3100"
+      - "${APP_PORT:-127.0.0.1:3100}:3100"
     volumes:
       - ./server/data:/app/server/data
       - ./server/uploads:/app/server/uploads
@@ -42,3 +52,21 @@ services:
       - "${NGINX_HTTP_PORT:-80}:80"
     volumes:
       - ./deploy/nginx.docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./server/uploads:/app/server/uploads:ro
+
+  nginx-ssl:
+    profiles: ["with-nginx-ssl"]
+    image: nginx:1.27-alpine
+    container_name: butler-nginx-ssl
+    restart: unless-stopped
+    depends_on:
+      butler:
+        condition: service_healthy
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/nginx.ssl.docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./server/uploads:/app/server/uploads:ro
+      - ${SSL_CERT_PATH:-./certs/fullchain.pem}:/etc/nginx/ssl/fullchain.pem:ro
+      - ${SSL_KEY_PATH:-./certs/privkey.pem}:/etc/nginx/ssl/privkey.pem:ro

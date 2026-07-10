@@ -7,12 +7,14 @@ const fs = require("fs");
 const crypto = require("crypto");
 const http = require("http");
 const https = require("https");
+const cluster = require("node:cluster");
 const express = require("express");
 const multer = require("multer");
 const exifr = require("exifr");
 const { buildConfig } = require("./config");
 const { info, error } = require("./lib/logger");
 const { ensureDir, appendJsonLine, readJsonArray, readJsonObject, writeJsonObject } = require("./lib/fs-store");
+const { createApiCache } = require("./lib/api-cache");
 const { buildTaskSummary } = require("./services/task-summary");
 const {
   isTaskDataFromDb,
@@ -565,7 +567,21 @@ const djangoAuthCache = createAuthCache({
   ttlMs: Number.isFinite(AUTH_CACHE_TTL_MS) && AUTH_CACHE_TTL_MS > 0 ? AUTH_CACHE_TTL_MS : 300000,
   negativeTtlMs: 60 * 1000,
 });
+const djangoApiCache = createApiCache({ defaultTtlMs: cfg.apiCacheHomeConfigTtlMs, maxEntries: 800 });
 let remoteAuthCircuitOpenUntil = 0;
+
+function invalidateEmployeeTaskCache(employeeId) {
+  const id = String(employeeId || "").trim();
+  if (!id) return;
+  djangoApiCache.delPrefix(`home-config:${id}`);
+  djangoApiCache.delPrefix(`task-status:${id}`);
+  djangoApiCache.delPrefix(`task-centre:${id}:`);
+}
+
+function invalidateManagerApiCache() {
+  djangoApiCache.delPrefix("manager-dashboard:");
+  djangoApiCache.delPrefix("work-orders:");
+}
 
 function shouldProxyToRemoteApi(apiPath) {
   return REMOTE_PROXY_PREFIXES.some((prefix) => apiPath === prefix || apiPath.startsWith(prefix));
@@ -817,6 +833,36 @@ function finalizeTaskUploadFilename(req, file) {
   return targetName;
 }
 
+function buildClientCapturePayload(body) {
+  const fallbackClientCaptureAt = normalizeIsoTime(body && body.clientCapturedAt);
+  const fallbackClientLatitude = parseFiniteNumber(body && body.clientLatitude);
+  const fallbackClientLongitude = parseFiniteNumber(body && body.clientLongitude);
+  const fallbackClientAccuracy = parseFiniteNumber(body && body.clientLocationAccuracy);
+  const capture = {};
+  if (fallbackClientCaptureAt) capture.capturedAt = fallbackClientCaptureAt;
+  if (
+    fallbackClientLatitude != null &&
+    fallbackClientLongitude != null &&
+    fallbackClientLatitude >= -90 &&
+    fallbackClientLatitude <= 90 &&
+    fallbackClientLongitude >= -180 &&
+    fallbackClientLongitude <= 180
+  ) {
+    capture.location = {
+      latitude: Number(fallbackClientLatitude.toFixed(6)),
+      longitude: Number(fallbackClientLongitude.toFixed(6)),
+    };
+    if (fallbackClientAccuracy != null && fallbackClientAccuracy >= 0) {
+      capture.location.accuracy = Number(fallbackClientAccuracy.toFixed(1));
+    }
+  }
+  return Object.keys(capture).length ? capture : null;
+}
+
+function appendUploadManifest(record, callback) {
+  appendJsonLine(cfg.manifestPath, record, callback || (() => {}));
+}
+
 const upload = createUpload(cfg.uploadsDir, { filenameBuilder: buildTaskUploadFilename });
 const certificateUpload = createUpload(cfg.certUploadsDir);
 
@@ -826,6 +872,23 @@ app.get("/health", (_req, res) => {
     service: "ButlerService",
     env: cfg.env,
     now: new Date().toISOString(),
+    clusterWorker: cluster.isWorker ? cluster.worker.id : null,
+  });
+});
+
+app.get("/api/metrics", (_req, res) => {
+  const mem = process.memoryUsage();
+  res.json({
+    ok: true,
+    service: "ButlerService",
+    pid: process.pid,
+    clusterWorker: cluster.isWorker ? cluster.worker.id : null,
+    uptimeSec: Math.round(process.uptime()),
+    memory: {
+      rss: mem.rss,
+      heapUsed: mem.heapUsed,
+      heapTotal: mem.heapTotal,
+    },
   });
 });
 
@@ -937,7 +1000,11 @@ app.get("/api/home-config", async (req, res) => {
   if (!assertEmployeeAccess(req, res, employeeId)) return;
   try {
     const token = authFromRequest(req);
-    const dbConfig = await fetchHomeConfigFromDb(employeeId, token);
+    const dbConfig = await djangoApiCache.getOrLoad(
+      `home-config:${employeeId}`,
+      () => fetchHomeConfigFromDb(employeeId, token),
+      cfg.apiCacheHomeConfigTtlMs,
+    );
     const recStore = readRecommendationsStore();
     const acceptedIds = Array.isArray(recStore.accepted[employeeId]) ? recStore.accepted[employeeId] : [];
     const acceptedSet = new Set(acceptedIds.map((x) => String(x || "").trim()).filter(Boolean));
@@ -971,7 +1038,11 @@ app.get("/api/task-status", async (req, res) => {
   if (!assertEmployeeAccess(req, res, employeeId)) return;
   try {
     const token = authFromRequest(req);
-    const data = await fetchTaskStatusFromDb(employeeId, token);
+    const data = await djangoApiCache.getOrLoad(
+      `task-status:${employeeId}`,
+      () => fetchTaskStatusFromDb(employeeId, token),
+      cfg.apiCacheTaskStatusTtlMs,
+    );
     return res.json({ ok: true, employeeId: data.employeeId, statuses: data.statuses });
   } catch (err) {
     return respondTaskDbUpstreamError(res, err, "Django task-status GET");
@@ -1008,7 +1079,11 @@ app.get("/api/task-centre", async (req, res) => {
   const month = String(req.query.month || "").trim();
   try {
     const token = authFromRequest(req);
-    const data = await fetchTaskCentreFromDb(employeeId, month, token);
+    const data = await djangoApiCache.getOrLoad(
+      `task-centre:${employeeId}:${month || "current"}`,
+      () => fetchTaskCentreFromDb(employeeId, month, token),
+      cfg.apiCacheTaskCentreTtlMs,
+    );
     return res.json({ ok: true, ...data });
   } catch (err) {
     return respondTaskDbUpstreamError(res, err, "Django task-centre GET");
@@ -1025,6 +1100,7 @@ app.post("/api/task-centre", async (req, res) => {
   try {
     const token = authFromRequest(req);
     const data = await createTaskCentreTaskInDb(req.body, token);
+    invalidateEmployeeTaskCache(employeeId);
     return res.status(201).json({ ok: true, ...data });
   } catch (err) {
     const code = err && err.payload && err.payload.code;
@@ -1066,6 +1142,7 @@ app.post("/api/task-status", async (req, res) => {
   try {
     const token = authFromRequest(req);
     const data = await postTaskStatusToDb(req.body, token);
+    invalidateEmployeeTaskCache(employeeId);
     const entry = data && data.status ? data.status : {};
     const key = String((data && data.taskKey) || taskKey || mainTaskId || "").trim();
     const user = { [key]: entry };
@@ -1130,7 +1207,11 @@ app.get("/api/users/self", async (req, res) => {
   if (isProfileDataFromDb()) {
     try {
       const token = authFromRequest(req);
-      const profile = await fetchH5ProfileFromDb(employeeId, token);
+      const profile = await djangoApiCache.getOrLoad(
+        `user-profile:${employeeId}`,
+        () => fetchH5ProfileFromDb(employeeId, token),
+        cfg.apiCacheUserProfileTtlMs,
+      );
       return res.json({ ok: true, user: profile });
     } catch (err) {
       if (actor && actor.employeeId) {
@@ -1556,7 +1637,11 @@ app.get("/api/manager/dashboard", async (req, res) => {
   const month = String(req.query.month || "").trim();
   try {
     const token = authFromRequest(req);
-    const dashboard = await fetchManagerDashboardFromDb(month, token);
+    const dashboard = await djangoApiCache.getOrLoad(
+      `manager-dashboard:${String(actor.employeeId || "").trim()}:${month || "current"}`,
+      () => fetchManagerDashboardFromDb(month, token),
+      cfg.apiCacheManagerDashboardTtlMs,
+    );
     return res.json({ ok: true, ...(dashboard && typeof dashboard === "object" ? dashboard : {}) });
   } catch (err) {
     return respondTaskDbUpstreamError(res, err, "Django manager dashboard");
@@ -1586,6 +1671,7 @@ app.post("/api/manager/assignments", async (req, res) => {
     if (!assignment) {
       return res.status(502).json({ ok: false, error: "assignment_create_failed" });
     }
+    invalidateManagerApiCache();
     return res.status(201).json({ ok: true, assignment });
   } catch (err) {
     return respondTaskDbUpstreamError(res, err, "Django manager assignments");
@@ -1630,42 +1716,23 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
   const uploadedAt = new Date().toISOString();
   const publicUrl = `/uploads/task/${storedName}`;
   const absFilePath = path.join(cfg.uploadsDir, storedName);
-  const captureMeta = await extractPhotoCaptureMeta(absFilePath);
-  const fallbackClientCaptureAt = normalizeIsoTime(req.body && req.body.clientCapturedAt);
-  const fallbackClientLatitude = parseFiniteNumber(req.body && req.body.clientLatitude);
-  const fallbackClientLongitude = parseFiniteNumber(req.body && req.body.clientLongitude);
-  const fallbackClientAccuracy = parseFiniteNumber(req.body && req.body.clientLocationAccuracy);
-  const capture = captureMeta || {};
-  if (!capture.capturedAt && fallbackClientCaptureAt) {
-    capture.capturedAt = fallbackClientCaptureAt;
-  }
-  if (
-    !capture.location &&
-    fallbackClientLatitude != null &&
-    fallbackClientLongitude != null &&
-    fallbackClientLatitude >= -90 &&
-    fallbackClientLatitude <= 90 &&
-    fallbackClientLongitude >= -180 &&
-    fallbackClientLongitude <= 180
-  ) {
-    capture.location = {
-      latitude: Number(fallbackClientLatitude.toFixed(6)),
-      longitude: Number(fallbackClientLongitude.toFixed(6)),
-    };
-    if (fallbackClientAccuracy != null && fallbackClientAccuracy >= 0) {
-      capture.location.accuracy = Number(fallbackClientAccuracy.toFixed(1));
-    }
-  }
-  if (capture.location) {
-    const geocoded = await reverseGeocodeLocation(capture.location.latitude, capture.location.longitude);
-    if (geocoded) {
-      if (geocoded.address) capture.location.address = geocoded.address;
-      if (geocoded.province) capture.location.province = geocoded.province;
-      if (geocoded.city) capture.location.city = geocoded.city;
-      if (geocoded.district) capture.location.district = geocoded.district;
-      capture.location.provider = geocoded.provider;
-    }
-  }
+  const hasClientGeo = (() => {
+    const lat = parseFiniteNumber(req.body && req.body.clientLatitude);
+    const lng = parseFiniteNumber(req.body && req.body.clientLongitude);
+    return lat != null && lng != null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  })();
+  const clientCapture = buildClientCapturePayload(req.body);
+  const captureMeta =
+    cfg.uploadSkipServerExifWhenClientGeo && hasClientGeo
+      ? null
+      : await extractPhotoCaptureMeta(absFilePath);
+  const capture = { ...(clientCapture || {}), ...(captureMeta || {}) };
+  const geocodeTarget =
+    capture.location &&
+    Number.isFinite(capture.location.latitude) &&
+    Number.isFinite(capture.location.longitude)
+      ? { latitude: capture.location.latitude, longitude: capture.location.longitude }
+      : null;
   const record = {
     type: "upload",
     at: uploadedAt,
@@ -1682,7 +1749,7 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
   if (Object.keys(capture).length) {
     record.capture = capture;
   }
-  appendJsonLine(cfg.manifestPath, record, (err) => {
+  appendUploadManifest(record, (err) => {
     if (err) return next(err);
     const payload = {
       ok: true,
@@ -1699,6 +1766,31 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
       payload.capture = capture;
     }
     res.json(payload);
+    if (
+      geocodeTarget &&
+      cfg.reverseGeocodeEnabled &&
+      cfg.uploadGeocodeAsync &&
+      cfg.amapWebApiKey
+    ) {
+      setImmediate(() => {
+        reverseGeocodeLocation(geocodeTarget.latitude, geocodeTarget.longitude)
+          .then((geocoded) => {
+            if (!geocoded) return;
+            appendJsonLine(cfg.manifestPath, {
+              type: "upload_geocode",
+              at: new Date().toISOString(),
+              storedName,
+              slotId,
+              taskId: taskId || undefined,
+              employeeId: employeeId || undefined,
+              location: geocoded,
+            }, (err) => {
+              if (err) error("upload geocode manifest failed", err);
+            });
+          })
+          .catch((err) => error("upload geocode async failed", err));
+      });
+    }
   });
 });
 
@@ -1712,6 +1804,14 @@ app.post("/api/task-draft", async (req, res) => {
   try {
     const token = authFromRequest(req);
     const data = await postTaskDraftToDb(payload, token, projectRoot);
+    invalidateEmployeeTaskCache(
+      String(
+        payload.employeeId ||
+          payload.employeeNo ||
+          (payload.basicInfo && payload.basicInfo.employeeId) ||
+          "",
+      ).trim(),
+    );
     return res.json({
       ok: true,
       status: data && data.status ? data.status : undefined,
@@ -1737,6 +1837,14 @@ app.post("/api/task-submit", async (req, res) => {
   try {
     const token = authFromRequest(req);
     const data = await postTaskSubmitToDb(payload, token, projectRoot);
+    invalidateEmployeeTaskCache(
+      String(
+        payload.employeeId ||
+          payload.employeeNo ||
+          (payload.basicInfo && payload.basicInfo.employeeId) ||
+          "",
+      ).trim(),
+    );
     return res.json({
       ok: true,
       status: data && data.status ? data.status : undefined,
@@ -1806,7 +1914,8 @@ function createServer() {
 
 const { server, protocol } = createServer();
 server.listen(cfg.port, cfg.host, () => {
-  info(`ButlerService listening on ${protocol}://127.0.0.1:${cfg.port}`);
+  const workerTag = cluster.isWorker ? ` worker#${cluster.worker.id}` : "";
+  info(`ButlerService listening on ${protocol}://127.0.0.1:${cfg.port}${workerTag}`);
   info(`Remote API base: ${REMOTE_API_BASE}`);
   info(`Local HMAC auth: ${ALLOW_LOCAL_AUTH ? "enabled" : "disabled"}`);
   info(`Skip remote auth: ${SKIP_REMOTE_AUTH ? "enabled" : "disabled"}`);

@@ -17,6 +17,12 @@ function buildConfig(projectRoot) {
   const reverseGeocodeRaw = String(env.REVERSE_GEOCODE_ENABLED || "1").trim().toLowerCase();
   const reverseGeocodeEnabled =
     reverseGeocodeRaw === "1" || reverseGeocodeRaw === "true" || reverseGeocodeRaw === "yes";
+  const uploadGeocodeAsyncRaw = String(env.UPLOAD_GEOCODE_ASYNC || "1").trim().toLowerCase();
+  const uploadGeocodeAsync =
+    uploadGeocodeAsyncRaw === "1" || uploadGeocodeAsyncRaw === "true" || uploadGeocodeAsyncRaw === "yes";
+  const skipServerExifRaw = String(env.UPLOAD_SKIP_SERVER_EXIF || "1").trim().toLowerCase();
+  const uploadSkipServerExifWhenClientGeo =
+    skipServerExifRaw === "1" || skipServerExifRaw === "true" || skipServerExifRaw === "yes";
   return {
     env: env.NODE_ENV || "development",
     host: String(env.HOST || "0.0.0.0"),
@@ -54,8 +60,15 @@ function buildConfig(projectRoot) {
       "server/data/recommendations.json"
     ),
     reverseGeocodeEnabled,
+    uploadGeocodeAsync,
+    uploadSkipServerExifWhenClientGeo,
     geocodeTimeoutMs: toInt(env.GEOCODE_TIMEOUT_MS, 3500),
     amapWebApiKey: String(env.AMAP_WEB_API_KEY || "").trim(),
+    apiCacheHomeConfigTtlMs: toInt(env.API_CACHE_HOME_CONFIG_MS, 30_000),
+    apiCacheTaskStatusTtlMs: toInt(env.API_CACHE_TASK_STATUS_MS, 15_000),
+    apiCacheUserProfileTtlMs: toInt(env.API_CACHE_USER_PROFILE_MS, 300_000),
+    apiCacheManagerDashboardTtlMs: toInt(env.API_CACHE_MANAGER_DASHBOARD_MS, 60_000),
+    apiCacheTaskCentreTtlMs: toInt(env.API_CACHE_TASK_CENTRE_MS, 30_000),
     httpsEnabled,
     sslKeyPath: resolveFromProject(projectRoot, env.SSL_KEY_PATH, "certs/localhost-key.pem"),
     sslCertPath: resolveFromProject(projectRoot, env.SSL_CERT_PATH, "certs/localhost.pem"),

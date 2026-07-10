@@ -30,7 +30,6 @@ const cbmRecoTasks = computed(() => {
 })
 
 onMounted(async () => {
-  await auth.refreshProfile().catch(() => {})
   try {
     const cfg = await fetchHomeConfig(auth.user?.employeeId || '')
     if (cfg.tasks) tasks.value = cfg.tasks

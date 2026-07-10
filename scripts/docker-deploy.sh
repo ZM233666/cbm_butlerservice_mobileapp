@@ -3,6 +3,7 @@
 # 用法：bash scripts/docker-deploy.sh
 # 可选：
 #   WITH_NGINX=1      同时启动 nginx 容器（80 端口）
+#   WITH_NGINX_SSL=1  启动 HTTPS nginx（80→443，需证书）
 #   SKIP_GIT_PULL=1   跳过 git pull
 
 set -euo pipefail
@@ -44,7 +45,9 @@ echo "==> docker build"
 "${COMPOSE[@]}" build
 
 PROFILE_ARGS=()
-if [[ "${WITH_NGINX:-0}" == "1" ]]; then
+if [[ "${WITH_NGINX_SSL:-0}" == "1" ]]; then
+  PROFILE_ARGS=(--profile with-nginx-ssl)
+elif [[ "${WITH_NGINX:-0}" == "1" ]]; then
   PROFILE_ARGS=(--profile with-nginx)
 fi
 
@@ -62,7 +65,9 @@ echo "==> 健康检查 http://127.0.0.1:${PORT}/health"
 curl -fsS "http://127.0.0.1:${PORT}/health" && echo ""
 
 echo "==> Docker 部署完成"
-if [[ "${WITH_NGINX:-0}" == "1" ]]; then
+if [[ "${WITH_NGINX_SSL:-0}" == "1" ]]; then
+  echo "    访问: https://<服务器IP>/"
+elif [[ "${WITH_NGINX:-0}" == "1" ]]; then
   echo "    访问: http://<服务器IP>/"
 else
   echo "    访问: http://<服务器IP>:${PORT}/"

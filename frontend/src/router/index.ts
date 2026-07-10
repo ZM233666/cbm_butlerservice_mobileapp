@@ -81,13 +81,23 @@ const router = createRouter({
   ],
 })
 
+// 会话内仅冷启动拉一次 profile，后续依赖 store TTL 去重
+let _sessionProfileBootDone = false
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
-  // 冷启动时主动续期并刷新用户信息（只执行一次）
+  if (!auth.isLoggedIn) {
+    _sessionProfileBootDone = false
+  }
+
+  // 冷启动时主动续期；profile 每会话只拉一次（5 分钟 TTL 兜底）
   if (auth.isLoggedIn) {
     await tryBootRefresh()
-    await auth.refreshProfile().catch(() => {})
+    if (!_sessionProfileBootDone) {
+      _sessionProfileBootDone = true
+      await auth.refreshProfile().catch(() => {})
+    }
   }
 
   if (to.meta.guest) {

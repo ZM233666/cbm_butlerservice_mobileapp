@@ -16,8 +16,23 @@ function onSessionExpired() {
   router.replace({ path: '/login' })
 }
 
-onMounted(() => window.addEventListener('auth:session-expired', onSessionExpired))
-onUnmounted(() => window.removeEventListener('auth:session-expired', onSessionExpired))
+function onUnhandledRejection(event: PromiseRejectionEvent) {
+  const reason = event.reason as { name?: string; message?: string; status?: number } | undefined
+  const msg = String(reason?.message || '')
+  if (reason?.name === 'ApiError' && (msg === 'session_expired' || reason?.status === 401)) {
+    event.preventDefault()
+    onSessionExpired()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('auth:session-expired', onSessionExpired)
+  window.addEventListener('unhandledrejection', onUnhandledRejection)
+})
+onUnmounted(() => {
+  window.removeEventListener('auth:session-expired', onSessionExpired)
+  window.removeEventListener('unhandledrejection', onUnhandledRejection)
+})
 </script>
 
 <template>

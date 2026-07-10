@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import PageShell from '@/components/layout/PageShell.vue'
 import ProfileCard from '@/components/home/ProfileCard.vue'
@@ -29,18 +29,29 @@ const cbmRecoTasks = computed(() => {
     .filter(t => !hiddenIds.has(String((t as any).taskId || '').trim()))
 })
 
-onMounted(async () => {
+async function loadHomeData() {
+  const employeeId = String(auth.user?.employeeId || '').trim()
+  if (!employeeId) return
   try {
-    const cfg = await fetchHomeConfig(auth.user?.employeeId || '')
+    const cfg = await fetchHomeConfig(employeeId)
     if (cfg.tasks) tasks.value = cfg.tasks
     recommendations.value = (cfg as any).recommendations || []
   } catch { /* keep empty */ }
-})
+}
+
+watch(
+  () => auth.user?.employeeId || '',
+  () => { void loadHomeData() },
+  { immediate: true },
+)
 
 watch(
   () => String(route.query.refresh || ''),
   (v) => {
-    if (v) refreshSignal.value = Date.now()
+    if (v) {
+      refreshSignal.value = Date.now()
+      void loadHomeData()
+    }
   },
   { immediate: true },
 )
@@ -67,7 +78,7 @@ async function acceptReco(card: TaskCard) {
       <ProfileCard />
       <ManagerDashboard v-if="auth.isManager" />
       <template v-if="auth.isFse || auth.isThirdParty">
-        <ActionTasks :refresh-signal="refreshSignal" />
+        <ActionTasks :refresh-signal="refreshSignal" :initial-tasks="tasks" />
         <CbmRecommendations class="home-recs-after-tasks" :tasks="cbmRecoTasks" :on-accept="acceptReco" />
       </template>
     </main>

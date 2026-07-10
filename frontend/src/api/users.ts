@@ -21,6 +21,10 @@ export interface LoginData {
   access: string
   refresh?: string
   username?: string
+  name?: string
+  email?: string | null
+  dept_info?: { dept_id?: number; dept_name?: string }
+  role_info?: Array<{ id?: number; name?: string; key?: string }>
   [k: string]: unknown
 }
 
@@ -88,8 +92,27 @@ export async function loginUser(payload: LoginPayload): Promise<{ user: Partial<
   const token = String(resp.data?.access || '').trim()
   if (!token) throw new Error('missing_access_token')
   const refreshToken = String(resp.data?.refresh || '').trim()
-  const username = String(resp.data?.username || payload.username).trim() || payload.username
-  return { user: { username, employeeId: username }, token, refreshToken }
+  const data = resp.data || {}
+  // 后端：username=工号，name=姓名
+  const employeeId = String(data.username || payload.username).trim() || payload.username
+  const displayName = String(data.name || '').trim() || employeeId
+  const email = data.email == null ? '' : String(data.email).trim()
+  const deptName = String(data.dept_info?.dept_name || '').trim()
+  const role = mapRoleFromUserInfo(data as UserInfoData)
+  const roleDisplayName = String(data.role_info?.[0]?.name || '').trim()
+  return {
+    user: {
+      username: displayName,
+      employeeId,
+      email,
+      department: deptName,
+      region: deptName,
+      ...(role ? { role } : {}),
+      ...(roleDisplayName ? { roleDisplayName } : {}),
+    },
+    token,
+    refreshToken,
+  }
 }
 
 export async function fetchUserInfo(username: string) {

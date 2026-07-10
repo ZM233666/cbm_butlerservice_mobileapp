@@ -97,7 +97,7 @@ async function submit() {
     })
 
     auth.login(resp.user, resp.token, resp.refreshToken)
-    await auth.refreshProfile().catch(() => {})
+    await auth.refreshProfile(true).catch(() => {})
     const next = typeof route.query.next === 'string' && route.query.next.startsWith('/') ? route.query.next : '/'
     router.replace(next)
   } catch (e: unknown) {

@@ -2,11 +2,11 @@ import { apiGet, apiPost } from './client'
 import type { HomeConfig, TaskSummary, TaskStatusStore, TaskDetail, TaskCentreResponse } from '@/types/task'
 import { cachedRequest, clearRequestCache } from './requestCache'
 
-export function fetchHomeConfig(employeeId?: string): Promise<HomeConfig> {
-  const params: Record<string, string> = {}
-  if (employeeId) params.employeeId = employeeId
-  const cacheKey = `home-config:${employeeId || 'self'}`
-  return cachedRequest(cacheKey, () => apiGet<HomeConfig>('/api/home-config', params), 30_000)
+export function fetchHomeConfig(employeeId: string): Promise<HomeConfig> {
+  const id = String(employeeId || '').trim()
+  if (!id) return Promise.reject(new Error('employee_id_required'))
+  const cacheKey = `home-config:${id}`
+  return cachedRequest(cacheKey, () => apiGet<HomeConfig>('/api/home-config', { employeeId: id }), 30_000)
 }
 
 export function fetchTaskSummary(): Promise<TaskSummary> {

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { isTokenRefreshFailure, parseTokenRefreshResponse } from '@/api/token-refresh'
 
 const TOKEN_KEY = 'butler.auth.token'
 const REFRESH_KEY = 'butler.auth.refresh'
@@ -10,13 +11,13 @@ async function tryBootRefresh(): Promise<void> {
   if (_bootRefreshDone) return
   _bootRefreshDone = true
   const access = localStorage.getItem(TOKEN_KEY)
-  const refresh = localStorage.getItem(REFRESH_KEY)
-  if (!access || !refresh) return
+  const storedRefresh = localStorage.getItem(REFRESH_KEY)
+  if (!access || !storedRefresh) return
   try {
     const res = await fetch('/token/refresh/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh }),
+      body: JSON.stringify({ refresh: storedRefresh }),
     })
     if (!res.ok) {
       // 远端不可用/连接池打满时：不强制登出，保留本地会话继续开发
@@ -27,9 +28,11 @@ async function tryBootRefresh(): Promise<void> {
       window.dispatchEvent(new CustomEvent('auth:session-expired'))
       return
     }
-    const data = await res.json()
-    const newAccess = String(data?.access || data?.data?.access || '').trim()
+    const data = await res.json().catch(() => null)
+    if (isTokenRefreshFailure(data, true)) return
+    const { access: newAccess, refresh: newRefresh } = parseTokenRefreshResponse(data)
     if (newAccess) localStorage.setItem(TOKEN_KEY, newAccess)
+    if (newRefresh) localStorage.setItem(REFRESH_KEY, newRefresh)
   } catch {
     // 网络异常时静默失败，让后续 API 请求触发 401 重试流程
   }

@@ -656,9 +656,17 @@ async function resolveDjangoAuthUser(token) {
     try {
       const profile = await fetchH5ProfileFromDb(identity.employeeId, token);
       if (profile && profile.employeeId) {
+        const profileEmp = String(profile.employeeId).trim();
+        const authEmp = identity.employeeId;
+        if (profileEmp && profileEmp !== authEmp) {
+          info("H5 profile employeeId mismatch; keeping user_info identity", {
+            authEmp,
+            profileEmp,
+          });
+        }
         return {
-          employeeId: String(profile.employeeId).trim(),
-          username: String(profile.username || profile.employeeId).trim(),
+          employeeId: authEmp,
+          username: String(profile.username || identity.username || authEmp).trim(),
           email: String(profile.email || "").trim(),
           department: String(profile.department || "").trim(),
           region: String(profile.region || "").trim(),
@@ -701,6 +709,33 @@ async function resolveDjangoAuthUser(token) {
   return merged;
 }
 
+function resolveJwtIdentityFallback(req, token) {
+  const payload = decodeJwtPayload(token);
+  if (!payload || payload.user_id == null) return null;
+  const employeeId = pickFirstString([
+    payload.username,
+    payload.user_name,
+    req.headers && (req.headers["x-employee-id"] || req.headers["X-Employee-Id"]),
+  ]);
+  if (!employeeId) return null;
+  const usersStore = readUsersStore();
+  const existing = usersStore.users.find((u) => u.employeeId === employeeId);
+  if (existing) return existing;
+  return {
+    employeeId,
+    username: employeeId,
+    email: "",
+    department: "",
+    region: "",
+    role: "fse",
+  };
+}
+
+function looksLikeDjangoJwt(token) {
+  const payload = decodeJwtPayload(token);
+  return !!(payload && payload.user_id != null);
+}
+
 async function resolveAuthUser(req) {
   const token = authFromRequest(req);
   if (!token) return null;
@@ -717,6 +752,13 @@ async function resolveAuthUser(req) {
   const cached = resolveCachedDjangoIdentityUser(token);
   if (cached) return cached;
 
+  const jwtFallback = resolveJwtIdentityFallback(req, token);
+  if (jwtFallback) return jwtFallback;
+
+  // TASK_DATA_SOURCE=db 时禁止回退到本地 HMAC token（users.json 演示工号 1/2/3），
+  // 否则会出现「登录 20005303、任务却是工号 1 的 8 条」的串号。
+  if (isTaskDataFromDb()) return null;
+
   return resolveLocalAuthUser(token);
 }
 
@@ -727,9 +769,11 @@ async function proxyToRemoteApi(req, res) {
   delete headers["content-length"];
   delete headers["transfer-encoding"];
   const init = { method: req.method, headers };
-  if (req.method !== "GET" && req.method !== "HEAD" && req.body && Object.keys(req.body).length) {
-    init.body = JSON.stringify(req.body);
-    headers["content-type"] = headers["content-type"] || "application/json";
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    if (req.body != null && typeof req.body === "object") {
+      init.body = JSON.stringify(req.body);
+      headers["content-type"] = headers["content-type"] || "application/json";
+    }
   }
   try {
     const upstreamRes = await fetch(upstream, init);
@@ -974,8 +1018,11 @@ function respondTaskDbUpstreamError(res, err, label) {
 }
 
 function resolveTaskEmployeeId(req) {
+  const actor = req.authUser || {};
+  const actorId = String(actor.employeeId || "").trim();
   const queryId = String(req.query.employeeId || "").trim();
-  const actorId = String((req.authUser && req.authUser.employeeId) || "").trim();
+  // 非经理只能查自己的任务，忽略前端 query 里可能过期的 employeeId
+  if (!isManagerRole(actor.role)) return actorId;
   return queryId || actorId;
 }
 
@@ -1879,6 +1926,8 @@ if (fs.existsSync(spaIndexFile)) {
     ) {
       return res.status(404).type("text/plain").send("Not Found");
     }
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
     res.sendFile(spaIndexFile, (err) => next(err));
   });
 } else {

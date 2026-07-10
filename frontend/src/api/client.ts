@@ -1,4 +1,5 @@
 import { useToastStore } from '@/stores/toast'
+import { isTokenRefreshFailure, parseTokenRefreshResponse } from './token-refresh'
 
 const BASE = ''
 const TOKEN_KEY = 'butler.auth.token'
@@ -68,29 +69,39 @@ function getAuthHeaders(extra?: Record<string, string>, opts?: { skipAuth?: bool
 // 防止并发多次刷新：同一时间只发起一次 refresh 请求
 let _refreshPromise: Promise<string> | null = null
 
+function clearAuthSession() {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(REFRESH_KEY)
+  localStorage.removeItem(USER_KEY)
+  window.dispatchEvent(new CustomEvent('auth:session-expired'))
+}
+
 async function refreshAccessToken(): Promise<string> {
   if (_refreshPromise) return _refreshPromise
   _refreshPromise = (async () => {
     const rt = String(localStorage.getItem(REFRESH_KEY) || '').trim()
-    if (!rt) throw new ApiError(401, 'no_refresh_token')
+    if (!rt) {
+      clearAuthSession()
+      throw new ApiError(401, 'session_expired')
+    }
     const res = await fetch('/token/refresh/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({ refresh: rt }),
     })
-    if (!res.ok) {
-      // refresh token 也失效，清除登录态，通知 App 跳转登录页
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(REFRESH_KEY)
-      localStorage.removeItem('butler.auth.user')
-      window.dispatchEvent(new CustomEvent('auth:session-expired'))
-      throw new ApiError(401, 'refresh_failed')
+    const data = await res.json().catch(() => null)
+    if (isTokenRefreshFailure(data, res.ok)) {
+      clearAuthSession()
+      throw new ApiError(401, 'session_expired')
     }
-    const data = await res.json()
-    const newAccess = String(data?.access || data?.data?.access || '').trim()
-    if (!newAccess) throw new ApiError(401, 'refresh_no_access')
-    localStorage.setItem(TOKEN_KEY, newAccess)
-    return newAccess
+    const { access, refresh } = parseTokenRefreshResponse(data)
+    if (!access) {
+      clearAuthSession()
+      throw new ApiError(401, 'session_expired')
+    }
+    localStorage.setItem(TOKEN_KEY, access)
+    if (refresh) localStorage.setItem(REFRESH_KEY, refresh)
+    return access
   })()
   _refreshPromise.finally(() => { _refreshPromise = null })
   return _refreshPromise
@@ -100,8 +111,10 @@ async function fetchWithAuth(input: RequestInfo, init: RequestInit, retried = fa
   const res = await fetch(input, init)
   if (res.status === 401 && !retried) {
     const rt = String(localStorage.getItem(REFRESH_KEY) || '').trim()
-    // 开发期常见：本地/过期会话无 refresh。不要抛未捕获异常，把 401 交回给上层 catch。
-    if (!rt) return res
+    if (!rt) {
+      clearAuthSession()
+      throw new ApiError(401, 'session_expired')
+    }
     try {
       const newToken = await refreshAccessToken()
       const newInit: RequestInit = {
@@ -114,8 +127,7 @@ async function fetchWithAuth(input: RequestInfo, init: RequestInit, retried = fa
       return fetchWithAuth(input, newInit, true)
     } catch (err) {
       const msg = String((err as Error)?.message || '')
-      // refresh 明确失败时才踢回登录；no_refresh_token 已在上方短路
-      if (msg === 'refresh_failed' || msg === 'refresh_no_access') {
+      if (msg === 'session_expired' || msg === 'refresh_failed' || msg === 'refresh_no_access') {
         throw new ApiError(401, 'session_expired')
       }
       return res

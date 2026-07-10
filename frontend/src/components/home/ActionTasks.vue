@@ -10,6 +10,7 @@ import { getDaysUntilDeadline, deadlineAlertLevel } from '@/composables/useDeadl
 const props = defineProps<{
   refreshSignal?: number
   extraCards?: TaskCard[]
+  initialTasks?: TaskCard[]
 }>()
 
 const auth = useAuthStore()
@@ -145,7 +146,7 @@ const counts = computed(() => {
     const s = getCardStatusByCard(c)
     if (s === 'doing') doing++
     else if (s === 'done') done++
-    else if (s === 'todo') todo++
+    else if (s === 'todo' || s === 'rejected') todo++
   })
   return { todo, doing, done, all: allCards.value.length }
 })
@@ -225,14 +226,22 @@ async function loadStatuses() {
 }
 
 async function boot(force = false) {
+  const employeeId = String(auth.user?.employeeId || '').trim()
+  if (!employeeId) return
   const now = Date.now()
   if (!force && now - lastBootAt < BOOT_MIN_INTERVAL_MS) return
   lastBootAt = now
   try {
-    const cfg = await fetchHomeConfig(auth.user?.employeeId || '')
-    if (cfg.tasks) cards.value = cfg.tasks
-  } catch { /* keep empty */ }
-  await loadStatuses()
+    if (props.initialTasks?.length && !force) {
+      cards.value = props.initialTasks
+    } else {
+      const cfg = await fetchHomeConfig(employeeId)
+      if (cfg.tasks) cards.value = cfg.tasks
+    }
+    await loadStatuses()
+  } catch {
+    /* 会话过期或上游失败 */
+  }
 }
 
 const BOOT_MIN_INTERVAL_MS = 60_000
@@ -251,9 +260,16 @@ onUnmounted(() => { window.removeEventListener('focus', onFocus) })
 watch(
   () => auth.user?.employeeId || '',
   (id) => {
-    if (id) loadStatuses()
+    if (id) void loadStatuses()
   },
   { immediate: true },
+)
+
+watch(
+  () => props.initialTasks,
+  (rows) => {
+    if (rows?.length) cards.value = rows
+  },
 )
 
 watch(

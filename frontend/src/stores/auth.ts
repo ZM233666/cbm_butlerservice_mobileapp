@@ -11,6 +11,7 @@ import {
   isValidRole,
 } from '@/types/user'
 import { fetchUserInfo, fetchLocalUserProfile } from '@/api/users'
+import { clearRequestCache } from '@/api/requestCache'
 import { useI18nStore } from './i18n'
 
 const USER_KEY = 'butler.auth.user'
@@ -145,7 +146,7 @@ export const useAuthStore = defineStore('auth', () => {
       refreshToken.value = rt
       localStorage.setItem(REFRESH_KEY, rt)
     }
-    _lastProfileRefreshAt = Date.now()
+    clearRequestCache()
   }
 
   function logout() {
@@ -156,6 +157,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(USER_KEY)
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REFRESH_KEY)
+    clearRequestCache()
   }
 
   function canAccess(path: string): boolean {
@@ -169,7 +171,10 @@ export const useAuthStore = defineStore('auth', () => {
     const currentToken = String(token.value || '').trim()
     const currentRefresh = String(refreshToken.value || '').trim()
     if (!current || !currentToken) return false
-    if (!force && _lastProfileRefreshAt > 0 && Date.now() - _lastProfileRefreshAt < PROFILE_REFRESH_TTL_MS) {
+    const staleDisplayName =
+      String(current.username || '').trim() === String(current.employeeId || '').trim()
+    const shouldForce = force || staleDisplayName
+    if (!shouldForce && _lastProfileRefreshAt > 0 && Date.now() - _lastProfileRefreshAt < PROFILE_REFRESH_TTL_MS) {
       return true
     }
     try {

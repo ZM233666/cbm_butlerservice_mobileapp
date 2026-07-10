@@ -7,7 +7,7 @@ import { useI18n } from '@/composables/useI18n'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
 import TaskUploadSlot from '@/components/task/TaskUploadSlot.vue'
-import { fetchGuidanceTasks, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit } from '@/api/tasks'
+import { fetchGuidanceTasks, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit, type TaskSubmitResponse } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
 import type { GuidanceRow, TaskDetail } from '@/types/task'
@@ -649,7 +649,7 @@ async function compressImageForUpload(file: File): Promise<File> {
   }
 }
 
-async function handleUpload(slotId: string, event: Event) {
+async function handleUpload(slotId: string, slotLabel: string, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
@@ -677,7 +677,7 @@ async function handleUpload(slotId: string, event: Event) {
       if (geo.accuracy != null) clientMeta.accuracy = geo.accuracy
     }
 
-    const data = await uploadImage(slotId, uploadFile, slotId, clientMeta, {
+    const data = await uploadImage(slotId, uploadFile, slotLabel || slotId, clientMeta, {
       taskId: mainTaskId.value,
       employeeId: auth.user?.employeeId || '',
     })
@@ -777,18 +777,37 @@ function buildTaskSubmitPayload(allowEmptyUploads = false) {
   }
 }
 
+function notifyReportStatus(report: TaskSubmitResponse['report']) {
+  if (!report) return
+  if (report.ok && report.status === 'queued') {
+    toast(t.value.reportQueued, 'success')
+    return
+  }
+  if (report.ok === false) {
+    toast(t.value.reportEnqueueFailed, 'warn')
+  }
+}
+
+async function finalizeSubmit(submitResp: TaskSubmitResponse) {
+  const doneUpdated = await setTaskStatus('done')
+  if (!doneUpdated) {
+    toast('Submit succeeded, but Done status sync failed', 'warn')
+    return
+  }
+  currentTaskStatus.value = 'done'
+  clearTaskListCache()
+  toast(t.value.submitted, 'success')
+  notifyReportStatus(submitResp.report)
+  await wait(900)
+  homeRefreshStamp.value = Date.now()
+  router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
+}
+
 async function onSubmit() {
   if (!isSubmitReady.value) { submitConfirmOpen.value = true; return }
   try {
-    await postTaskSubmit(buildTaskSubmitPayload())
-    const doneUpdated = await setTaskStatus('done')
-    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed', 'warn'); return }
-    currentTaskStatus.value = 'done'
-    clearTaskListCache()
-    toast(t.value.submitted, 'success')
-    await wait(900)
-    homeRefreshStamp.value = Date.now()
-    router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
+    const submitResp = await postTaskSubmit(buildTaskSubmitPayload())
+    await finalizeSubmit(submitResp)
   } catch { toast('Submit failed', 'error') }
 }
 
@@ -796,15 +815,8 @@ async function confirmSubmitWithMissingUploads() {
   submitConfirmOpen.value = false
   try {
     const hasAnyUpload = Object.values(uploadRecords.value).some((row) => String(row?.url || '').trim())
-    await postTaskSubmit(buildTaskSubmitPayload(!hasAnyUpload))
-    const doneUpdated = await setTaskStatus('done')
-    if (!doneUpdated) { toast('Submit succeeded, but Done status sync failed', 'warn'); return }
-    currentTaskStatus.value = 'done'
-    clearTaskListCache()
-    toast(t.value.submitted, 'success')
-    await wait(900)
-    homeRefreshStamp.value = Date.now()
-    router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
+    const submitResp = await postTaskSubmit(buildTaskSubmitPayload(!hasAnyUpload))
+    await finalizeSubmit(submitResp)
   } catch { toast('Submit failed', 'error') }
 }
 
@@ -934,7 +946,7 @@ onUnmounted(() => {
                           :image-url="displayedUploadUrl(btn.slot)"
                           :uploading="!!uploadingSlots[btn.slot]"
                           :meta-lines="uploadMetaLines(btn.slot)"
-                          @change="handleUpload(btn.slot, $event)"
+                          @change="handleUpload(btn.slot, btn.label, $event)"
                         />
                       </div>
                     </template>

@@ -27,6 +27,7 @@ const {
   postTaskStatusToDb,
   fetchSubmitLatestFromDb,
   postTaskSubmitToDb,
+  postReportGenerateToDb,
   postTaskDraftToDb,
   fetchManagerDashboardFromDb,
   postManagerAssignmentToDb,
@@ -842,6 +843,7 @@ function buildTaskUploadFilename(req, file) {
   return buildNormalizedTaskFilename({
     taskId: body.taskId || body.mainTaskId,
     slotId: body.slotId,
+    slotLabel: body.clientDisplayName || body.slotLabel,
     employeeId: body.employeeId,
     ext,
   });
@@ -856,7 +858,13 @@ function finalizeTaskUploadFilename(req, file) {
   if (!taskId && !slotId && !employeeId) return file.filename;
 
   const ext = path.extname(file.filename) || path.extname(file.originalname) || ".jpg";
-  const desired = buildNormalizedTaskFilename({ taskId, slotId, employeeId, ext });
+  const desired = buildNormalizedTaskFilename({
+    taskId,
+    slotId,
+    slotLabel: body.clientDisplayName || body.slotLabel,
+    employeeId,
+    ext,
+  });
   if (desired === file.filename) return file.filename;
 
   const currentPath = file.path || path.join(cfg.uploadsDir, file.filename);
@@ -1892,12 +1900,38 @@ app.post("/api/task-submit", async (req, res) => {
           "",
       ).trim(),
     );
+
+    let report = null;
+    const markDone = payload.markDone !== false;
+    const taskPk = data && data.id != null ? Number(data.id) : NaN;
+    if (markDone && Number.isInteger(taskPk) && taskPk > 0) {
+      try {
+        const reportData = await postReportGenerateToDb(taskPk, token);
+        report = {
+          ok: true,
+          status: String((reportData && reportData.status) || "queued").trim() || "queued",
+          queue: String((reportData && reportData.queue) || "").trim() || undefined,
+          celeryTaskId: String((reportData && reportData.task_id) || "").trim() || undefined,
+        };
+      } catch (reportErr) {
+        error("Report generation enqueue failed after task submit", reportErr);
+        report = {
+          ok: false,
+          status: "failed",
+          error: String((reportErr && reportErr.message) || "report_enqueue_failed"),
+        };
+      }
+    }
+
     return res.json({
       ok: true,
+      taskId: data && data.taskId ? data.taskId : undefined,
+      id: data && data.id != null ? data.id : undefined,
       status: data && data.status ? data.status : undefined,
       uploads: data && data.uploads ? data.uploads : undefined,
       issues: data && data.issues ? data.issues : undefined,
       updatedSeqCount: data && data.updatedSeqCount != null ? data.updatedSeqCount : undefined,
+      report,
     });
   } catch (err) {
     return respondTaskDbUpstreamError(res, err, "Django task-submit");

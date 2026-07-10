@@ -26,16 +26,31 @@ test("timestampCompact is YYYYMMDDHHmmss", () => {
   assert.equal(ts, "20260415083045");
 });
 
-test("buildNormalizedTaskFilename follows task__slot__employee__ts__rand.ext", () => {
+test("buildNormalizedTaskFilename follows task__label__employee__ts__rand.ext", () => {
   const name = buildNormalizedTaskFilename({
     taskId: "MT-CCBII-88521",
-    slotId: "slot-1",
+    slotId: "r3-IPM-PN",
+    slotLabel: "IPM PN",
     employeeId: "20005303",
     ext: ".png",
     now: new Date("2026-04-15T08:30:45.123Z"),
   });
   assert.match(
     name,
-    /^MT-CCBII-88521__slot-1__20005303__20260415083045__[a-z0-9]{4}\.png$/,
+    /^MT-CCBII-88521__IPM_PN__20005303__20260415083045__[a-z0-9]{4}\.png$/,
+  );
+});
+
+test("buildNormalizedTaskFilename falls back to slotId when label empty", () => {
+  const name = buildNormalizedTaskFilename({
+    taskId: "MT-CCBII-88521",
+    slotId: "r3-IPM-PN",
+    employeeId: "20005303",
+    ext: ".png",
+    now: new Date("2026-04-15T08:30:45.123Z"),
+  });
+  assert.match(
+    name,
+    /^MT-CCBII-88521__r3-IPM-PN__20005303__20260415083045__[a-z0-9]{4}\.png$/,
   );
 });

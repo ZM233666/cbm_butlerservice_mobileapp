@@ -1,6 +1,6 @@
 /**
  * 任务图片规范化命名：
- * {task_no}__{slot_id}__{employee_no}__{YYYYMMDDHHmmss}__{rand4}.{ext}
+ * {task_no}__{button_label}__{employee_no}__{YYYYMMDDHHmmss}__{rand4}.{ext}
  */
 function sanitizePart(raw, fallback = "na") {
   const text = String(raw || "")
@@ -23,13 +23,13 @@ function timestampCompact(date = new Date()) {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
 }
 
-function buildNormalizedTaskFilename({ taskId, slotId, employeeId, ext, now } = {}) {
+function buildNormalizedTaskFilename({ taskId, slotId, slotLabel, employeeId, ext, now } = {}) {
   const task = sanitizePart(taskId, "notask");
-  const slot = sanitizePart(slotId, "noslot");
+  const label = sanitizePart(slotLabel, "") || sanitizePart(slotId, "noslot");
   const employee = sanitizePart(employeeId, "noemp");
   const ts = timestampCompact(now instanceof Date ? now : new Date());
   const rand = Math.random().toString(36).slice(2, 6);
-  return `${task}__${slot}__${employee}__${ts}__${rand}${normalizeExt(ext)}`;
+  return `${task}__${label}__${employee}__${ts}__${rand}${normalizeExt(ext)}`;
 }
 
 function buildLegacyUploadFilename(ext) {

@@ -168,6 +168,29 @@ async function postTaskSubmitToDb(body, token, projectRoot) {
   });
 }
 
+/** 任务提交成功后触发报告生成（异步队列，不阻塞主流程）。 */
+async function postReportGenerateToDb(taskPk, token, options = {}) {
+  const id = Number(taskPk);
+  if (!Number.isInteger(id) || id < 1) {
+    const err = new Error("report_task_id_required");
+    err.status = 400;
+    throw err;
+  }
+  const opts = options && typeof options === "object" ? options : {};
+  return fetchDjangoJson("/api/report/generate/", {
+    token,
+    method: "POST",
+    body: {
+      task_id: id,
+      template_code: String(opts.template_code || "report_template").trim() || "report_template",
+      options: {
+        trigger_workflow: opts.trigger_workflow !== false,
+        emit_pdf: opts.emit_pdf !== false,
+      },
+    },
+  });
+}
+
 async function postTaskDraftToDb(body, token, projectRoot) {
   const payload = body && typeof body === "object" ? { ...body } : {};
   payload.slotSeqMap = buildSlotSeqMap(projectRoot);
@@ -265,6 +288,7 @@ module.exports = {
   postTaskStatusToDb,
   fetchSubmitLatestFromDb,
   postTaskSubmitToDb,
+  postReportGenerateToDb,
   postTaskDraftToDb,
   fetchManagerDashboardFromDb,
   postManagerAssignmentToDb,

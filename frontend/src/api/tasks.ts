@@ -73,8 +73,19 @@ export function fetchGuidanceTasks() {
   return apiGet<{ rows: import('@/types/task').GuidanceRow[] }>('/data/brake-guidance-tasks.json')
 }
 
+export interface TaskSubmitResponse {
+  ok?: boolean
+  id?: number
+  taskId?: string
+  report?: {
+    ok?: boolean
+    status?: string
+    error?: string
+  }
+}
+
 export function postTaskSubmit(body: unknown) {
-  return apiPost('/api/task-submit', body).then((data) => {
+  return apiPost<TaskSubmitResponse>('/api/task-submit', body).then((data) => {
     const employeeId = String(
       (body as any)?.basicInfo?.employeeId || (body as any)?.employeeId || '',
     ).trim()

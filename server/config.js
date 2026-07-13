@@ -23,6 +23,23 @@ function buildConfig(projectRoot) {
   const skipServerExifRaw = String(env.UPLOAD_SKIP_SERVER_EXIF || "1").trim().toLowerCase();
   const uploadSkipServerExifWhenClientGeo =
     skipServerExifRaw === "1" || skipServerExifRaw === "true" || skipServerExifRaw === "yes";
+  // Align with Django MEDIA_ROOT/uploads/task so Celery report generation can find images.
+  const defaultUploadsDir = path.resolve(
+    projectRoot,
+    "..",
+    "butler-service",
+    "backend",
+    "media",
+    "uploads",
+    "task"
+  );
+  const legacyUploadsDir = path.join(projectRoot, "server", "uploads", "task");
+  const uploadsDirRaw = String(env.UPLOADS_DIR || "").trim();
+  const uploadsDir = uploadsDirRaw
+    ? path.isAbsolute(uploadsDirRaw)
+      ? uploadsDirRaw
+      : path.resolve(projectRoot, uploadsDirRaw)
+    : defaultUploadsDir;
   return {
     env: env.NODE_ENV || "development",
     host: String(env.HOST || "0.0.0.0"),
@@ -32,7 +49,8 @@ function buildConfig(projectRoot) {
     projectRoot,
     publicDir: path.join(projectRoot, "public"),
     picSamplesDir: path.join(projectRoot, "PicSamples"),
-    uploadsDir: path.join(projectRoot, "server", "uploads", "task"),
+    uploadsDir,
+    legacyUploadsDir,
     certUploadsDir: path.join(projectRoot, "server", "uploads", "certificates"),
     manifestPath: path.join(projectRoot, "server", "uploads", "upload-manifest.jsonl"),
     recordsDataPath: resolveFromProject(projectRoot, env.RECORDS_DATA_PATH, "server/data/records.json"),

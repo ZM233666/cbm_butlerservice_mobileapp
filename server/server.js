@@ -1748,6 +1748,10 @@ app.get("/RVSChinaDT_Logo.png", (_req, res) => {
 
 app.use("/PicSamples", express.static(cfg.picSamplesDir));
 app.use("/uploads/task", express.static(cfg.uploadsDir));
+// 兼容历史落盘目录（改指向 Django media 之前的 Node 本地 uploads）
+if (cfg.legacyUploadsDir && cfg.legacyUploadsDir !== cfg.uploadsDir) {
+  app.use("/uploads/task", express.static(cfg.legacyUploadsDir));
+}
 app.use("/uploads/certificates", express.static(cfg.certUploadsDir));
 // 兼容 TaskList 子任务数据：即便启用 Vue dist，也始终从 public/data 提供静态 JSON
 app.use("/data", express.static(path.join(cfg.publicDir, "data")));
@@ -1903,22 +1907,42 @@ app.post("/api/task-submit", async (req, res) => {
 
     let report = null;
     const markDone = payload.markDone !== false;
-    const taskPk = data && data.id != null ? Number(data.id) : NaN;
-    if (markDone && Number.isInteger(taskPk) && taskPk > 0) {
-      try {
-        const reportData = await postReportGenerateToDb(taskPk, token);
-        report = {
-          ok: true,
-          status: String((reportData && reportData.status) || "queued").trim() || "queued",
-          queue: String((reportData && reportData.queue) || "").trim() || undefined,
-          celeryTaskId: String((reportData && reportData.task_id) || "").trim() || undefined,
-        };
-      } catch (reportErr) {
-        error("Report generation enqueue failed after task submit", reportErr);
+    const upstreamReport = data && data.report && typeof data.report === "object" ? data.report : null;
+    // 优先使用 Django 提交接口内入队结果，避免二次调用失败导致漏触发
+    if (upstreamReport) {
+      const status = String(upstreamReport.status || "").trim() || (upstreamReport.ok === false ? "failed" : "queued");
+      report = {
+        ok: upstreamReport.ok !== false && status !== "failed",
+        status,
+        queue: String(upstreamReport.queue || "").trim() || undefined,
+        celeryTaskId: String(upstreamReport.celeryTaskId || upstreamReport.task_id || "").trim() || undefined,
+        error: upstreamReport.error ? String(upstreamReport.error) : undefined,
+      };
+    } else if (markDone) {
+      const taskPk = data && data.id != null ? Number(data.id) : NaN;
+      if (Number.isInteger(taskPk) && taskPk > 0) {
+        try {
+          const reportData = await postReportGenerateToDb(taskPk, token);
+          report = {
+            ok: true,
+            status: String((reportData && reportData.status) || "queued").trim() || "queued",
+            queue: String((reportData && reportData.queue) || "").trim() || undefined,
+            celeryTaskId: String((reportData && reportData.task_id) || "").trim() || undefined,
+          };
+        } catch (reportErr) {
+          error("Report generation enqueue failed after task submit", reportErr);
+          report = {
+            ok: false,
+            status: "failed",
+            error: String((reportErr && reportErr.message) || "report_enqueue_failed"),
+          };
+        }
+      } else {
+        error("Report generation skipped: missing task id after submit", { taskId: data && data.taskId });
         report = {
           ok: false,
           status: "failed",
-          error: String((reportErr && reportErr.message) || "report_enqueue_failed"),
+          error: "report_task_id_required",
         };
       }
     }
@@ -2003,6 +2027,7 @@ server.listen(cfg.port, cfg.host, () => {
   info(`Local HMAC auth: ${ALLOW_LOCAL_AUTH ? "enabled" : "disabled"}`);
   info(`Skip remote auth: ${SKIP_REMOTE_AUTH ? "enabled" : "disabled"}`);
   info(`Task data source: ${isTaskDataFromDb() ? "db" : "json"}`);
+  info(`Uploads dir: ${cfg.uploadsDir}`);
   info(`Auth cache TTL: ${djangoAuthCache.ttlMs}ms`);
   const lanUrls = getLanIPv4Urls(cfg.port);
   if (lanUrls.length) {

@@ -57,6 +57,10 @@ export interface HomeConfig {
   ok: boolean
   tasks: TaskCard[]
   recommendations?: TaskCard[]
+  upload?: {
+    maxBytes?: number
+    allowedContentTypePrefixes?: string[]
+  }
 }
 
 export interface TaskStatusEntry {

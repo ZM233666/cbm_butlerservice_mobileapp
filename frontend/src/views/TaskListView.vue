@@ -7,7 +7,7 @@ import { useI18n } from '@/composables/useI18n'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
 import TaskUploadSlot from '@/components/task/TaskUploadSlot.vue'
-import { fetchGuidanceTasks, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit, type TaskSubmitResponse } from '@/api/tasks'
+import { fetchGuidanceTasks, fetchHomeConfig, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit, type TaskSubmitResponse } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
 import type { GuidanceRow, TaskDetail } from '@/types/task'
@@ -24,6 +24,7 @@ const { lang, t } = useI18n()
 const toastStore = useToastStore()
 
 const SCHEMATIC_SEQS = new Set(['1','2','3','3.1','3.2','3.3','4','5','5.1','6','6.1','7','8','8.1','8.2','9','9.1','10','11','11.1','12','13','14','15','17.1','17.2','17.3','17.4','17.5','17.6'])
+const FALLBACK_UPLOAD_MAX_BYTES = 30 * 1024 * 1024
 
 const maintType = ref<'c4c6' | 'c1c3'>('c4c6')
 const taskDetail = ref<TaskDetail | null>(null)
@@ -32,6 +33,8 @@ const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['
 const localPreviewRecords = ref<Record<string, string>>({})
 const uploadingSlots = ref<Record<string, boolean>>({})
 const issueRecords = ref<Record<string, { text: string; updatedAt: string }>>({})
+const uploadMaxBytes = ref(FALLBACK_UPLOAD_MAX_BYTES)
+const uploadAllowedContentTypePrefixes = ref(['image/'])
 
 const schematicOpen = ref(false)
 const schematicSrc = ref('')
@@ -192,6 +195,51 @@ const editRequestSentText = computed(() => {
 
 function toast(msg: string, type: Parameters<typeof toastStore.show>[1] = 'info', duration = 2200) {
   toastStore.show(msg, type, duration)
+}
+
+function formatUploadLimit(bytes: number) {
+  const mb = bytes / 1024 / 1024
+  return Number.isInteger(mb) ? String(mb) : mb.toFixed(1)
+}
+
+function uploadTooLargeMessage() {
+  const mb = formatUploadLimit(uploadMaxBytes.value)
+  return lang.value === 'zh' ? `图片不能超过 ${mb}MB` : `Image must be ${mb}MB or smaller`
+}
+
+function invalidUploadTypeMessage() {
+  return lang.value === 'zh' ? '只能上传图片文件' : 'Only image files can be uploaded'
+}
+
+function normalizeUploadMaxBytes(value: unknown) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : FALLBACK_UPLOAD_MAX_BYTES
+}
+
+function normalizeContentTypePrefixes(value: unknown) {
+  if (!Array.isArray(value)) return ['image/']
+  const prefixes = value.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean)
+  return prefixes.length ? prefixes : ['image/']
+}
+
+function applyUploadConfig(upload?: { maxBytes?: number; allowedContentTypePrefixes?: string[] }) {
+  uploadMaxBytes.value = normalizeUploadMaxBytes(upload?.maxBytes)
+  uploadAllowedContentTypePrefixes.value = normalizeContentTypePrefixes(upload?.allowedContentTypePrefixes)
+}
+
+function isAllowedUploadType(file: File) {
+  const contentType = String(file.type || '').trim().toLowerCase()
+  if (!contentType) return false
+  return uploadAllowedContentTypePrefixes.value.some((prefix) => contentType.startsWith(prefix))
+}
+
+async function loadUploadConfig(employeeId: string) {
+  try {
+    const cfg = await fetchHomeConfig(employeeId)
+    applyUploadConfig(cfg.upload)
+  } catch {
+    applyUploadConfig()
+  }
 }
 
 function wait(ms: number) {
@@ -515,6 +563,7 @@ async function hydrateTaskPage() {
   }
 
   if (auth.user?.employeeId) {
+    await loadUploadConfig(auth.user.employeeId)
     try {
       if (mainTaskId.value) {
         const detailData = await fetchTaskDetail(mainTaskId.value)
@@ -653,6 +702,11 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  if (!isAllowedUploadType(file)) {
+    toast(invalidUploadTypeMessage(), 'error')
+    input.value = ''
+    return
+  }
   const previewUrl = URL.createObjectURL(file)
   cleanupLocalPreview(slotId)
   localPreviewRecords.value[slotId] = previewUrl
@@ -662,6 +716,12 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   try {
     const uploadFile = await compressImageForUpload(file)
+    if (uploadFile.size > uploadMaxBytes.value) {
+      toast(uploadTooLargeMessage(), 'error')
+      cleanupLocalPreview(slotId)
+      input.value = ''
+      return
+    }
     const geoPromise = isGeoFresh() ? Promise.resolve(lastGeo) : getGeo(2500)
     const exifMeta = await readExifMeta(file)
     const geo = (exifMeta.latitude != null && exifMeta.longitude != null) ? null : await geoPromise

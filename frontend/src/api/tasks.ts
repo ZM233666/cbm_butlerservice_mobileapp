@@ -37,10 +37,17 @@ export interface CreateTaskCentrePayload {
   deadline: string
   title?: string
   status?: 'todo' | 'doing' | 'done'
+  source?: string
+  assignedBy?: string
 }
 
 export function createTaskCentreTask(payload: CreateTaskCentrePayload) {
-  return apiPost<{ ok: boolean; task?: unknown; card?: TaskCentreResponse['tasks'][0] }>('/api/task-centre', payload).then((data) => {
+  const body = {
+    ...payload,
+    source: payload.source || 'mini_app',
+    assignedBy: payload.assignedBy || payload.employeeId,
+  }
+  return apiPost<{ ok: boolean; task?: unknown; card?: TaskCentreResponse['tasks'][0] }>('/api/task-centre', body).then((data) => {
     clearRequestCache(`task-centre:${payload.employeeId}`)
     clearRequestCache(`home-config:${payload.employeeId}`)
     return data

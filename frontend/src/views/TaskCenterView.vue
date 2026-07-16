@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -26,12 +26,16 @@ function todayIso(): string {
 }
 
 const auth = useAuthStore()
-const { lang, t } = useI18n()
+const { t } = useI18n()
 const selectedMonth = ref(nowMonth())
 const toast = useToastStore()
 const todayMin = computed(() => todayIso())
 const adding = ref(false)
 const loading = ref(false)
+const hasLoadError = ref(false)
+
+let loadVersion = 0
+let addVersion = 0
 
 const form = ref({
   template: 'c1c3' as TaskTemplate,
@@ -45,13 +49,40 @@ const form = ref({
 const centre = ref<TaskCentreResponse | null>(null)
 const checklistCounts = ref({ c1c3: 19, c4c6: 45 })
 
+const employeeId = computed(() => String(auth.user?.employeeId || '').trim())
+
+const loadError = computed(() =>
+  hasLoadError.value ? t.value.tcLoadFail : '',
+)
+
+const hasCentreData = computed(() => centre.value != null)
+
+const loadingMessage = computed(() =>
+  hasCentreData.value ? t.value.tcRefreshing : t.value.tcLoading,
+)
+
+const showWorkload = computed(() =>
+  !!employeeId.value && !hasLoadError.value && (hasCentreData.value || !loading.value),
+)
+
 const monthStatusByMonth = computed(() => centre.value?.monthStatusByMonth || {})
 const totalServices = computed(() => centre.value?.stats.all ?? 0)
 const todoServices = computed(() => centre.value?.stats.todo ?? 0)
 const doingServices = computed(() => centre.value?.stats.doing ?? 0)
 const completedServices = computed(() => centre.value?.stats.done ?? 0)
-const trainStats = computed(() => centre.value?.stats.byTrainModel ?? [])
-const attachmentStats = computed(() => centre.value?.stats.attachment ?? { uploaded: 0, required: 0, percent: 0 })
+const trainStats = computed(() => {
+  const rows = centre.value?.stats.byTrainModel
+  return Array.isArray(rows) ? rows : []
+})
+const attachmentStats = computed(() => {
+  const raw = centre.value?.stats.attachment
+  if (!raw || typeof raw !== 'object') return { uploaded: 0, required: 0, percent: 0 }
+  return {
+    uploaded: Number(raw.uploaded) || 0,
+    required: Number(raw.required) || 0,
+    percent: Number(raw.percent) || 0,
+  }
+})
 
 watch(() => form.value.template, (v) => {
   if (v === 'c1c3') form.value.requiredAttachments = checklistCounts.value.c1c3
@@ -78,39 +109,55 @@ const canAddTask = computed(() => {
 })
 
 async function loadCentre() {
-  const employeeId = String(auth.user?.employeeId || '').trim()
-  if (!employeeId) {
+  const id = employeeId.value
+  const currentVersion = ++loadVersion
+
+  if (!id) {
     centre.value = null
+    loading.value = false
+    hasLoadError.value = false
     return
   }
+
   loading.value = true
+  hasLoadError.value = false
+
   try {
-    const data = await fetchTaskCentre(employeeId, selectedMonth.value)
+    const data = await fetchTaskCentre(id, selectedMonth.value)
+    if (currentVersion !== loadVersion) return
+
     centre.value = data
-    if (data?.checklistCounts) {
-      checklistCounts.value = data.checklistCounts
-      if (form.value.template === 'c1c3') form.value.requiredAttachments = data.checklistCounts.c1c3
-      else if (form.value.template === 'c4c6') form.value.requiredAttachments = data.checklistCounts.c4c6
+    const counts = data?.checklistCounts
+    if (counts && typeof counts === 'object') {
+      checklistCounts.value = {
+        c1c3: Number(counts.c1c3) || checklistCounts.value.c1c3,
+        c4c6: Number(counts.c4c6) || checklistCounts.value.c4c6,
+      }
+      if (form.value.template === 'c1c3') form.value.requiredAttachments = checklistCounts.value.c1c3
+      else if (form.value.template === 'c4c6') form.value.requiredAttachments = checklistCounts.value.c4c6
     }
   } catch {
+    if (currentVersion !== loadVersion) return
     centre.value = null
+    hasLoadError.value = true
   } finally {
-    loading.value = false
+    if (currentVersion === loadVersion) loading.value = false
   }
 }
 
-onMounted(() => {
-  loadCentre()
-})
-
 watch(
-  () => auth.user?.employeeId || '',
-  () => { loadCentre() },
+  [employeeId, selectedMonth],
+  ([id], prev) => {
+    addVersion += 1
+    const prevId = prev?.[0]
+    if (id !== prevId) {
+      centre.value = null
+      hasLoadError.value = false
+    }
+    void loadCentre()
+  },
+  { immediate: true },
 )
-
-watch(selectedMonth, () => {
-  loadCentre()
-})
 
 function templateTitle(tp: TaskTemplate) {
   if (tp === 'c1c3') return t.value.tcTemplateC1C3
@@ -120,17 +167,23 @@ function templateTitle(tp: TaskTemplate) {
 
 async function addTask() {
   if (adding.value || !canAddTask.value) return
-  const employeeId = auth.user?.employeeId || ''
-  if (!employeeId) return
+  const id = employeeId.value
+  if (!id) return
+
+  const currentAddVersion = addVersion
   adding.value = true
   const name = form.value.template === 'custom'
     ? form.value.customName.trim()
-    : `${templateTitle(form.value.template)} Service`
-  if (!name) { adding.value = false; return }
+    : `${templateTitle(form.value.template)}${t.value.tcServiceSuffix}`
+  if (!name) {
+    adding.value = false
+    return
+  }
+
   try {
     const maint = form.value.template === 'c1c3' ? 'c1c3' : 'c4c6'
     await createTaskCentreTask({
-      employeeId,
+      employeeId: id,
       maint,
       trainNo: form.value.trainModel.trim(),
       depot: form.value.serviceCity.trim(),
@@ -138,21 +191,28 @@ async function addTask() {
       title: name,
       status: 'doing',
     })
+
+    if (currentAddVersion !== addVersion || employeeId.value !== id) return
+
     const endMonth = String(form.value.endDate || '').slice(0, 7)
     if (endMonth && endMonth !== selectedMonth.value) {
       selectedMonth.value = endMonth
     } else {
       await loadCentre()
     }
+    if (currentAddVersion !== addVersion || employeeId.value !== id) return
     toast.show(t.value.tcAdded, 'success', 1800)
+
+    form.value.customName = ''
+    form.value.trainModel = ''
+    form.value.serviceCity = ''
+    form.value.endDate = ''
   } catch {
-    toast.show(lang.value === 'zh' ? '创建任务失败' : 'Failed to create task', 'error', 2200)
+    if (currentAddVersion !== addVersion || employeeId.value !== id) return
+    toast.show(t.value.tcCreateFail, 'error', 2200)
+  } finally {
+    if (currentAddVersion === addVersion) adding.value = false
   }
-  form.value.customName = ''
-  form.value.trainModel = ''
-  form.value.serviceCity = ''
-  form.value.endDate = ''
-  setTimeout(() => { adding.value = false }, 450)
 }
 </script>
 
@@ -167,7 +227,16 @@ async function addTask() {
         </label>
       </section>
 
-      <section class="tc-card">
+      <div v-if="loading" class="tc-status tc-status--loading" role="status" aria-live="polite">
+        {{ loadingMessage }}
+      </div>
+
+      <div v-else-if="loadError" class="tc-status tc-status--error" role="alert">
+        <p>{{ loadError }}</p>
+        <button type="button" class="tc-status__retry" @click="loadCentre">{{ t.tcRetry }}</button>
+      </div>
+
+      <section v-if="showWorkload" class="tc-card">
         <h2 class="tc-title">{{ t.tcWorkload }}</h2>
         <div class="tc-kpis tc-kpis--summary">
           <article class="tc-kpi tc-kpi--all">
@@ -209,26 +278,26 @@ async function addTask() {
       <section class="tc-card">
         <h2 class="tc-title">{{ t.tcAddSelfTask }}</h2>
         <div class="tc-form">
-          <section class="tc-step" aria-label="Step 1">
+          <section class="tc-step" :aria-label="t.tcStep1Title">
             <header class="tc-step__head">
               <span class="tc-step__no" aria-hidden="true">1</span>
               <div class="tc-step__copy">
-                <p class="tc-step__title">{{ lang === 'zh' ? '选车与位置' : 'Vehicle & Location' }}</p>
-                <p class="tc-step__sub">{{ lang === 'zh' ? '车号 / 地点' : 'Train No. / Service Location' }}</p>
+                <p class="tc-step__title">{{ t.tcStep1Title }}</p>
+                <p class="tc-step__sub">{{ t.tcStep1Sub }}</p>
               </div>
             </header>
             <div class="tc-step__fields">
-              <label><span>{{ t.tcServiceCity }}</span><input v-model="form.serviceCity" :placeholder="lang === 'zh' ? '如：上海机务段' : 'e.g. Shanghai Depot'" /></label>
+              <label><span>{{ t.tcServiceCity }}</span><input v-model="form.serviceCity" :placeholder="t.tcDepotPlaceholder" /></label>
               <label><span>{{ t.tcTrainModel }}</span><input v-model="form.trainModel" :placeholder="t.tcTrainPlaceholder" /></label>
             </div>
           </section>
 
-          <section class="tc-step" aria-label="Step 2">
+          <section class="tc-step" :aria-label="t.tcStep2Title">
             <header class="tc-step__head">
               <span class="tc-step__no" aria-hidden="true">2</span>
               <div class="tc-step__copy">
-                <p class="tc-step__title">{{ lang === 'zh' ? '选标准' : 'Standard' }}</p>
-                <p class="tc-step__sub">{{ lang === 'zh' ? '维保级别 / 自动带出检查项' : 'Maintenance level / Auto checklist' }}</p>
+                <p class="tc-step__title">{{ t.tcStep2Title }}</p>
+                <p class="tc-step__sub">{{ t.tcStep2Sub }}</p>
               </div>
             </header>
             <div class="tc-step__fields tc-step__fields--standard">
@@ -240,19 +309,19 @@ async function addTask() {
                   <option value="custom">{{ t.tcTemplateCustom }}</option>
                 </select>
               </label>
-              <span class="tc-step__pill tc-step__pill--inline" :title="lang === 'zh' ? '自动带出检查项数量' : 'Auto checklist count'">
-                {{ lang === 'zh' ? `检查项 ${form.requiredAttachments} 项` : `${form.requiredAttachments} items` }}
+              <span class="tc-step__pill tc-step__pill--inline" :title="t.tcChecklistCountTitle">
+                {{ t.tcChecklistCount.replace('{n}', String(form.requiredAttachments)) }}
               </span>
               <label v-if="form.template === 'custom'" class="tc-step__field--full"><span>{{ t.tcCustomName }}</span><input v-model="form.customName" :placeholder="t.tcCustomPlaceholder" /></label>
             </div>
           </section>
 
-          <section class="tc-step" aria-label="Step 3">
+          <section class="tc-step" :aria-label="t.tcStep3Title">
             <header class="tc-step__head">
               <span class="tc-step__no" aria-hidden="true">3</span>
               <div class="tc-step__copy">
-                <p class="tc-step__title">{{ lang === 'zh' ? '定时间并确认' : 'Schedule & Confirm' }}</p>
-                <p class="tc-step__sub">{{ lang === 'zh' ? '选择日期后提交' : 'Pick a date then submit' }}</p>
+                <p class="tc-step__title">{{ t.tcStep3Title }}</p>
+                <p class="tc-step__sub">{{ t.tcStep3Sub }}</p>
               </div>
             </header>
             <div class="tc-step__fields">
@@ -282,6 +351,54 @@ async function addTask() {
 
 <style scoped>
 .tc-main { display: flex; flex-direction: column; gap: 0.8rem; padding: 0.95rem 1rem 0.8rem; }
+.tc-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 0.88rem;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+}
+.tc-status--loading { color: #8a94a6; }
+.tc-status--loading::before {
+  content: '';
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid #00467f;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: tc-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.tc-status--error {
+  flex-direction: column;
+  color: #64748b;
+  text-align: center;
+}
+.tc-status--error p { margin: 0; }
+.tc-status__retry {
+  padding: 0.45rem 1.2rem;
+  border: none;
+  border-radius: 8px;
+  background: #00467f;
+  color: #fff;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.tc-status__retry:hover { filter: brightness(1.06); }
+.tc-status__retry:focus-visible {
+  outline: 3px solid rgba(0, 69, 126, 0.25);
+  outline-offset: 3px;
+}
+.tc-status__retry:active { transform: scale(0.98); }
+@keyframes tc-spin { to { transform: rotate(360deg); } }
 .tc-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 0.8rem; box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06); }
 .tc-title {
   margin: 0 0 0.72rem;
@@ -302,8 +419,19 @@ async function addTask() {
   font-weight: 760;
   color: #24476f;
 }
-.tc-month :deep(.mp) { flex: 0 0 30%; width: 30%; max-width: 30%; min-width: 0; }
-.tc-month :deep(.mp__control) { width: 100%; }
+.tc-month :deep(.mp) {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 9.2rem;
+  max-width: min(48%, 11rem);
+}
+.tc-month :deep(.mp__control) {
+  width: 100%;
+  min-width: 9.2rem;
+}
+.tc-month :deep(.mp__value) {
+  white-space: nowrap;
+}
 .tc-kpis { display: grid; gap: 0.5rem; }
 .tc-kpis--summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tc-kpi {
@@ -526,5 +654,9 @@ async function addTask() {
   .tc-step__fields { grid-template-columns: 1fr; }
   .tc-kpis--summary { grid-template-columns: 1fr; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .tc-status--loading::before,
+  .tc-add__spinner { animation: none; border-right-color: #00467f; border-top-color: rgba(255,255,255,1); }
+  .tc-status__retry:active { transform: none; }
+}
 </style>
-

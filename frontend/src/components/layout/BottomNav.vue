@@ -33,30 +33,99 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
       :class="{ 'is-active': route.path === item.to }"
       :aria-current="route.path === item.to ? 'page' : undefined"
     >
+      <!-- Home -->
       <svg v-if="item.icon === 'home'" class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path fill="currentColor" stroke="none" d="M12 4L4 10.5h16L12 4z" />
-        <path fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" d="M5 10.5V20h4v-6h6v6h4V10.5" />
+        <path
+          class="bottom-nav__glyph--outline"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M4.5 10.8 12 4.5l7.5 6.3V19a1.5 1.5 0 0 1-1.5 1.5h-3.6v-5.2h-4.8V20.5H6A1.5 1.5 0 0 1 4.5 19V10.8Z"
+        />
+        <path
+          class="bottom-nav__glyph--fill"
+          fill="currentColor"
+          d="M12 3.6 3.7 10.6a.9.9 0 0 0-.3.65V19a2.2 2.2 0 0 0 2.2 2.2h4.1v-5.6h4.6v5.6h4.1A2.2 2.2 0 0 0 20.6 19v-7.75a.9.9 0 0 0-.3-.65L12 3.6Z"
+        />
       </svg>
-      <svg v-else-if="item.icon === 'assignments'" class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.65" />
-        <path d="M8 9.25h8M8 12h5" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" />
-        <path d="m13.5 15.5 1.6 1.6 3-3.6" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" />
+
+      <!-- Assignments -->
+      <svg v-else-if="item.icon === 'assignments'" class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          class="bottom-nav__glyph--outline"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M8.2 4.5h7.6A2.2 2.2 0 0 1 18 6.7v12.6A2.2 2.2 0 0 1 15.8 21.5H8.2A2.2 2.2 0 0 1 6 19.3V6.7A2.2 2.2 0 0 1 8.2 4.5Z"
+        />
+        <path class="bottom-nav__glyph--outline" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M9.2 9.4h5.6M9.2 13h5.6M9.2 16.6h3.4" />
+        <path class="bottom-nav__glyph--outline" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M9.4 3.4h5.2" />
+        <path
+          class="bottom-nav__glyph--fill"
+          fill="currentColor"
+          d="M8.2 3.7h7.6A3 3 0 0 1 18.8 6.7v12.6a3 3 0 0 1-3 3H8.2a3 3 0 0 1-3-3V6.7a3 3 0 0 1 3-3Zm1.4 5.2a.85.85 0 0 0 0 1.7h5.2a.85.85 0 0 0 0-1.7H9.6Zm0 3.6a.85.85 0 0 0 0 1.7h5.2a.85.85 0 0 0 0-1.7H9.6Zm0 3.6a.85.85 0 0 0 0 1.7H13a.85.85 0 0 0 0-1.7H9.6Z"
+        />
       </svg>
-      <svg v-else-if="item.icon === 'records'" class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" d="M3 10.5V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-9" />
-        <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" d="M3 10.5V8a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v.5" />
-        <ellipse cx="6.25" cy="18.6" rx="2" ry="1.15" stroke="currentColor" stroke-width="1.65" fill="none" />
-        <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" d="M4.25 18.6v-2.5M8.25 18.6v-2.5" />
+
+      <!-- Tasks / Task Centre — clipboard checklist -->
+      <svg v-else-if="item.icon === 'task-center'" class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          class="bottom-nav__glyph--outline"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9 4.4h6a1.1 1.1 0 0 1 1.1 1.1V6.2h1.4A2.1 2.1 0 0 1 19.6 8.3v10.5a2.1 2.1 0 0 1-2.1 2.1H6.5a2.1 2.1 0 0 1-2.1-2.1V8.3A2.1 2.1 0 0 1 6.5 6.2h1.4V5.5A1.1 1.1 0 0 1 9 4.4Z"
+        />
+        <path class="bottom-nav__glyph--outline" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="m8.6 12.2 1.7 1.7 3.6-3.8M8.6 17.1h6.8" />
+        <path
+          class="bottom-nav__glyph--fill"
+          fill="currentColor"
+          d="M9 3.55h6a2 2 0 0 1 2 2v.35h1.15A3 3 0 0 1 21.15 8.9v10a3 3 0 0 1-3 3H5.85a3 3 0 0 1-3-3v-10a3 3 0 0 1 3-3H7V5.55a2 2 0 0 1 2-2Zm-.3 9.35a.85.85 0 0 0 0 1.2l1.9 1.9a.85.85 0 0 0 1.2 0l3.85-4.05a.85.85 0 1 0-1.23-1.17l-3.25 3.42-1.27-1.27a.85.85 0 0 0-1.2 0ZM8.6 16.35a.85.85 0 0 0 0 1.7h6.8a.85.85 0 0 0 0-1.7H8.6Z"
+        />
       </svg>
-      <svg v-else-if="item.icon === 'task-center'" class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="3.5" y="5.5" width="17" height="15" rx="2.2" stroke="currentColor" stroke-width="1.65" />
-        <path d="M8.5 5.2a2 2 0 0 1 2-1.7h3a2 2 0 0 1 2 1.7" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" />
-        <path d="M8 11h8M8 15h5" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" />
+
+      <!-- Records — document + bars -->
+      <svg v-else-if="item.icon === 'records'" class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          class="bottom-nav__glyph--outline"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M7.2 3.8h7.1L18.8 8.4v11a1.8 1.8 0 0 1-1.8 1.8H7.2A1.8 1.8 0 0 1 5.4 19.4V5.6A1.8 1.8 0 0 1 7.2 3.8Z"
+        />
+        <path class="bottom-nav__glyph--outline" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M14 3.9v3.8h3.9M9 13.2v4.2M12 11.4v6M15 14.5v3.9" />
+        <path
+          class="bottom-nav__glyph--fill"
+          fill="currentColor"
+          d="M7.2 2.95h7.35L19.55 8.1v11.3A2.65 2.65 0 0 1 16.9 22H7.2A2.65 2.65 0 0 1 4.55 19.4V5.6A2.65 2.65 0 0 1 7.2 2.95ZM14.1 4.3v3.35h3.35L14.1 4.3ZM9 12.35a.85.85 0 0 0-.85.85v4.2a.85.85 0 0 0 1.7 0v-4.2A.85.85 0 0 0 9 12.35Zm3-1.8a.85.85 0 0 0-.85.85v6a.85.85 0 0 0 1.7 0v-6a.85.85 0 0 0-.85-.85Zm3 3.1a.85.85 0 0 0-.85.85v2.9a.85.85 0 0 0 1.7 0v-2.9a.85.85 0 0 0-.85-.85Z"
+        />
       </svg>
-      <svg v-else class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="9" r="3.25" stroke="currentColor" stroke-width="1.65" />
-        <path stroke="currentColor" stroke-width="1.65" stroke-linecap="round" d="M5 20.25a7.2 7.2 0 0 1 14 0" />
+
+      <!-- Profile -->
+      <svg v-else class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          class="bottom-nav__glyph--outline"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          d="M12 12.4a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM5.2 20.2a6.8 6.8 0 0 1 13.6 0"
+        />
+        <path
+          class="bottom-nav__glyph--fill"
+          fill="currentColor"
+          d="M12 4.1a4.45 4.45 0 1 1 0 8.9 4.45 4.45 0 0 1 0-8.9Zm0 10.2c4.35 0 7.85 2.95 8.55 6.85a1 1 0 0 1-.98 1.2H4.43a1 1 0 0 1-.98-1.2C4.15 17.25 7.65 14.3 12 14.3Z"
+        />
       </svg>
+
       <span>{{ item.label }}</span>
     </router-link>
   </nav>
@@ -65,7 +134,6 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
 <style scoped>
 .bottom-nav {
   position: fixed;
-  /* 高于第三方截图水印层（home.css 中 .screenshot-watermark 为 9999） */
   z-index: 10050;
   left: 0;
   right: 0;
@@ -73,72 +141,92 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
   display: flex;
   justify-content: space-around;
   align-items: stretch;
-  gap: 0.25rem;
+  gap: 0.15rem;
   max-width: var(--column-max, 28rem);
   margin: 0 auto;
   height: calc(var(--bottom-nav-h, 3.5rem) + env(safe-area-inset-bottom, 0px));
-  padding: 0.2rem 0.35rem;
-  padding-bottom: calc(0.4rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.15rem 0.25rem 0.3rem;
+  padding-bottom: calc(0.3rem + env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
-  border-radius: 18px 18px 0 0;
-  border-top: 1px solid rgba(148, 163, 184, 0.25);
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: saturate(160%) blur(18px);
-  -webkit-backdrop-filter: saturate(160%) blur(18px);
-  box-shadow:
-    0 -8px 24px rgba(15, 23, 42, 0.08),
-    0 1px 0 rgba(255, 255, 255, 0.85) inset;
+  border-radius: 0;
+  border-top: 1px solid rgba(196, 204, 215, 0.65);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  box-shadow: 0 -4px 16px rgba(0, 69, 126, 0.06);
 }
 
 .bottom-nav__item {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.2rem;
+  gap: 0.18rem;
   min-width: 0;
   min-height: 2.8rem;
-  padding: 0.2rem 0.35rem;
-  border-radius: 12px;
-  color: var(--bottom-nav-muted, #71717a);
+  padding: 0.35rem 0.25rem 0.2rem;
+  border-radius: 0;
+  color: var(--bottom-nav-muted, #8a94a6);
   text-decoration: none;
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 0.66rem;
+  font-weight: 650;
   letter-spacing: 0.01em;
   line-height: 1.15;
   text-align: center;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease;
+}
+
+.bottom-nav__item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 22%;
+  right: 22%;
+  height: 3px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.15s ease;
 }
 
 .bottom-nav__item:active {
-  background: rgba(0, 70, 127, 0.06);
+  background: transparent;
+  opacity: 0.88;
 }
 
 .bottom-nav__item.is-active {
-  /* 更高对比度：户外强光下更易辨识 */
-  color: #00345e;
-  background: rgba(0, 70, 127, 0.16);
-  border: 1px solid rgba(0, 70, 127, 0.22);
-  box-shadow:
-    0 6px 14px rgba(0, 70, 127, 0.12),
-    0 1px 0 rgba(255, 255, 255, 0.65) inset;
-  font-weight: 750;
+  color: var(--kb-brand, #00467f);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font-weight: 760;
+}
+
+.bottom-nav__item.is-active::before {
+  background: var(--kb-brand, #00467f);
 }
 
 .bottom-nav__icon {
   display: block;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  /* 默认图标跟随文字颜色，选中态对比度更统一 */
   color: currentColor;
 }
 
-.bottom-nav__item.is-active .bottom-nav__icon {
-  color: #00345e;
+.bottom-nav__glyph--fill {
+  display: none;
+}
+
+.bottom-nav__item.is-active .bottom-nav__glyph--outline {
+  display: none;
+}
+
+.bottom-nav__item.is-active .bottom-nav__glyph--fill {
+  display: block;
 }
 
 .bottom-nav__item span {

@@ -6,7 +6,19 @@ export function fetchHomeConfig(employeeId: string): Promise<HomeConfig> {
   const id = String(employeeId || '').trim()
   if (!id) return Promise.reject(new Error('employee_id_required'))
   const cacheKey = `home-config:${id}`
-  return cachedRequest(cacheKey, () => apiGet<HomeConfig>('/api/home-config', { employeeId: id }), 30_000)
+  return cachedRequest(
+    cacheKey,
+    async () => {
+      const raw = await apiGet<Partial<HomeConfig> & { ok?: boolean }>('/api/home-config', { employeeId: id })
+      return {
+        ok: raw.ok !== false,
+        tasks: Array.isArray(raw.tasks) ? raw.tasks : [],
+        recommendations: Array.isArray(raw.recommendations) ? raw.recommendations : [],
+        upload: raw.upload,
+      }
+    },
+    30_000,
+  )
 }
 
 export function fetchTaskSummary(): Promise<TaskSummary> {

@@ -11,13 +11,17 @@ const rows = ref<RecordRow[]>([])
 const auth = useAuthStore()
 const { t } = useI18n()
 const placeholderState = ref<'default' | 'loading' | 'empty' | 'fail'>('default')
+const showList = ref(false)
+let searchVersion = 0
+
+const employeeId = computed(() => String(auth.user?.employeeId || '').trim())
+
 const placeholder = computed(() => {
   if (placeholderState.value === 'loading') return t.value.recordsPlaceholderLoading
   if (placeholderState.value === 'empty') return t.value.recordsPlaceholderEmpty
   if (placeholderState.value === 'fail') return t.value.recordsPlaceholderFail
   return t.value.recordsPlaceholderDefault
 })
-const showList = ref(false)
 const resultCount = computed(() => rows.value.length)
 
 function resolveImageUrl(url: string) {
@@ -29,30 +33,54 @@ function resolveImageUrl(url: string) {
   return text.startsWith('/') ? text : `/${text}`
 }
 
+function resetResults() {
+  rows.value = []
+  showList.value = false
+}
+
 async function onSearch() {
   const q = query.value.trim().toLowerCase()
-  if (!q) { rows.value = []; showList.value = false; placeholderState.value = 'default'; return }
+  const currentVersion = ++searchVersion
+  if (!q) {
+    resetResults()
+    placeholderState.value = 'default'
+    return
+  }
   placeholderState.value = 'loading'
   showList.value = false
   try {
-    const data = await searchRecords(q, auth.user?.employeeId)
-    if (data.rows.length) { rows.value = data.rows; showList.value = true }
-    else { rows.value = []; placeholderState.value = 'empty' }
+    const data = await searchRecords(q, employeeId.value || undefined)
+    if (currentVersion !== searchVersion) return
+    const nextRows = Array.isArray(data.rows) ? data.rows : []
+    if (nextRows.length) {
+      rows.value = nextRows
+      showList.value = true
+    } else {
+      resetResults()
+      placeholderState.value = 'empty'
+    }
   } catch {
-    rows.value = []; placeholderState.value = 'fail'
+    if (currentVersion !== searchVersion) return
+    resetResults()
+    placeholderState.value = 'fail'
   }
 }
 
-// 需求：当用户清空搜索框时，结果立即清空，等待重新搜索（无需再次点击按钮）
 watch(
   () => query.value,
   (v) => {
     if (String(v || '').trim()) return
-    rows.value = []
-    showList.value = false
+    searchVersion += 1
+    resetResults()
     placeholderState.value = 'default'
   },
 )
+
+watch(employeeId, () => {
+  searchVersion += 1
+  resetResults()
+  placeholderState.value = query.value.trim() ? 'default' : 'default'
+})
 
 watch(() => t.value.recordsPlaceholderDefault, () => {
   if (!showList.value && !query.value.trim()) placeholderState.value = 'default'
@@ -112,7 +140,7 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
                   <p class="records-item__meta"><span>{{ t.recordsRowMaint }}</span><strong>{{ r.maintType }}</strong></p>
                 </div>
                 <p class="records-item__desc">{{ r.desc }}</p>
-                <div v-if="r.images && r.images.length" class="records-item__images" aria-label="Uploaded photos">
+                <div v-if="Array.isArray(r.images) && r.images.length" class="records-item__images" :aria-label="t.recordsUploadedPhotos">
                   <a
                     v-for="(img, i) in r.images"
                     :key="`${r.id}-${i}`"
@@ -139,13 +167,11 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
 .main.main--records { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.78rem; padding: 1.05rem 1rem 0.8rem; }
 .records-card {
   width: 100%;
-  background:
-    radial-gradient(circle at top right, rgba(0, 102, 179, 0.08), transparent 32%),
-    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  background: #fff;
   border: 1px solid #d9e3ee;
   border-radius: 1.35rem;
   padding: 1rem 0.95rem 0.95rem;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.92) inset, 0 12px 28px rgba(15,23,42,0.08);
+  box-shadow: 0 6px 20px rgba(15,23,42,0.06);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -226,7 +252,7 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
   min-height: 2.82rem;
   border-radius: 999px;
   border: 1px solid #00467f;
-  background: linear-gradient(180deg, #0a5c9f 0%, #00467f 100%);
+  background: #00467f;
   color: #fff;
   font: inherit;
   font-size: 0.84rem;
@@ -235,6 +261,11 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
   cursor: pointer;
   box-shadow: 0 8px 16px rgba(0,70,127,0.16);
 }
+.records-search__btn:hover { filter: brightness(1.06); }
+.records-search__btn:focus-visible {
+  outline: 3px solid rgba(0, 69, 126, 0.25);
+  outline-offset: 3px;
+}
 .records-search__btn:active { transform: translateY(1px); filter: brightness(0.96); }
 .records-result {
   margin-top: 0.72rem;
@@ -242,7 +273,7 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
   min-height: clamp(20rem,58vh,30rem);
   border: 1px solid #dce5ef;
   border-radius: 1.02rem;
-  background: linear-gradient(180deg,#fcfdff 0%,#f7fbff 100%);
+  background: #f7fbff;
   padding: 0.72rem;
   display: flex;
   flex-direction: column;
@@ -293,7 +324,7 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
 .records-item {
   border: 1px solid #dbe4ee;
   border-radius: 1rem;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  background: #fff;
   padding: 0.78rem 0.8rem;
   box-shadow: 0 8px 18px rgba(15,23,42,0.05);
 }
@@ -373,5 +404,8 @@ watch(() => t.value.recordsPlaceholderDefault, () => {
   .records-item__top { flex-direction: column; gap: 0.38rem; }
   .records-item__meta-grid { grid-template-columns: 1fr; }
   .records-item__image { height: 3.55rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .records-search__btn:active { transform: none; }
 }
 </style>

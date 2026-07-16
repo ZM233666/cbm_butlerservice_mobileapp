@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useI18nStore } from '@/stores/i18n'
-import { storeToRefs } from 'pinia'
-
+import LangSwitch from '@/components/common/LangSwitch.vue'
 import type { RouteLocationRaw } from 'vue-router'
 
 defineProps<{
@@ -11,10 +8,6 @@ defineProps<{
   backTo?: RouteLocationRaw
   backLabel?: string
 }>()
-
-const i18n = useI18nStore()
-const { lang } = storeToRefs(i18n)
-const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
 </script>
 
 <template>
@@ -24,9 +17,7 @@ const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
       <img v-else class="top-brand-bar__logo" src="/RVSChinaDT_Logo.png" width="364" height="230" alt="RVS-CHINA DIGITAL TEAM" decoding="async" />
     </div>
     <span class="top-brand-bar__title">{{ title ?? 'Digital CBM' }}</span>
-    <button type="button" class="top-brand-bar__lang" :aria-label="toggleLabel" @click="i18n.toggleLang">
-      {{ toggleLabel }}
-    </button>
+    <LangSwitch class="top-brand-bar__lang" />
   </header>
 </template>
 
@@ -105,22 +96,5 @@ const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
 
 .top-brand-bar__lang {
   margin-left: auto;
-  flex-shrink: 0;
-  min-height: 2.05rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.55);
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-  color: #0f172a;
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 760;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-
-.top-brand-bar__lang:active {
-  transform: translateY(1px);
-  filter: brightness(0.98);
 }
 </style>

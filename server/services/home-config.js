@@ -8,7 +8,19 @@ function normalizeTaskCard(item) {
   const href = String(item.href || "").trim() || `/task-list.html?maint=${maint}`;
   const taskId = String(item.taskId || "").trim();
   const depot = String(item.depot || "").trim();
-  return { maint, title, meta, deadline, href, taskId: taskId || undefined, depot: depot || undefined };
+  const id = String(item.id || "").trim();
+  const priority = String(item.priority || "").trim().toLowerCase();
+  return {
+    ...(id ? { id } : {}),
+    maint,
+    title,
+    meta,
+    deadline,
+    href,
+    ...(priority === "low" || priority === "medium" || priority === "high" ? { priority } : {}),
+    taskId: taskId || undefined,
+    depot: depot || undefined,
+  };
 }
 
 function buildHomeConfig(raw) {

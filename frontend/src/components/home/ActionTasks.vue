@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchHomeConfig, fetchTaskStatus } from '@/api/tasks'
+import { fetchTaskStatus } from '@/api/tasks'
 import { useAuthStore } from '@/stores/auth'
 import type { TaskCard, TaskStatusStore } from '@/types/task'
 import { useI18n } from '@/composables/useI18n'
 import { getDaysUntilDeadline, deadlineAlertLevel } from '@/composables/useDeadlineAlert'
 
 const props = defineProps<{
-  refreshSignal?: number
   extraCards?: TaskCard[]
-  initialTasks?: TaskCard[]
+  /** 父组件唯一数据源：home-config 的 tasks，本组件不再重复请求 */
+  tasks?: TaskCard[]
 }>()
 
 const auth = useAuthStore()
@@ -19,7 +19,11 @@ const { t } = useI18n()
 
 const cards = ref<TaskCard[]>([])
 const statusStore = ref<TaskStatusStore>({})
-const activeFilter = ref<'todo' | 'doing' | 'done' | 'all'>('todo')
+const activeFilter = ref<'todo' | 'doing' | 'done' | 'all'>('doing')
+
+const BOOT_MIN_INTERVAL_MS = 60_000
+let lastStatusFetchAt = 0
+let statusFetchVersion = 0
 
 const allCards = computed<TaskCard[]>(() => {
   const merged = [...cards.value, ...(props.extraCards || [])]
@@ -44,8 +48,7 @@ function getStatusFromEntry(entry: unknown): 'todo' | 'doing' | 'done' | 'reject
 }
 
 function taskKey(card: TaskCard) {
-  // 任务状态 key：优先使用每条任务独立的 Main Task ID
-  return String((card as any).taskId || '').trim() || `${card.maint}-${card.title}-${card.deadline}`
+  return String(card.taskId || '').trim() || `${card.maint}-${card.title}-${card.deadline}`
 }
 
 const maintCounts = computed(() => {
@@ -77,11 +80,11 @@ function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' | 'rejec
 }
 
 function getDepot(_card: TaskCard) {
-  return String((_card as any).depot || '').trim() || '-'
+  return String(_card.depot || '').trim() || '-'
 }
 
 function doneUploadText(card: TaskCard) {
-  const p = (card as any).uploadProgress as { uploaded?: number; required?: number } | undefined
+  const p = card.uploadProgress
   if (!p || !p.required) return ''
   return `${p.uploaded || 0}/${p.required || 0}`
 }
@@ -207,75 +210,67 @@ function goTask(card: TaskCard) {
     path: '/task-list',
     query: {
       maint: card.maint,
-      // 关键：确保 TaskList 侧可以在缺 k 时复原 key（以及便于调试/排查）
       title: card.title,
       deadline: card.deadline,
-      taskId: (card as any).taskId || '',
-      // k 用于 taskKey 存储/读取：这里直接使用 Main Task ID
+      taskId: card.taskId || '',
       k: taskKey(card),
     },
   })
 }
 
-async function loadStatuses() {
-  if (!auth.user) return
-  try {
-    const data = await fetchTaskStatus(auth.user.employeeId)
-    if (data.statuses) statusStore.value = data.statuses
-  } catch { /* keep local */ }
-}
-
-async function boot(force = false) {
+async function loadStatuses(force = false) {
   const employeeId = String(auth.user?.employeeId || '').trim()
-  if (!employeeId) return
+  if (!employeeId) {
+    statusStore.value = {}
+    return
+  }
+
   const now = Date.now()
-  if (!force && now - lastBootAt < BOOT_MIN_INTERVAL_MS) return
-  lastBootAt = now
+  if (!force && now - lastStatusFetchAt < BOOT_MIN_INTERVAL_MS) return
+  lastStatusFetchAt = now
+
+  const version = ++statusFetchVersion
   try {
-    if (props.initialTasks?.length && !force) {
-      cards.value = props.initialTasks
-    } else {
-      const cfg = await fetchHomeConfig(employeeId)
-      if (cfg.tasks) cards.value = cfg.tasks
-    }
-    await loadStatuses()
+    const data = await fetchTaskStatus(employeeId)
+    if (version !== statusFetchVersion) return
+    if (String(auth.user?.employeeId || '').trim() !== employeeId) return
+    if (data.statuses) statusStore.value = data.statuses
   } catch {
-    /* 会话过期或上游失败 */
+    /* keep local */
   }
 }
 
-const BOOT_MIN_INTERVAL_MS = 60_000
-let lastBootAt = 0
-
-function onFocus() { boot() }
+function onFocus() {
+  void loadStatuses()
+}
 
 onMounted(() => {
-  boot()
   window.addEventListener('focus', onFocus)
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) boot() })
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void loadStatuses()
+  })
 })
-onUnmounted(() => { window.removeEventListener('focus', onFocus) })
+onUnmounted(() => {
+  window.removeEventListener('focus', onFocus)
+})
 
-// 有些情况下首页先渲染、auth 后到位，导致未拉到状态；监听 employeeId，确保随时刷新。
+// 任务列表完全由父组件驱动，避免与 HomeView 重复请求 home-config
 watch(
-  () => auth.user?.employeeId || '',
-  (id) => {
-    if (id) void loadStatuses()
+  () => props.tasks,
+  (rows) => {
+    cards.value = Array.isArray(rows) ? rows.slice() : []
+    void loadStatuses(true)
   },
   { immediate: true },
 )
 
 watch(
-  () => props.initialTasks,
-  (rows) => {
-    if (rows?.length) cards.value = rows
-  },
-)
-
-watch(
-  () => props.refreshSignal || 0,
-  () => {
-    boot(true)
+  () => auth.user?.employeeId || '',
+  (id) => {
+    statusFetchVersion += 1
+    statusStore.value = {}
+    lastStatusFetchAt = 0
+    if (id) void loadStatuses(true)
   },
 )
 </script>
@@ -283,16 +278,7 @@ watch(
 <template>
   <section class="home-section" aria-label="Action Tasks">
     <div class="home-section__header">
-      <h2 class="home-section__title">
-        <span class="home-section__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M7 3h8l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke-linejoin="round" />
-            <path d="M14 3v5h5" stroke-linejoin="round" />
-            <path d="M8 13h8M8 17h6" stroke-linecap="round" />
-          </svg>
-        </span>
-        {{ t.homeActionTasksTitle }}
-      </h2>
+      <h2 class="home-section__title">{{ t.homeActionTasksTitle }}</h2>
     </div>
 
     <div class="ios-list-group">
@@ -303,11 +289,32 @@ watch(
             :key="f"
             type="button"
             class="segment-btn"
-            :class="{ 'is-active': activeFilter === f, 'has-doing-bar': f === 'doing' && counts.doing > 0 }"
+            :class="[
+              `segment-btn--${f}`,
+              { 'is-active': activeFilter === f, 'has-doing-bar': f === 'doing' && counts.doing > 0 },
+            ]"
             role="tab"
             :aria-selected="activeFilter === f"
             @click="activeFilter = f"
           >
+            <span class="segment-btn__icon" aria-hidden="true">
+              <svg v-if="f === 'todo'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M8 4h7l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke-linejoin="round" />
+                <path d="M14 4v4h4M9 12h6M9 15.5h4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <svg v-else-if="f === 'doing'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="7.2" />
+                <circle cx="12" cy="12" r="3.6" />
+                <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+              </svg>
+              <svg v-else-if="f === 'done'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="7.5" />
+                <path d="m8.5 12.2 2.4 2.4 4.6-4.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M7 7h10M7 12h10M7 17h7" stroke-linecap="round" />
+              </svg>
+            </span>
             <span class="segment-btn__label">{{ { todo: t.filterTodo, doing: t.filterDoing, done: t.filterDone, all: t.filterAll }[f] }}</span>
             <span class="segment-btn__count">{{ counts[f] }}</span>
           </button>
@@ -315,30 +322,34 @@ watch(
       </div>
 
       <div class="ios-list-scroll" :class="{ 'is-empty': !sortedCards.length }">
-        <div v-if="sortedCards.length">
-          <button v-for="card in sortedCards" :key="`${card.maint}-${card.title}-${card.deadline}`" type="button" class="ios-list-item" @click="goTask(card)">
-            <span class="item-icon-area" aria-hidden="true">
-              <span class="status-ring" :class="ringClass(card.deadline, getCardStatusByCard(card))"></span>
+        <button
+          v-for="card in sortedCards"
+          :key="`${card.maint}-${card.title}-${card.deadline}`"
+          type="button"
+          class="ios-list-item"
+          @click="goTask(card)"
+        >
+          <span class="item-icon-area" aria-hidden="true">
+            <span class="status-ring" :class="ringClass(card.deadline, getCardStatusByCard(card))"></span>
+          </span>
+          <span class="item-content">
+            <span class="item-title">{{ card.meta }}</span>
+            <span class="item-subtitle">
+              {{ card.title }} · {{ getDepot(card) }}
+              <template v-if="getCardRejected(card)"> · {{ (t as any).rejectedBtn || '已拒绝' }}</template>
+              <template v-if="getCardStatusByCard(card) === 'done' && doneUploadText(card)">
+                · {{ doneUploadText(card) }}
+              </template>
             </span>
-            <span class="item-content">
-              <span class="item-title">{{ card.meta }}</span>
-              <span class="item-subtitle">
-                {{ card.title }} · {{ getDepot(card) }}
-                <template v-if="getCardRejected(card)"> · {{ (t as any).rejectedBtn || '已拒绝' }}</template>
-                <template v-if="getCardStatusByCard(card) === 'done' && doneUploadText(card)">
-                  · {{ doneUploadText(card) }}
-                </template>
-              </span>
+          </span>
+          <span class="item-right" aria-hidden="true">
+            <span class="item-date" :class="dateClass(card.deadline, getCardStatusByCard(card))">
+              {{ deadlineText(card.deadline, getCardStatusByCard(card)) }}
             </span>
-            <span class="item-right" aria-hidden="true">
-              <span class="item-date" :class="dateClass(card.deadline, getCardStatusByCard(card))">
-                {{ deadlineText(card.deadline, getCardStatusByCard(card)) }}
-              </span>
-              <span class="chevron">›</span>
-            </span>
-          </button>
-        </div>
-        <p v-else class="ios-list-empty">{{ t.homeNoTasksFound }}</p>
+            <span class="chevron">›</span>
+          </span>
+        </button>
+        <p v-if="!sortedCards.length" class="ios-list-empty">{{ t.homeNoTasksFound }}</p>
       </div>
     </div>
   </section>

@@ -5,13 +5,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useI18nStore } from '@/stores/i18n'
 import { storeToRefs } from 'pinia'
 import { loginUser, fetchCaptcha } from '@/api/users'
+import LangSwitch from '@/components/common/LangSwitch.vue'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-const i18n = useI18nStore()
-const { lang } = storeToRefs(i18n)
-const toggleLabel = computed(() => (lang.value === 'zh' ? 'CN/EN' : 'EN/CN'))
+const { lang } = storeToRefs(useI18nStore())
 
 const copy = computed(() => {
   if (lang.value === 'en') {
@@ -114,9 +113,7 @@ async function submit() {
 
 <template>
   <div class="page login-page-wrap">
-    <button type="button" class="login-lang" :aria-label="toggleLabel" @click="i18n.toggleLang">
-      {{ toggleLabel }}
-    </button>
+    <LangSwitch class="login-lang" />
     <main class="login-main">
       <section class="login-card" aria-label="登录">
         <h1 class="login-title">{{ copy.title }}</h1>
@@ -207,22 +204,6 @@ async function submit() {
   top: max(0.85rem, calc(0.55rem + env(safe-area-inset-top, 0px)));
   right: 0.95rem;
   z-index: 5;
-  min-height: 2.05rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.55);
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-  color: #0f172a;
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 760;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-
-.login-lang:active {
-  transform: translateY(1px);
-  filter: brightness(0.98);
 }
 
 .login-main { width: 100%; padding: 1.25rem 1.25rem 1.35rem; }

@@ -190,8 +190,15 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .mp.is-disabled .mp__control { opacity: 0.6; cursor: not-allowed; }
+.mp__value {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
 .mp__value.is-placeholder { color: #64748b; }
-.mp__chev { color: #475569; font-size: 0.9rem; }
+.mp__chev { color: #475569; font-size: 0.9rem; flex-shrink: 0; }
 
 .mp__panel {
   position: absolute;

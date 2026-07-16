@@ -1434,10 +1434,13 @@ app.post("/api/recommendations/:id/accept", async (req, res) => {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const id = String(req.params.id || "").trim();
-  const employeeId = String(req.body && req.body.employeeId || "").trim();
+  // 身份只信任登录态，忽略 body.employeeId（前端不可冒用他人）
+  const employeeId = String(actor.employeeId || "").trim();
   if (!id) return res.status(400).json({ ok: false, error: "recommendation_id_required" });
-  if (!employeeId) return res.status(400).json({ ok: false, error: "employee_id_required" });
-  if (employeeId !== String(actor.employeeId || "").trim()) {
+  if (!employeeId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  const hintedEmployeeId = String(req.body && req.body.employeeId || "").trim();
+  if (hintedEmployeeId && hintedEmployeeId !== employeeId) {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
 

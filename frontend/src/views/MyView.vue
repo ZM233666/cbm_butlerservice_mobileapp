@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
@@ -15,6 +15,7 @@ const { t, lang } = useI18n()
 const aboutOpen = ref(false)
 const contactOpen = ref(false)
 const isFseProfile = computed(() => auth.isFse)
+const employeeId = computed(() => String(auth.user?.employeeId || '').trim())
 const certificates = computed(() => user.value?.specialWorkCertificates || [])
 const qualifications = computed(() => user.value?.qualifications || [])
 const skillTypes = computed(() => user.value?.skillTypes || [])
@@ -36,7 +37,28 @@ type CertificateDraft = {
 }
 const certificateDrafts = ref<CertificateDraft[]>([])
 const certificateSaving = ref(false)
-const certificateFeedback = ref('')
+
+type CertFeedbackKind =
+  | ''
+  | 'uploadFail'
+  | 'required'
+  | 'photoRequired'
+  | 'saveSuccess'
+  | 'saveFail'
+
+const certFeedbackKind = ref<CertFeedbackKind>('')
+let writeVersion = 0
+
+const certificateFeedback = computed(() => {
+  switch (certFeedbackKind.value) {
+    case 'uploadFail': return t.value.myCertificateUploadFail
+    case 'required': return t.value.myCertificateRequired
+    case 'photoRequired': return t.value.myCertificatePhotoRequired
+    case 'saveSuccess': return t.value.myCertificateSaveSuccess
+    case 'saveFail': return t.value.myCertificateSaveFail
+    default: return ''
+  }
+})
 
 const PROFILE_TERM_LABELS = {
   qualification: {
@@ -118,18 +140,19 @@ function syncCertificateDrafts() {
 function openCertificateEditor() {
   syncCertificateDrafts()
   if (!certificateDrafts.value.length) certificateDrafts.value = [createEmptyDraft()]
-  certificateFeedback.value = ''
+  certFeedbackKind.value = ''
   certificatesDialogOpen.value = true
 }
 
 function closeCertificateEditor() {
+  writeVersion += 1
   certificatesDialogOpen.value = false
-  certificateFeedback.value = ''
+  certFeedbackKind.value = ''
 }
 
 function addCertificateDraft() {
   certificateDrafts.value.push(createEmptyDraft())
-  certificateFeedback.value = ''
+  certFeedbackKind.value = ''
 }
 
 function removeCertificateDraft(index: number) {
@@ -141,21 +164,29 @@ async function onCertificatePhotoChange(index: number, event: Event) {
   const input = event.target as HTMLInputElement | null
   const file = input?.files?.[0]
   if (!file) return
-  certificateFeedback.value = ''
+  const id = employeeId.value
+  const currentWriteVersion = writeVersion
+  certFeedbackKind.value = ''
   certificateDrafts.value[index].uploading = true
   try {
     const resp = await uploadMyCertificatePhoto(file)
+    if (currentWriteVersion !== writeVersion || employeeId.value !== id) return
     certificateDrafts.value[index].photoUrl = resp.photoUrl
   } catch {
-    certificateFeedback.value = t.value.myCertificateUploadFail
+    if (currentWriteVersion !== writeVersion || employeeId.value !== id) return
+    certFeedbackKind.value = 'uploadFail'
   } finally {
-    certificateDrafts.value[index].uploading = false
+    if (currentWriteVersion === writeVersion) {
+      certificateDrafts.value[index].uploading = false
+    }
     if (input) input.value = ''
   }
 }
 
 async function saveCertificates() {
   if (certificateSaving.value) return
+  const id = employeeId.value
+  const currentWriteVersion = writeVersion
   const normalized = certificateDrafts.value
     .map((item) => ({
       name: String(item.name || '').trim(),
@@ -163,15 +194,15 @@ async function saveCertificates() {
     }))
     .filter((item) => item.name || item.photoUrl)
   if (normalized.some((item) => !item.name)) {
-    certificateFeedback.value = t.value.myCertificateRequired
+    certFeedbackKind.value = 'required'
     return
   }
   if (normalized.some((item) => !item.photoUrl)) {
-    certificateFeedback.value = t.value.myCertificatePhotoRequired
+    certFeedbackKind.value = 'photoRequired'
     return
   }
   certificateSaving.value = true
-  certificateFeedback.value = ''
+  certFeedbackKind.value = ''
   try {
     const payload: UserCertificate[] = normalized.map((item) => ({
       name: item.name,
@@ -179,16 +210,19 @@ async function saveCertificates() {
       status: 'valid',
     }))
     const resp = await updateMyCertificates(payload)
+    if (currentWriteVersion !== writeVersion || employeeId.value !== id) return
     auth.login(resp.user, auth.token)
-    certificateFeedback.value = t.value.myCertificateSaveSuccess
+    certFeedbackKind.value = 'saveSuccess'
     setTimeout(() => {
+      if (currentWriteVersion !== writeVersion) return
       certificatesDialogOpen.value = false
-      certificateFeedback.value = ''
+      certFeedbackKind.value = ''
     }, 500)
   } catch {
-    certificateFeedback.value = t.value.myCertificateSaveFail
+    if (currentWriteVersion !== writeVersion || employeeId.value !== id) return
+    certFeedbackKind.value = 'saveFail'
   } finally {
-    certificateSaving.value = false
+    if (currentWriteVersion === writeVersion) certificateSaving.value = false
   }
 }
 
@@ -196,6 +230,14 @@ function logout() {
   auth.logout()
   router.replace('/login')
 }
+
+watch(employeeId, () => {
+  writeVersion += 1
+  certificatesDialogOpen.value = false
+  certFeedbackKind.value = ''
+  certificateSaving.value = false
+  syncCertificateDrafts()
+})
 
 onMounted(() => {
   auth.refreshProfile()

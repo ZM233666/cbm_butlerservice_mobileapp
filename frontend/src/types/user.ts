@@ -46,11 +46,11 @@ export const ROLE_LABELS: Record<'zh' | 'en', Record<UserRole, string>> = {
     [ROLE_EXTERNAL_CONTRACTOR]: '外部承包商',
   },
   en: {
-    [ROLE_FSE]: 'FieldServiceEngineer',
-    [ROLE_RS_MANAGER]: 'RegionalServiceManager',
-    [ROLE_FS_MANAGER]: 'FieldServiceManager',
-    [ROLE_FS_DIRECTOR]: 'FieldServiceDirector',
-    [ROLE_EXTERNAL_CONTRACTOR]: 'Externalcontractor',
+    [ROLE_FSE]: 'Field Service Engineer',
+    [ROLE_RS_MANAGER]: 'Regional Service Manager',
+    [ROLE_FS_MANAGER]: 'Field Service Manager',
+    [ROLE_FS_DIRECTOR]: 'Field Service Director',
+    [ROLE_EXTERNAL_CONTRACTOR]: 'External Contractor',
   },
 }
 

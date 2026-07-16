@@ -2,11 +2,13 @@
 import { computed, ref } from 'vue'
 import type { TaskCard } from '@/types/task'
 import { useI18n } from '@/composables/useI18n'
-import { useAuthStore } from '@/stores/auth'
+import { getDaysUntilDeadline } from '@/composables/useDeadlineAlert'
 
 const props = withDefaults(defineProps<{
   tasks: TaskCard[]
   onAccept?: (card: TaskCard) => Promise<void> | void
+  /** 正在接受中的推荐 ID 集合，用于禁用重复点击 */
+  acceptingRecoIds?: Set<string>
   /** 功能未上线时置灰展示，不可点击 */
   comingSoon?: boolean
 }>(), {
@@ -14,15 +16,28 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
-const auth = useAuthStore()
 
 const DEFAULT_DEPOT = 'Shanghai'
 const DEFAULT_PROJECT = 'PRJ-2026-RVS-01'
 const DEFAULT_TRAIN_NO = 'HXD1-1234'
+type RecoPriority = 'low' | 'medium' | 'high'
 
 const selected = ref<TaskCard | null>(null)
 const modalOpen = computed(() => selected.value !== null)
 const acceptState = ref<'idle' | 'loading' | 'success'>('idle')
+
+const selectedRecoId = computed(() => String(selected.value?.id || '').trim())
+const isSelectedAccepting = computed(() => {
+  const id = selectedRecoId.value
+  return !!id && !!props.acceptingRecoIds?.has(id)
+})
+
+const recommendationRows = computed(() =>
+  props.tasks.map((card) => ({
+    card,
+    priority: getRecommendationPriority(card),
+  })),
+)
 
 function openCard(card: TaskCard) {
   if (props.comingSoon) return
@@ -35,11 +50,36 @@ function closeModal() {
 
 function maintLabel(card: TaskCard) {
   const m = String(card.maint || '').toLowerCase()
-  return m === 'c1c3' ? 'C1–C3' : (m === 'c4c6' ? 'C4–C6' : m.toUpperCase())
+  return m === 'c1c3' ? 'C1/C3' : (m === 'c4c6' ? 'C4/C6' : m.toUpperCase())
+}
+
+function normalizePriority(value: unknown): RecoPriority | null {
+  const raw = String(value || '').trim().toLowerCase()
+  if (raw === 'high' || raw === '高') return 'high'
+  if (raw === 'medium' || raw === 'med' || raw === 'middle' || raw === '中') return 'medium'
+  if (raw === 'low' || raw === '低') return 'low'
+  return null
+}
+
+function getRecommendationPriority(card: TaskCard): RecoPriority {
+  const explicit = normalizePriority(card.priority)
+  if (explicit) return explicit
+
+  const days = getDaysUntilDeadline(card.deadline)
+  if (days == null) return 'low'
+  if (days <= 7) return 'high'
+  if (days <= 30) return 'medium'
+  return 'low'
+}
+
+function priorityLabel(priority: RecoPriority) {
+  if (priority === 'high') return t.value.legendHigh
+  if (priority === 'medium') return t.value.legendMedium
+  return t.value.legendLow
 }
 
 async function acceptSelected() {
-  if (!selected.value || acceptState.value !== 'idle') return
+  if (!selected.value || acceptState.value !== 'idle' || isSelectedAccepting.value) return
   acceptState.value = 'loading'
   try {
     await props.onAccept?.(selected.value)
@@ -55,13 +95,6 @@ async function acceptSelected() {
   <section class="home-section" :class="{ 'is-coming-soon': comingSoon }" aria-label="CBM Recommendations">
     <div class="home-section__header">
       <h2 class="home-section__title">
-        <span class="home-section__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M12 3.8V20.2M3.8 12H20.2" stroke-linecap="round" />
-            <path d="M6.2 6.2 17.8 17.8M17.8 6.2 6.2 17.8" stroke-linecap="round" />
-            <circle cx="12" cy="12" r="8.2" />
-          </svg>
-        </span>
         {{ t.homeCbmTitle }}
         <span v-if="comingSoon" class="coming-soon-badge">{{ t.homeCbmComingSoon }}</span>
       </h2>
@@ -71,22 +104,29 @@ async function acceptSelected() {
       <div class="ios-list-scroll" :class="{ 'is-empty': !tasks.length }">
         <component
           :is="comingSoon ? 'div' : 'button'"
-          v-for="card in tasks"
-          :key="`${card.maint}-${card.title}-${card.deadline}`"
+          v-for="row in recommendationRows"
+          :key="row.card.id || `${row.card.maint}-${row.card.title}-${row.card.deadline}`"
           :type="comingSoon ? undefined : 'button'"
           class="ios-list-item"
           :class="{ 'is-disabled': comingSoon }"
-          @click="openCard(card)"
+          @click="openCard(row.card)"
         >
           <span class="item-icon-area" aria-hidden="true">
-            <span class="ai-icon">✦</span>
+            <span class="status-ring"></span>
+            <span
+              class="maint-badge"
+              :class="String(row.card.maint || '').toLowerCase() === 'c4c6' ? 'maint-badge--c4c6' : 'maint-badge--c1c3'"
+            >{{ maintLabel(row.card) }}</span>
           </span>
           <span class="item-content">
-            <span class="item-title">{{ card.title }} {{ t.homeRecoSuffix }}</span>
-            <span class="item-subtitle">{{ (card.meta || 'CCBII · Maintenance') }} · {{ String((card as any).depot || '').trim() || DEFAULT_DEPOT }}</span>
+            <span class="item-title">{{ t.homeRecoInspection }}</span>
+            <span class="item-subtitle">{{ String(row.card.depot || '').trim() || DEFAULT_DEPOT }}</span>
           </span>
-          <span class="item-right" aria-hidden="true">
-            <span class="priority-indicator" :class="card.maint.toLowerCase() === 'c4c6' ? 'bg-high' : 'bg-med'"></span>
+          <span class="item-right">
+            <span class="reco-priority" :class="`reco-priority--${row.priority}`">
+              <i class="reco-priority__dot"></i>
+              <span>{{ priorityLabel(row.priority) }}</span>
+            </span>
             <span class="chevron">›</span>
           </span>
         </component>
@@ -120,19 +160,25 @@ async function acceptSelected() {
           </div>
 
           <dl class="reco-basic" aria-label="Basic Info">
-            <div class="reco-basic__row"><dt>{{ t.depot }}</dt><dd>{{ String((selected as any)?.depot || '').trim() || DEFAULT_DEPOT }}</dd></div>
+            <div class="reco-basic__row"><dt>{{ t.depot }}</dt><dd>{{ String(selected?.depot || '').trim() || DEFAULT_DEPOT }}</dd></div>
             <div class="reco-basic__row"><dt>{{ t.deadline }}</dt><dd>{{ selected?.deadline || '-' }}</dd></div>
             <div class="reco-basic__row"><dt>{{ t.train }}</dt><dd>{{ DEFAULT_TRAIN_NO }}</dd></div>
             <div class="reco-basic__row"><dt>{{ t.project }}</dt><dd>{{ DEFAULT_PROJECT }}</dd></div>
-            <div class="reco-basic__row"><dt>{{ t.taskid }}</dt><dd>{{ String((selected as any)?.taskId || '-') }}</dd></div>
+            <div class="reco-basic__row"><dt>{{ t.taskid }}</dt><dd>{{ selected?.taskId || '-' }}</dd></div>
           </dl>
 
           <div class="reco-sheet__actions">
-            <button type="button" class="reco-accept" :class="{ 'is-loading': acceptState === 'loading' }" :disabled="acceptState !== 'idle'" @click="acceptSelected">
-              <span v-if="acceptState === 'idle'" class="reco-accept__plus" aria-hidden="true">+</span>
-              <span v-else-if="acceptState === 'loading'" class="reco-accept__spinner" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="reco-accept"
+              :class="{ 'is-loading': acceptState === 'loading' || isSelectedAccepting }"
+              :disabled="acceptState !== 'idle' || isSelectedAccepting"
+              @click="acceptSelected"
+            >
+              <span v-if="acceptState === 'idle' && !isSelectedAccepting" class="reco-accept__plus" aria-hidden="true">+</span>
+              <span v-else-if="acceptState === 'loading' || isSelectedAccepting" class="reco-accept__spinner" aria-hidden="true"></span>
               <span v-else class="reco-accept__check" aria-hidden="true">✓</span>
-              {{ acceptState === 'idle' ? ((t as any).accept || 'Accept') : (acceptState === 'loading' ? '...' : 'OK') }}
+              {{ acceptState === 'idle' && !isSelectedAccepting ? t.accept : (acceptState === 'success' ? 'OK' : '...') }}
             </button>
           </div>
         </div>
@@ -143,8 +189,8 @@ async function acceptSelected() {
 
 <style scoped>
 .home-section.is-coming-soon {
-  opacity: 0.62;
-  filter: grayscale(0.35);
+  opacity: 1;
+  filter: none;
 }
 
 .home-section.is-coming-soon .home-section__icon {
@@ -152,16 +198,16 @@ async function acceptSelected() {
 }
 
 .coming-soon-badge {
-  margin-left: 0.45rem;
+  margin-left: auto;
   padding: 0.12rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #64748b;
-  background: rgba(226, 232, 240, 0.95);
-  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: var(--surface-muted, #f5f7fa);
+  border: 1px solid rgba(196, 204, 215, 0.9);
   vertical-align: middle;
 }
 
@@ -173,11 +219,11 @@ async function acceptSelected() {
 
 .ios-list-item.is-disabled .item-title,
 .ios-list-item.is-disabled .item-subtitle,
-.ios-list-item.is-disabled .ai-icon {
+.ios-list-item.is-disabled .maint-badge {
   color: #94a3b8;
 }
 
-.ios-list-item.is-disabled .priority-indicator {
+.ios-list-item.is-disabled .status-ring {
   opacity: 0.45;
 }
 
@@ -190,7 +236,71 @@ async function acceptSelected() {
 }
 
 .home-section.is-coming-soon .home-legend__item {
-  opacity: 0.55;
+  opacity: 0.86;
+}
+
+.reco-priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 2.65rem;
+  justify-content: flex-start;
+  padding: 0.2rem 0.38rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.reco-priority__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.reco-priority--low {
+  color: #15803d;
+}
+
+.reco-priority--low .reco-priority__dot {
+  background: #22c55e;
+}
+
+.reco-priority--medium {
+  color: #b45309;
+}
+
+.reco-priority--medium .reco-priority__dot {
+  background: #f59e0b;
+}
+
+.reco-priority--high {
+  color: #b91c1c;
+}
+
+.reco-priority--high .reco-priority__dot {
+  background: #e11d48;
+}
+
+.ios-list-item.is-disabled .reco-priority {
+  color: inherit;
+  opacity: 1;
+}
+
+.ios-list-item.is-disabled .reco-priority--low {
+  color: #15803d;
+}
+
+.ios-list-item.is-disabled .reco-priority--medium {
+  color: #b45309;
+}
+
+.ios-list-item.is-disabled .reco-priority--high {
+  color: #b91c1c;
 }
 
 .reco-sheet-backdrop {

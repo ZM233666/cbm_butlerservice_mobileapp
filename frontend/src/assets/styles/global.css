@@ -29,9 +29,7 @@ body {
     "Malgun Gothic",
     Arial,
     sans-serif;
-  background:
-    radial-gradient(120% 42% at 50% 0%, rgba(0, 102, 179, 0.14) 0%, rgba(0, 70, 127, 0) 68%),
-    var(--page-bg);
+  background: var(--page-bg);
   color: var(--kb-navy);
   -webkit-tap-highlight-color: rgba(0, 70, 127, 0.08);
   overflow-x: hidden;

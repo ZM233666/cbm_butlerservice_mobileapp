@@ -1,9 +1,12 @@
 export interface TaskCard {
+  /** CBM 推荐 ID；行动任务可能为空 */
+  id?: string
   href: string
   maint: string
   title: string
   meta: string
   deadline: string
+  priority?: 'low' | 'medium' | 'high'
   taskId?: string
   depot?: string
   trainNo?: string
@@ -56,7 +59,7 @@ export interface TaskSummary {
 export interface HomeConfig {
   ok: boolean
   tasks: TaskCard[]
-  recommendations?: TaskCard[]
+  recommendations: TaskCard[]
   upload?: {
     maxBytes?: number
     allowedContentTypePrefixes?: string[]

@@ -10,6 +10,7 @@ function normalizeTaskCard(item) {
   const depot = String(item.depot || "").trim();
   const id = String(item.id || "").trim();
   const priority = String(item.priority || "").trim().toLowerCase();
+  const status = String(item.status || "").trim().toLowerCase();
   return {
     ...(id ? { id } : {}),
     maint,
@@ -17,6 +18,7 @@ function normalizeTaskCard(item) {
     meta,
     deadline,
     href,
+    ...(status === "todo" || status === "doing" || status === "done" || status === "rejected" ? { status } : {}),
     ...(priority === "low" || priority === "medium" || priority === "high" ? { priority } : {}),
     taskId: taskId || undefined,
     depot: depot || undefined,

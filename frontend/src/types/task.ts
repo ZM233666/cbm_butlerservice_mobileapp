@@ -6,6 +6,7 @@ export interface TaskCard {
   title: string
   meta: string
   deadline: string
+  status?: 'todo' | 'doing' | 'done' | 'rejected'
   priority?: 'low' | 'medium' | 'high'
   taskId?: string
   depot?: string

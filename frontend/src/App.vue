@@ -16,6 +16,10 @@ function onSessionExpired() {
   router.replace({ path: '/login' })
 }
 
+function onTokensRefreshed() {
+  auth.syncTokensFromStorage()
+}
+
 function onUnhandledRejection(event: PromiseRejectionEvent) {
   const reason = event.reason as { name?: string; message?: string; status?: number } | undefined
   const msg = String(reason?.message || '')
@@ -27,10 +31,12 @@ function onUnhandledRejection(event: PromiseRejectionEvent) {
 
 onMounted(() => {
   window.addEventListener('auth:session-expired', onSessionExpired)
+  window.addEventListener('auth:tokens-refreshed', onTokensRefreshed)
   window.addEventListener('unhandledrejection', onUnhandledRejection)
 })
 onUnmounted(() => {
   window.removeEventListener('auth:session-expired', onSessionExpired)
+  window.removeEventListener('auth:tokens-refreshed', onTokensRefreshed)
   window.removeEventListener('unhandledrejection', onUnhandledRejection)
 })
 </script>

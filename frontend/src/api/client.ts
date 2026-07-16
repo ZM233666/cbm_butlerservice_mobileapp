@@ -101,6 +101,7 @@ async function refreshAccessToken(): Promise<string> {
     }
     localStorage.setItem(TOKEN_KEY, access)
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh)
+    window.dispatchEvent(new CustomEvent('auth:tokens-refreshed'))
     return access
   })()
   _refreshPromise.finally(() => { _refreshPromise = null })

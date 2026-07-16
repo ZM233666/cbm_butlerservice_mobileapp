@@ -31,6 +31,7 @@ const taskDetail = ref<TaskDetail | null>(null)
 const guidanceRows = ref<GuidanceRow[]>([])
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture'] }>>({})
 const localPreviewRecords = ref<Record<string, string>>({})
+const processingSlots = ref<Record<string, boolean>>({})
 const uploadingSlots = ref<Record<string, boolean>>({})
 const issueRecords = ref<Record<string, { text: string; updatedAt: string }>>({})
 const uploadMaxBytes = ref(FALLBACK_UPLOAD_MAX_BYTES)
@@ -655,6 +656,25 @@ function imageBitmapToJpegFile(bitmap: ImageBitmap, filenameBase: string, qualit
   })
 }
 
+async function resizeImageBitmap(bitmap: ImageBitmap): Promise<ImageBitmap> {
+  const MAX_EDGE = 1920
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+  if (scale >= 1) return bitmap
+  const width = Math.max(1, Math.round(bitmap.width * scale))
+  const height = Math.max(1, Math.round(bitmap.height * scale))
+  try {
+    const resized = await createImageBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, {
+      resizeWidth: width,
+      resizeHeight: height,
+      resizeQuality: 'high',
+    })
+    bitmap.close()
+    return resized
+  } catch {
+    return bitmap
+  }
+}
+
 async function compressImageForUpload(file: File): Promise<File> {
   if (!file.type.startsWith('image/')) return file
   // 小文件直接上传，避免额外前处理开销
@@ -662,7 +682,7 @@ async function compressImageForUpload(file: File): Promise<File> {
   try {
     const filenameBase = String(file.name || 'upload').replace(/\.[^.]+$/, '') || 'upload'
     if ('createImageBitmap' in window) {
-      const bitmap = await createImageBitmap(file)
+      const bitmap = await resizeImageBitmap(await createImageBitmap(file))
       try {
         return await imageBitmapToJpegFile(bitmap, filenameBase)
       } finally {
@@ -710,7 +730,7 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
   const previewUrl = URL.createObjectURL(file)
   cleanupLocalPreview(slotId)
   localPreviewRecords.value[slotId] = previewUrl
-  uploadingSlots.value[slotId] = true
+  processingSlots.value[slotId] = true
   persistTaskListCache()
   await nextTick()
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -737,6 +757,8 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
       if (geo.accuracy != null) clientMeta.accuracy = geo.accuracy
     }
 
+    processingSlots.value[slotId] = false
+    uploadingSlots.value[slotId] = true
     const data = await uploadImage(slotId, uploadFile, slotLabel || slotId, clientMeta, {
       taskId: mainTaskId.value,
       employeeId: auth.user?.employeeId || '',
@@ -749,6 +771,7 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
     cleanupLocalPreview(slotId)
     input.value = ''
   } finally {
+    processingSlots.value[slotId] = false
     uploadingSlots.value[slotId] = false
   }
 }
@@ -1004,6 +1027,7 @@ onUnmounted(() => {
                           :label="btn.label"
                           :input-id="`f-${btn.slot}-${bi}`"
                           :image-url="displayedUploadUrl(btn.slot)"
+                          :processing="!!processingSlots[btn.slot]"
                           :uploading="!!uploadingSlots[btn.slot]"
                           :meta-lines="uploadMetaLines(btn.slot)"
                           @change="handleUpload(btn.slot, btn.label, $event)"

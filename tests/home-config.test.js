@@ -11,11 +11,13 @@ test("buildHomeConfig should normalize valid cards", () => {
         meta: "CCBII · Maintenance",
         deadline: "2026-04-30",
         href: "/task-list.html?maint=c4c6",
+        status: " Done ",
       },
     ],
   });
   assert.equal(out.tasks.length, 1);
   assert.equal(out.tasks[0].maint, "c4c6");
+  assert.equal(out.tasks[0].status, "done");
 });
 
 test("buildHomeConfig should fallback when config invalid", () => {

@@ -195,7 +195,7 @@ async function acceptReco(card: TaskCard) {
     </header>
 
     <main class="main home-main">
-      <div v-if="loading && canViewFseModules" class="home-status home-status--loading" role="status" aria-live="polite">
+      <div v-if="loading && hasHomeData && canViewFseModules" class="home-status home-status--loading" role="status" aria-live="polite">
         {{ loadingMessage }}
       </div>
 
@@ -211,7 +211,19 @@ async function acceptReco(card: TaskCard) {
 
       <ManagerDashboard v-if="auth.isManager" />
 
-      <template v-if="showFseModules">
+      <div
+        v-if="loading && !hasHomeData && canViewFseModules"
+        class="home-skeleton"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        :aria-label="loadingMessage"
+      >
+        <div class="home-skeleton__section home-skeleton__section--tasks"></div>
+        <div class="home-skeleton__section home-skeleton__section--recommendations"></div>
+      </div>
+
+      <template v-else-if="showFseModules">
         <ActionTasks :tasks="tasks" />
         <CbmRecommendations
           class="home-recs-after-tasks"
@@ -353,6 +365,26 @@ async function acceptReco(card: TaskCard) {
   margin-top: 0.05rem;
 }
 
+.home-skeleton {
+  display: grid;
+  gap: clamp(0.75rem, 2vw, 1rem);
+}
+
+.home-skeleton__section {
+  border-radius: 8px;
+  background: linear-gradient(100deg, #e8edf3 20%, #f6f8fb 45%, #e8edf3 70%);
+  background-size: 220% 100%;
+  animation: home-skeleton-shift 1.4s ease-in-out infinite;
+}
+
+.home-skeleton__section--tasks {
+  min-height: 16rem;
+}
+
+.home-skeleton__section--recommendations {
+  min-height: 11rem;
+}
+
 .home-status {
   display: flex;
   align-items: center;
@@ -443,10 +475,18 @@ async function acceptReco(card: TaskCard) {
   to { transform: rotate(360deg); }
 }
 
+@keyframes home-skeleton-shift {
+  to { background-position: -220% 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-status--loading::before {
     animation: none;
     border-right-color: var(--kb-brand, #00467f);
+  }
+
+  .home-skeleton__section {
+    animation: none;
   }
 
   .home-status__retry:active,

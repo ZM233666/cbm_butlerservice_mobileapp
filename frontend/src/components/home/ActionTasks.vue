@@ -19,6 +19,7 @@ const { t } = useI18n()
 
 const cards = ref<TaskCard[]>([])
 const statusStore = ref<TaskStatusStore>({})
+const statusHydrated = ref(false)
 const activeFilter = ref<'todo' | 'doing' | 'done' | 'all'>('doing')
 
 const BOOT_MIN_INTERVAL_MS = 60_000
@@ -46,6 +47,14 @@ function getStatusFromEntry(entry: unknown): 'todo' | 'doing' | 'done' | 'reject
   if (s === 'todo' || s === 'doing' || s === 'done') return s
   return null
 }
+
+function haveInlineStatuses(rows: TaskCard[]): boolean {
+  return rows.length === 0 || rows.every((card) => !!getStatusFromEntry(card))
+}
+
+const statusReady = computed(() =>
+  allCards.value.length === 0 || statusHydrated.value || haveInlineStatuses(allCards.value),
+)
 
 function taskKey(card: TaskCard) {
   return String(card.taskId || '').trim() || `${card.maint}-${card.title}-${card.deadline}`
@@ -75,6 +84,9 @@ function getCardStatusByCard(card: TaskCard): 'todo' | 'doing' | 'done' | 'rejec
     const byMaint = getStatusFromEntry(statusStore.value[maint])
     if (byMaint) return byMaint
   }
+
+  const byCard = getStatusFromEntry(card)
+  if (byCard) return byCard
 
   return 'todo'
 }
@@ -222,6 +234,7 @@ async function loadStatuses(force = false) {
   const employeeId = String(auth.user?.employeeId || '').trim()
   if (!employeeId) {
     statusStore.value = {}
+    statusHydrated.value = true
     return
   }
 
@@ -235,8 +248,9 @@ async function loadStatuses(force = false) {
     if (version !== statusFetchVersion) return
     if (String(auth.user?.employeeId || '').trim() !== employeeId) return
     if (data.statuses) statusStore.value = data.statuses
+    statusHydrated.value = true
   } catch {
-    /* keep local */
+    statusHydrated.value = haveInlineStatuses(allCards.value)
   }
 }
 
@@ -244,14 +258,17 @@ function onFocus() {
   void loadStatuses()
 }
 
+function onVisibilityChange() {
+  if (!document.hidden) void loadStatuses()
+}
+
 onMounted(() => {
   window.addEventListener('focus', onFocus)
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) void loadStatuses()
-  })
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 onUnmounted(() => {
   window.removeEventListener('focus', onFocus)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 
 // 任务列表完全由父组件驱动，避免与 HomeView 重复请求 home-config
@@ -259,7 +276,8 @@ watch(
   () => props.tasks,
   (rows) => {
     cards.value = Array.isArray(rows) ? rows.slice() : []
-    void loadStatuses(true)
+    statusHydrated.value = haveInlineStatuses(cards.value)
+    if (!statusHydrated.value) void loadStatuses(true)
   },
   { immediate: true },
 )
@@ -269,6 +287,7 @@ watch(
   (id) => {
     statusFetchVersion += 1
     statusStore.value = {}
+    statusHydrated.value = false
     lastStatusFetchAt = 0
     if (id) void loadStatuses(true)
   },
@@ -282,7 +301,9 @@ watch(
     </div>
 
     <div class="ios-list-group">
-      <div class="in-card-tabs" role="tablist" aria-label="任务筛选">
+      <p v-if="!statusReady" class="ios-list-empty" role="status" aria-live="polite">{{ t.homeLoading }}</p>
+
+      <div v-else class="in-card-tabs" role="tablist" aria-label="任务筛选">
         <div class="ios-segmented-control">
           <button
             v-for="f in (['todo','doing','done','all'] as const)"
@@ -321,7 +342,7 @@ watch(
         </div>
       </div>
 
-      <div class="ios-list-scroll" :class="{ 'is-empty': !sortedCards.length }">
+      <div v-if="statusReady" class="ios-list-scroll" :class="{ 'is-empty': !sortedCards.length }">
         <button
           v-for="card in sortedCards"
           :key="`${card.maint}-${card.title}-${card.deadline}`"

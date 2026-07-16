@@ -134,6 +134,58 @@ function normalizeTaskKeyPart(raw) {
     .replace(/\s+/g, " ");
 }
 
+function getStatusFromEntry(entry) {
+  const e = entry && typeof entry === "object" ? entry : {};
+  const status = normalizeStatus(e.status);
+  if (status === "rejected") return "rejected";
+  if (status === "todo" && e.rejected) return "rejected";
+  return status || "";
+}
+
+function taskCardKey(card) {
+  const c = card && typeof card === "object" ? card : {};
+  const taskId = normalizeTaskKeyPart(c.taskId);
+  if (taskId) return taskId;
+  const maint = normalizeMaint(c.maint) || normalizeTaskKeyPart(c.maint);
+  return [
+    maint,
+    normalizeTaskKeyPart(c.title),
+    normalizeTaskKeyPart(c.deadline),
+  ].join("-");
+}
+
+function attachStatusesToTaskCards(tasks, statuses) {
+  const rows = Array.isArray(tasks) ? tasks : [];
+  const src = statuses && typeof statuses === "object" ? statuses : {};
+  const maintCounts = {};
+  rows.forEach((card) => {
+    const maint = normalizeMaint(card && card.maint);
+    if (maint) maintCounts[maint] = (maintCounts[maint] || 0) + 1;
+  });
+
+  return rows.map((card) => {
+    const existing = normalizeStatus(card && card.status);
+    if (existing) return { ...card, status: existing };
+
+    const key = taskCardKey(card);
+    const byKey = getStatusFromEntry(src[key]);
+    if (byKey) return { ...card, status: byKey };
+
+    const taskId = normalizeTaskKeyPart(card && card.taskId);
+    const byTaskId = taskId && taskId !== key ? getStatusFromEntry(src[taskId]) : "";
+    if (byTaskId) return { ...card, status: byTaskId };
+
+    // 兼容旧数据：仅当同 maint 只有一条任务时，才允许回退到 maint 级别状态。
+    const maint = normalizeMaint(card && card.maint);
+    if (maint && (maintCounts[maint] || 0) <= 1) {
+      const byMaint = getStatusFromEntry(src[maint]);
+      if (byMaint) return { ...card, status: byMaint };
+    }
+
+    return { ...card, status: "todo" };
+  });
+}
+
 function readUsersStore() {
   const raw = readJsonObject(cfg.usersDataPath);
   return normalizeUsersStore(raw);
@@ -1055,11 +1107,18 @@ app.get("/api/home-config", async (req, res) => {
   if (!assertEmployeeAccess(req, res, employeeId)) return;
   try {
     const token = authFromRequest(req);
-    const dbConfig = await djangoApiCache.getOrLoad(
-      `home-config:${employeeId}`,
-      () => fetchHomeConfigFromDb(employeeId, token),
-      cfg.apiCacheHomeConfigTtlMs,
-    );
+    const [dbConfig, statusData] = await Promise.all([
+      djangoApiCache.getOrLoad(
+        `home-config:${employeeId}`,
+        () => fetchHomeConfigFromDb(employeeId, token),
+        cfg.apiCacheHomeConfigTtlMs,
+      ),
+      djangoApiCache.getOrLoad(
+        `task-status:${employeeId}`,
+        () => fetchTaskStatusFromDb(employeeId, token),
+        cfg.apiCacheTaskStatusTtlMs,
+      ),
+    ]);
     const recStore = readRecommendationsStore();
     const acceptedIds = Array.isArray(recStore.accepted[employeeId]) ? recStore.accepted[employeeId] : [];
     const acceptedSet = new Set(acceptedIds.map((x) => String(x || "").trim()).filter(Boolean));
@@ -1079,7 +1138,7 @@ app.get("/api/home-config", async (req, res) => {
       }));
     return res.json({
       ok: true,
-      tasks: dbConfig.tasks || [],
+      tasks: attachStatusesToTaskCards(dbConfig.tasks || [], statusData && statusData.statuses),
       recommendations: recCards.length ? recCards : dbConfig.recommendations || [],
     });
   } catch (err) {

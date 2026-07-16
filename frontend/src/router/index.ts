@@ -7,12 +7,25 @@ const REFRESH_KEY = 'butler.auth.refresh'
 
 // 冷启动时尝试用 refresh token 续期 access token（只跑一次）
 let _bootRefreshDone = false
+function accessTokenNeedsRefresh(token: string): boolean {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return true
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=')
+    const exp = Number(JSON.parse(atob(base64))?.exp)
+    return !Number.isFinite(exp) || exp * 1000 <= Date.now() + 60_000
+  } catch {
+    return true
+  }
+}
+
 async function tryBootRefresh(): Promise<void> {
   if (_bootRefreshDone) return
   _bootRefreshDone = true
   const access = localStorage.getItem(TOKEN_KEY)
   const storedRefresh = localStorage.getItem(REFRESH_KEY)
   if (!access || !storedRefresh) return
+  if (!accessTokenNeedsRefresh(access)) return
   try {
     const res = await fetch('/token/refresh/', {
       method: 'POST',
@@ -97,9 +110,10 @@ router.beforeEach(async (to) => {
   // 冷启动时主动续期；profile 每会话只拉一次（5 分钟 TTL 兜底）
   if (auth.isLoggedIn) {
     await tryBootRefresh()
+    auth.syncTokensFromStorage()
     if (!_sessionProfileBootDone) {
       _sessionProfileBootDone = true
-      await auth.refreshProfile().catch(() => {})
+      void auth.refreshProfile().catch(() => {})
     }
   }
 

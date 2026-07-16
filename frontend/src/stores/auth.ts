@@ -160,6 +160,11 @@ export const useAuthStore = defineStore('auth', () => {
     clearRequestCache()
   }
 
+  function syncTokensFromStorage() {
+    token.value = String(localStorage.getItem(TOKEN_KEY) || '').trim()
+    refreshToken.value = String(localStorage.getItem(REFRESH_KEY) || '').trim()
+  }
+
   function canAccess(path: string): boolean {
     const allowed = PAGE_ACCESS[path]
     if (!allowed) return true
@@ -186,7 +191,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (!dbUser) {
         const info = await fetchUserInfo(key).catch(() => ({} as Partial<User>))
         if (!Object.keys(info || {}).length) return false
-        login({ ...current, ...info }, currentToken, currentRefresh || undefined)
+        login({ ...current, ...info }, token.value || currentToken, refreshToken.value || currentRefresh || undefined)
         return true
       }
 
@@ -209,7 +214,7 @@ export const useAuthStore = defineStore('auth', () => {
         skillTypes: Array.isArray(dbUser.skillTypes) ? dbUser.skillTypes : current.skillTypes,
         roleDisplayName: String(dbUser.roleDisplayName || current.roleDisplayName || '').trim() || undefined,
       }
-      login(merged, currentToken, currentRefresh || undefined)
+      login(merged, token.value || currentToken, refreshToken.value || currentRefresh || undefined)
       _lastProfileRefreshAt = Date.now()
       return true
     } catch {
@@ -217,5 +222,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, token, refreshToken, isLoggedIn, role, roleLabel, isManager, isFse, isThirdParty, login, logout, canAccess, refreshProfile }
+  return { user, token, refreshToken, isLoggedIn, role, roleLabel, isManager, isFse, isThirdParty, login, logout, syncTokensFromStorage, canAccess, refreshProfile }
 })

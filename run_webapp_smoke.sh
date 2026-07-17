@@ -12,7 +12,7 @@ export AUTH_TOKEN_SECRET="${AUTH_TOKEN_SECRET:-butler-dev-secret}"
 
 if [[ ! -x "${VENV_PYTHON}" ]]; then
   echo "未找到虚拟环境 Python: ${VENV_PYTHON}"
-  echo "请先在 /Users/God-Prime/Desktop/H5Projects 下创建 .venv。"
+  echo "请先在 ${ROOT_DIR} 下创建 .venv。"
   exit 1
 fi
 

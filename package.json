@@ -24,6 +24,8 @@
     "dev:db": "node --watch server/server.js",
     "dev:local-db": "bash scripts/dev-local-db.sh",
     "validate:data": "node scripts/validate-data.js",
+    "migrate:uploads": "node scripts/migrate-verify-task-uploads.js",
+    "verify:uploads": "node scripts/migrate-verify-task-uploads.js --verify-only",
     "test": "node --test tests/*.test.js",
     "check": "npm run validate:data && npm test",
     "test:api": "node scripts/api-smoke.js",

@@ -17,6 +17,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3100
+ENV UPLOADS_DIR=/data/uploads/task
+ENV MAX_UPLOAD_MB=30
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
@@ -29,7 +31,7 @@ COPY scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 RUN chmod +x ./scripts/docker-entrypoint.sh \
-  && mkdir -p server/uploads/task server/uploads/certificates
+  && mkdir -p server/uploads/task server/uploads/certificates /data/uploads/task
 
 EXPOSE 3100
 

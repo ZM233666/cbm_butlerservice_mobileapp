@@ -40,6 +40,9 @@ if [[ "${SKIP_GIT_PULL:-0}" != "1" ]] && command -v git >/dev/null 2>&1 && [[ -d
 fi
 
 mkdir -p server/uploads/task server/uploads/certificates
+# 共享任务图目录（与 Django MEDIA_ROOT/uploads/task、Docker /data/uploads/task 对齐）
+UPLOADS_HOST="${TASK_UPLOADS_HOST_DIR:-../butler-service/backend/media/uploads/task}"
+mkdir -p "$UPLOADS_HOST"
 
 echo "==> docker build"
 "${COMPOSE[@]}" build

@@ -25,6 +25,7 @@ type RecoPriority = 'low' | 'medium' | 'high'
 const selected = ref<TaskCard | null>(null)
 const modalOpen = computed(() => selected.value !== null)
 const acceptState = ref<'idle' | 'loading' | 'success'>('idle')
+const collapsed = ref(false)
 
 const selectedRecoId = computed(() => String(selected.value?.id || '').trim())
 const isSelectedAccepting = computed(() => {
@@ -98,9 +99,20 @@ async function acceptSelected() {
         {{ t.homeCbmTitle }}
         <span v-if="comingSoon" class="coming-soon-badge">{{ t.homeCbmComingSoon }}</span>
       </h2>
+      <button
+        type="button"
+        class="cbm-collapse-button"
+        :aria-expanded="!collapsed"
+        :aria-label="collapsed ? t.homeCbmExpand : t.homeCbmCollapse"
+        @click="collapsed = !collapsed"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
     </div>
 
-    <div class="ios-list-group" aria-label="CBM recommendation list" :aria-disabled="comingSoon ? 'true' : undefined">
+    <div v-if="!collapsed" class="ios-list-group" aria-label="CBM recommendation list" :aria-disabled="comingSoon ? 'true' : undefined">
       <div class="ios-list-scroll" :class="{ 'is-empty': !tasks.length }">
         <component
           :is="comingSoon ? 'div' : 'button'"
@@ -134,7 +146,7 @@ async function acceptSelected() {
       </div>
     </div>
 
-    <div class="home-cbm-meta" role="note">
+    <div v-if="!collapsed" class="home-cbm-meta" role="note">
       <p class="home-section__subtitle home-cbm-meta__hint">{{ comingSoon ? t.homeCbmComingSoonHint : t.homeCbmSubtitle }}</p>
       <div class="home-legend home-cbm-meta__legend" aria-label="priority legend">
         <span class="home-legend__item"><i class="home-legend__dot bg-low"></i>{{ t.legendLow }}</span>
@@ -191,6 +203,54 @@ async function acceptSelected() {
 .home-section.is-coming-soon {
   opacity: 1;
   filter: none;
+}
+
+.home-section__header {
+  align-items: center;
+}
+
+.home-section__title {
+  min-width: 0;
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.cbm-collapse-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 2.25rem;
+  display: inline-grid;
+  place-items: center;
+  margin-left: 0.45rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--kb-brand);
+  cursor: pointer;
+}
+
+.cbm-collapse-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.18s ease;
+}
+
+.cbm-collapse-button[aria-expanded='false'] svg {
+  transform: rotate(180deg);
+}
+
+.cbm-collapse-button:focus-visible {
+  outline: 2px solid var(--kb-brand);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cbm-collapse-button svg { transition: none; }
 }
 
 .home-section.is-coming-soon .home-section__icon {

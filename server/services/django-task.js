@@ -3,6 +3,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { runWithTimeout, upstreamTimeoutMs } = require("./fetch-timeout");
 
 function remoteApiBase() {
   return String(process.env.REMOTE_API_BASE || "http://117.62.232.51:8004").replace(/\/$/, "");
@@ -47,8 +48,11 @@ async function fetchDjangoJson(pathUrl, { token, method = "GET", body } = {}) {
     },
   };
   if (body) init.body = JSON.stringify(body);
-  const res = await fetch(upstream, init);
-  const payload = await res.json().catch(() => null);
+  const { res, payload } = await runWithTimeout(async (signal) => {
+    const response = await fetch(upstream, { ...init, signal });
+    const responsePayload = await response.json().catch(() => null);
+    return { res: response, payload: responsePayload };
+  }, upstreamTimeoutMs(method));
   if (!res.ok || !payload || payload.code !== 2000) {
     const err = new Error(upstreamErrorMessage(payload, res));
     err.status = upstreamHttpStatus(res, payload);

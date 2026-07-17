@@ -23,7 +23,8 @@ function buildConfig(projectRoot) {
   const skipServerExifRaw = String(env.UPLOAD_SKIP_SERVER_EXIF || "1").trim().toLowerCase();
   const uploadSkipServerExifWhenClientGeo =
     skipServerExifRaw === "1" || skipServerExifRaw === "true" || skipServerExifRaw === "yes";
-  // Align with Django MEDIA_ROOT/uploads/task so Celery report generation can find images.
+  // Canonical task images: UPLOADS_DIR, else local Django MEDIA_ROOT/uploads/task.
+  // Docker sets UPLOADS_DIR=/data/uploads/task (shared volume with Django/Celery/Nginx).
   const defaultUploadsDir = path.resolve(
     projectRoot,
     "..",
@@ -45,7 +46,7 @@ function buildConfig(projectRoot) {
     host: String(env.HOST || "0.0.0.0"),
     port: toInt(env.PORT, 3100),
     bodyLimit: `${toInt(env.BODY_LIMIT_MB, 2)}mb`,
-    maxUploadBytes: toInt(env.MAX_UPLOAD_MB, 20) * 1024 * 1024,
+    maxUploadBytes: toInt(env.MAX_UPLOAD_MB, 30) * 1024 * 1024,
     projectRoot,
     publicDir: path.join(projectRoot, "public"),
     picSamplesDir: path.join(projectRoot, "PicSamples"),

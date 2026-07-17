@@ -1,1 +1,0 @@
-import{K as r,L as n,G as t}from"./index-Bp6OF9Ly.js";function c(a){const s={};a&&(s.month=a);const e=`manager-dashboard:${a||"current"}`;return r(e,()=>n("/api/manager/dashboard",s),6e4)}function i(a){return t("/api/manager/assignments",a)}export{c as f,i as p};

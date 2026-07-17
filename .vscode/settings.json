@@ -1,0 +1,9 @@
+{
+  "remote.portsAttributes": {
+    "3100": {
+      "label": "ButlerService local Node",
+      "onAutoForward": "ignore",
+      "elevateIfNeeded": false
+    }
+  }
+}

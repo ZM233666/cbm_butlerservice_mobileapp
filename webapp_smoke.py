@@ -11,7 +11,7 @@ from playwright.sync_api import Page, expect, sync_playwright
 
 ROOT = os.getenv("FRONTEND_URL", "http://127.0.0.1:5174")
 BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:3100")
-PROJECT_DIR = Path("/Users/God-Prime/Desktop/H5Projects/ButlerService")
+PROJECT_DIR = Path(__file__).resolve().parent
 SHOT_DIR = PROJECT_DIR / "test-artifacts"
 SHOT_DIR.mkdir(parents=True, exist_ok=True)
 CERT_PHOTO = PROJECT_DIR / "RVSChinaDT_Logo.png"

@@ -14,6 +14,8 @@ services:
       PORT: 3100
       NODE_CLUSTER_ENABLED: "1"
       NODE_CLUSTER_WORKERS: "${NODE_CLUSTER_WORKERS:-8}"
+      UPLOADS_DIR: /data/uploads/task
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-30}"
     deploy:
       resources:
         limits:
@@ -26,7 +28,9 @@ services:
       - "${APP_PORT:-127.0.0.1:3100}:3100"
     volumes:
       - ./server/data:/app/server/data
+      # 证书 / manifest 等仍落在 server/uploads；任务图走共享目录
       - ./server/uploads:/app/server/uploads
+      - ${TASK_UPLOADS_HOST_DIR:-../butler-service/backend/media/uploads/task}:/data/uploads/task
     healthcheck:
       test:
         [
@@ -53,6 +57,7 @@ services:
     volumes:
       - ./deploy/nginx.docker.conf:/etc/nginx/conf.d/default.conf:ro
       - ./server/uploads:/app/server/uploads:ro
+      - ${TASK_UPLOADS_HOST_DIR:-../butler-service/backend/media/uploads/task}:/data/uploads/task:ro
 
   nginx-ssl:
     profiles: ["with-nginx-ssl"]
@@ -68,5 +73,6 @@ services:
     volumes:
       - ./deploy/nginx.ssl.docker.conf:/etc/nginx/conf.d/default.conf:ro
       - ./server/uploads:/app/server/uploads:ro
+      - ${TASK_UPLOADS_HOST_DIR:-../butler-service/backend/media/uploads/task}:/data/uploads/task:ro
       - ${SSL_CERT_PATH:-./certs/fullchain.pem}:/etc/nginx/ssl/fullchain.pem:ro
       - ${SSL_KEY_PATH:-./certs/privkey.pem}:/etc/nginx/ssl/privkey.pem:ro

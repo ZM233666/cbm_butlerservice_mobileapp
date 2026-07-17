@@ -66,6 +66,62 @@ npm i
 npm run dev
 ```
 
+## 任务图片存储
+
+任务图片对外统一使用以下 URL，不在数据库中保存服务器绝对路径：
+
+```text
+/uploads/task/<文件名>
+```
+
+### 本地开发
+
+新上传图片统一写入 Django 的媒体目录：
+
+```text
+butler-service/backend/media/uploads/task
+```
+
+从 `ButlerService/` 项目看，对应的相对配置为：
+
+```env
+UPLOADS_DIR=../butler-service/backend/media/uploads/task
+```
+
+旧版图片目录 `ButlerService/server/uploads/task` 仅用于兼容读取，新的任务图片不再写入该目录。
+
+### 服务器部署
+
+当 ButlerService、Django 和 Celery 部署在同一台服务器时，建议使用独立的宿主机持久化目录：
+
+```text
+/srv/butler-data/uploads/task
+```
+
+两套项目的部署环境统一设置：
+
+```env
+TASK_UPLOADS_HOST_DIR=/srv/butler-data/uploads/task
+```
+
+容器内路径映射如下：
+
+```text
+ButlerService Node / Nginx: /data/uploads/task
+Django / Celery:             /backend/media/uploads/task
+```
+
+以上路径指向同一个宿主机目录，确保网页显示、任务提交和报告生成读取同一份图片。该目录必须作为持久化 volume 挂载，不能随容器重新部署而删除。
+
+服务器首次部署前创建目录并配置权限：
+
+```bash
+sudo mkdir -p /srv/butler-data/uploads/task
+sudo chown -R 1000:1000 /srv/butler-data
+```
+
+上传限制统一为：前端、Node、Django `30MB`，Nginx `32MB`。如果 ButlerService 与 Django 部署在不同服务器，不能使用本地共享目录，应改用对象存储、NFS，或统一由 Django 接收和提供图片。
+
 ## Cursor Skill（已内置到项目）
 
 项目包含一个用于联调/实现接口的 Skill：

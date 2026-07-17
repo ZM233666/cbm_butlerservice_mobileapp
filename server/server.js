@@ -70,6 +70,8 @@ const {
 } = require("./services/django-user");
 const { buildNormalizedTaskFilename, buildLegacyUploadFilename } = require("./upload-filename");
 const { validateTaskSubmitPayload, validateTaskDraftPayload } = require("./task-submit-payload");
+const { validateUploadMetadata, validateStoredImage } = require("./image-upload-validation");
+const { runWithTimeout, upstreamTimeoutMs } = require("./services/fetch-timeout");
 
 const projectRoot = path.resolve(__dirname, "..");
 const cfg = buildConfig(projectRoot);
@@ -655,14 +657,18 @@ async function fetchDjangoUserInfo(token) {
 
   const upstream = `${REMOTE_API_BASE}/api/system/user/user_info/`;
   try {
-    const upstreamRes = await fetch(upstream, {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        Authorization: `JWT ${raw}`,
-      },
-    });
-    const payload = await upstreamRes.json().catch(() => null);
+    const { upstreamRes, payload } = await runWithTimeout(async (signal) => {
+      const response = await fetch(upstream, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          Authorization: `JWT ${raw}`,
+        },
+        signal,
+      });
+      const responsePayload = await response.json().catch(() => null);
+      return { upstreamRes: response, payload: responsePayload };
+    }, upstreamTimeoutMs("GET"));
     if (isRemoteDbSaturationError(payload)) {
       remoteAuthCircuitOpenUntil = Date.now() + 60 * 1000;
       error("Django auth circuit open: remote DB saturated");
@@ -675,6 +681,7 @@ async function fetchDjangoUserInfo(token) {
   } catch (err) {
     error("Django user_info lookup failed", err);
     remoteAuthCircuitOpenUntil = Date.now() + 30 * 1000;
+    if (err && err.code === "upstream_timeout") throw err;
     return null;
   }
 }
@@ -829,17 +836,24 @@ async function proxyToRemoteApi(req, res) {
     }
   }
   try {
-    const upstreamRes = await fetch(upstream, init);
+    const { upstreamRes, payload } = await runWithTimeout(async (signal) => {
+      const response = await fetch(upstream, { ...init, signal });
+      const responsePayload = Buffer.from(await response.arrayBuffer());
+      return { upstreamRes: response, payload: responsePayload };
+    }, upstreamTimeoutMs(req.method));
     res.status(upstreamRes.status);
     upstreamRes.headers.forEach((value, key) => {
       if (key.toLowerCase() === "transfer-encoding") return;
       res.setHeader(key, value);
     });
-    const payload = Buffer.from(await upstreamRes.arrayBuffer());
     res.send(payload);
   } catch (err) {
     error("Remote API proxy failed", err);
-    res.status(502).json({ ok: false, error: "upstream_unavailable" });
+    const timedOut = err && err.code === "upstream_timeout";
+    res.status(timedOut ? 504 : 502).json({
+      ok: false,
+      error: timedOut ? "upstream_timeout" : "upstream_unavailable",
+    });
   }
 }
 
@@ -864,7 +878,11 @@ app.use("/api", async (req, res, next) => {
     next();
   } catch (err) {
     error("Auth middleware failed", err);
-    return res.status(502).json({ ok: false, error: "auth_upstream_unavailable" });
+    const timedOut = err && err.code === "upstream_timeout";
+    return res.status(timedOut ? 504 : 502).json({
+      ok: false,
+      error: timedOut ? "auth_upstream_timeout" : "auth_upstream_unavailable",
+    });
   }
 });
 
@@ -886,7 +904,20 @@ function createUpload(dir, { filenameBuilder } = {}) {
   return multer({
     storage,
     limits: { fileSize: cfg.maxUploadBytes },
+    fileFilter: (_req, file, cb) => {
+      if (validateUploadMetadata(file)) return cb(null, true);
+      const err = new Error("invalid_file_type");
+      err.code = "invalid_file_type";
+      return cb(err);
+    },
   });
+}
+
+function rejectInvalidStoredImage(file, res) {
+  if (validateStoredImage(file)) return false;
+  if (file && file.path) fs.rmSync(file.path, { force: true });
+  res.status(400).json({ ok: false, error: "invalid_file_type" });
+  return true;
 }
 
 function buildTaskUploadFilename(req, file) {
@@ -1434,6 +1465,7 @@ app.post("/api/users/self-certificates/upload", certificateUpload.single("file")
   if (!req.file) {
     return res.status(400).json({ ok: false, error: "no_file" });
   }
+  if (rejectInvalidStoredImage(req.file, res)) return;
   return res.json({
     ok: true,
     photoUrl: `/uploads/certificates/${req.file.filename}`,
@@ -1822,6 +1854,7 @@ app.post("/api/upload", upload.single("file"), async (req, res, next) => {
   if (!req.file) {
     return res.status(400).json({ ok: false, error: "no_file" });
   }
+  if (rejectInvalidStoredImage(req.file, res)) return;
   const slotId = (req.body && req.body.slotId) || "";
   const taskId = String((req.body && (req.body.taskId || req.body.mainTaskId)) || "").trim();
   const employeeId = String((req.body && req.body.employeeId) || "").trim();
@@ -2060,6 +2093,9 @@ app.use((err, _req, res, _next) => {
       return res.status(413).json({ ok: false, error: "file_too_large" });
     }
     return res.status(400).json({ ok: false, error: err.code });
+  }
+  if (err && err.code === "invalid_file_type") {
+    return res.status(400).json({ ok: false, error: "invalid_file_type" });
   }
   error("Unhandled server error", err);
   res.status(500).json({ ok: false, error: "internal_error" });

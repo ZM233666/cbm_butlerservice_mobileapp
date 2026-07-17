@@ -17,7 +17,14 @@ server {
     # 若已配置 HTTPS，可取消注释以强制跳转
     # return 301 https://$host$request_uri;
 
-    client_max_body_size 25m;
+    client_max_body_size 32m;
+
+    # 裸机 PM2：直接读取与 Node UPLOADS_DIR 相同的持久化目录
+    location /uploads/task/ {
+        alias /srv/butler-data/uploads/task/;
+        access_log off;
+        expires 7d;
+    }
 
     # 上传：流式转发 + 加长超时（配合 Node 多 worker）
     location /api/upload {
@@ -31,7 +38,7 @@ server {
         proxy_request_buffering off;
         proxy_read_timeout 180s;
         proxy_send_timeout 180s;
-        client_max_body_size 25m;
+        client_max_body_size 32m;
     }
 
     location / {
@@ -55,7 +62,7 @@ server {
 #     ssl_certificate     /etc/letsencrypt/live/your-domain.com/fullchain.pem;
 #     ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
 #
-#     client_max_body_size 25m;
+#     client_max_body_size 32m;
 #
 #     gzip on;
 #     gzip_types text/plain text/css application/json application/javascript image/svg+xml;

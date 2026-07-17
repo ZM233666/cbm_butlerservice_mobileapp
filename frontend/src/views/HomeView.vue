@@ -179,6 +179,19 @@ async function acceptReco(card: TaskCard) {
 <template>
   <PageShell>
     <header class="home-top" :aria-label="t.brand">
+      <svg class="home-top__tech-lines" viewBox="0 0 260 170" aria-hidden="true">
+        <defs>
+          <linearGradient id="home-route-a" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#9fc8e5" stop-opacity="0" />
+            <stop offset="0.4" stop-color="#9fc8e5" stop-opacity="0.28" />
+            <stop offset="0.78" stop-color="#d8eaf6" stop-opacity="0.34" />
+            <stop offset="1" stop-color="#d8eaf6" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <line class="home-top__ray" stroke="url(#home-route-a)" x1="260" y1="10" x2="-10" y2="124" />
+        <line class="home-top__ray home-top__ray--middle" stroke="url(#home-route-a)" x1="260" y1="24" x2="42" y2="170" />
+        <line class="home-top__ray home-top__ray--short" stroke="url(#home-route-a)" x1="248" y1="-4" x2="112" y2="170" />
+      </svg>
       <div class="home-top__row">
         <img
           class="home-top__logo"
@@ -246,20 +259,43 @@ async function acceptReco(card: TaskCard) {
     clamp(1rem, 3.5vw, 1.35rem)
     clamp(1rem, 4vw, 1.5rem)
     clamp(1.25rem, 4vw, 1.55rem);
-  background:
-    radial-gradient(circle at 100% 0%, rgba(255,255,255,0.22), transparent 28%),
-    linear-gradient(180deg, #0a5a9e 0%, #00467f 100%);
+  background-color: #00467f;
   overflow: hidden;
 }
 
-.home-top::after {
-  content: '';
+.home-top__tech-lines {
   position: absolute;
-  inset: auto -10% -48% 35%;
-  height: 9rem;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,255,255,0.14), transparent 65%);
-  z-index: -1;
+  top: clamp(3.4rem, 13vw, 4.4rem);
+  right: -1rem;
+  width: min(62vw, 18rem);
+  height: clamp(9rem, 33vw, 11.5rem);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.home-top__tech-lines line {
+  fill: none;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.home-top__ray--middle {
+  stroke-width: 1.15;
+  opacity: 0.72;
+}
+
+.home-top__ray--short {
+  stroke-width: 0.9;
+  opacity: 0.5;
+}
+
+.home-top__row,
+.home-top__title,
+.home-top__profile {
+  position: relative;
+  z-index: 1;
 }
 
 .home-top__row {
@@ -283,7 +319,6 @@ async function acceptReco(card: TaskCard) {
 }
 
 .home-top__title {
-  position: relative;
   margin: clamp(1.55rem, 5.5vw, 2.15rem) 0 clamp(1.2rem, 4vw, 1.55rem);
   padding-bottom: 1.5rem;
   font-size: clamp(1.75rem, 7.6vw, 2.35rem);

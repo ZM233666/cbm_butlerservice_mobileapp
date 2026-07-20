@@ -10,6 +10,24 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
     <title>Digital CBM</title>
+    <script>
+      // Compatibility for non-secure HTTP WebViews and injected integrations.
+      if (globalThis.crypto && typeof globalThis.crypto.randomUUID !== 'function') {
+        globalThis.crypto.randomUUID = function () {
+          var bytes = new Uint8Array(16)
+          if (typeof globalThis.crypto.getRandomValues === 'function') {
+            globalThis.crypto.getRandomValues(bytes)
+          } else {
+            for (var i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256)
+          }
+          bytes[6] = (bytes[6] & 15) | 64
+          bytes[8] = (bytes[8] & 63) | 128
+          var hex = Array.from(bytes, function (value) { return value.toString(16).padStart(2, '0') })
+          return hex.slice(0, 4).join('') + '-' + hex.slice(4, 6).join('') + '-' +
+            hex.slice(6, 8).join('') + '-' + hex.slice(8, 10).join('') + '-' + hex.slice(10).join('')
+        }
+      }
+    </script>
     <script type="module" crossorigin src="/assets/index-BVDnuY6q.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-B6cnbe0R.css">
   </head>

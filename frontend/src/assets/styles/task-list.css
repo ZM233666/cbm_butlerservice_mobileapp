@@ -419,6 +419,14 @@ body.tl-page {
   outline-offset: 1px;
 }
 
+.tl-upload-btn.is-disabled,
+.tl-upload-slot.is-disabled .tl-upload-btn {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+}
+
 .tl-upload-btn.is-hidden {
   display: none;
 }
@@ -517,6 +525,13 @@ body.tl-page {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.84) inset,
     0 5px 12px rgba(15, 23, 42, 0.08);
+}
+
+.tl-issue-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
 }
 
 .tl-issue-btn:focus-visible {

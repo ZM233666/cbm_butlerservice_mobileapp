@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   slotId: string
   label: string
   inputId: string
@@ -10,7 +10,11 @@ const props = defineProps<{
   processing: boolean
   uploading: boolean
   metaLines: string[]
-}>()
+  /** 非 DOING 状态时禁止上传/更换图片 */
+  disabled?: boolean
+}>(), {
+  disabled: false,
+})
 
 const emit = defineEmits<{
   (e: 'change', event: Event): void
@@ -21,16 +25,23 @@ const hasImage = computed(() => !!props.imageUrl)
 </script>
 
 <template>
-  <div class="tl-upload-slot">
+  <div class="tl-upload-slot" :class="{ 'is-disabled': disabled }">
     <input
       :id="inputId"
       class="tl-file"
-      :class="{ 'is-hidden': hasImage }"
+      :class="{ 'is-hidden': hasImage || disabled }"
       type="file"
       accept="image/*"
+      :disabled="disabled"
       @change="emit('change', $event)"
     />
-    <label v-show="!hasImage" class="tl-upload-btn" :for="inputId">{{ label }}</label>
+    <label
+      v-show="!hasImage"
+      class="tl-upload-btn"
+      :class="{ 'is-disabled': disabled }"
+      :for="disabled ? undefined : inputId"
+      :aria-disabled="disabled ? 'true' : undefined"
+    >{{ label }}</label>
     <div v-show="hasImage" class="tl-thumb is-visible">
       <img :src="imageUrl" alt="" decoding="async" />
       <div v-if="processing" class="tl-thumb__meta">

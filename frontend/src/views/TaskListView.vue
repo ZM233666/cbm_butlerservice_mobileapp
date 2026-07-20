@@ -371,12 +371,14 @@ function openSchematic(seq: string) {
 }
 
 function openIssue(rowId: string) {
+  if (!isTaskDoing.value) return
   issueRowId.value = rowId
   issueText.value = issueRecords.value[rowId]?.text || ''
   issueOpen.value = true
 }
 
 function saveIssue() {
+  if (!isTaskDoing.value) return
   if (!issueRowId.value) return
   const text = issueText.value.trim()
   if (text) {
@@ -722,6 +724,10 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  if (!isTaskDoing.value) {
+    input.value = ''
+    return
+  }
   if (!isAllowedUploadType(file)) {
     toast(invalidUploadTypeMessage(), 'error')
     input.value = ''
@@ -1030,6 +1036,7 @@ onUnmounted(() => {
                           :processing="!!processingSlots[btn.slot]"
                           :uploading="!!uploadingSlots[btn.slot]"
                           :meta-lines="uploadMetaLines(btn.slot)"
+                          :disabled="!isTaskDoing"
                           @change="handleUpload(btn.slot, btn.label, $event)"
                         />
                       </div>
@@ -1037,7 +1044,7 @@ onUnmounted(() => {
                     <span v-else class="tl-upload-na">{{ row.uploadHint || t.noUpload }}</span>
                     <div class="tl-issue-wrap">
                       <div v-if="issueRecords[row.id]?.text" class="tl-issue-note">{{ t.issueNotePrefix }}{{ issueRecords[row.id].text.slice(0, 44) }}{{ issueRecords[row.id].text.length > 44 ? '...' : '' }}</div>
-                      <button type="button" class="tl-issue-btn" @click="openIssue(row.id)">{{ t.reportIssue }}</button>
+                      <button type="button" class="tl-issue-btn" :disabled="!isTaskDoing" @click="openIssue(row.id)">{{ t.reportIssue }}</button>
                     </div>
                   </div>
                 </td>

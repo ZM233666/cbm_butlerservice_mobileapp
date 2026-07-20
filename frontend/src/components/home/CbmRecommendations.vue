@@ -25,7 +25,7 @@ type RecoPriority = 'low' | 'medium' | 'high'
 const selected = ref<TaskCard | null>(null)
 const modalOpen = computed(() => selected.value !== null)
 const acceptState = ref<'idle' | 'loading' | 'success'>('idle')
-const collapsed = ref(false)
+const collapsed = ref(true)
 
 const selectedRecoId = computed(() => String(selected.value?.id || '').trim())
 const isSelectedAccepting = computed(() => {
@@ -135,7 +135,12 @@ async function acceptSelected() {
             <span class="item-subtitle">{{ String(row.card.depot || '').trim() || DEFAULT_DEPOT }}</span>
           </span>
           <span class="item-right">
-            <span class="reco-priority" :class="`reco-priority--${row.priority}`">
+            <!-- 高优先级展示暂未启用，先隐藏红色「高」 -->
+            <span
+              v-if="row.priority !== 'high'"
+              class="reco-priority"
+              :class="`reco-priority--${row.priority}`"
+            >
               <i class="reco-priority__dot"></i>
               <span>{{ priorityLabel(row.priority) }}</span>
             </span>
@@ -151,7 +156,9 @@ async function acceptSelected() {
       <div class="home-legend home-cbm-meta__legend" aria-label="priority legend">
         <span class="home-legend__item"><i class="home-legend__dot bg-low"></i>{{ t.legendLow }}</span>
         <span class="home-legend__item"><i class="home-legend__dot bg-med"></i>{{ t.legendMedium }}</span>
+        <!-- 高优先级图例暂未启用
         <span class="home-legend__item"><i class="home-legend__dot bg-high"></i>{{ t.legendHigh }}</span>
+        -->
       </div>
     </div>
   </section>

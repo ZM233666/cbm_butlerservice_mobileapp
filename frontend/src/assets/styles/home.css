@@ -2633,6 +2633,8 @@ button.my-info-row.my-info-row--action {
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
   padding: 0.75rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .mgr-step__head {
@@ -2673,6 +2675,7 @@ button.my-info-row.my-info-row--action {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
+  min-width: 0;
 }
 
 .mgr-step .manager-field > span {
@@ -2699,6 +2702,7 @@ button.my-info-row.my-info-row--action {
 .manager-field {
   display: grid;
   gap: 0.24rem;
+  min-width: 0;
 }
 
 .manager-field--full {
@@ -2725,6 +2729,16 @@ button.my-info-row.my-info-row--action {
   color: #0f172a;
   padding: 0.45rem 0.58rem;
   box-sizing: border-box;
+}
+
+.manager-field input[type='date'] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .manager-field select {
@@ -2799,7 +2813,12 @@ button.my-info-row.my-info-row--action {
 
 .manager-table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
   min-width: 0;
+  /* 表头约 1 行 + 正文约 3.5 行，超出可上下拖动 */
+  max-height: calc(2.45rem + 3.5 * 2.55rem);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .manager-table {

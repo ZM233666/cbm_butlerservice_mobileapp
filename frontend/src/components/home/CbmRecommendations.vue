@@ -135,15 +135,15 @@ async function acceptSelected() {
             <span class="item-subtitle">{{ String(row.card.depot || '').trim() || DEFAULT_DEPOT }}</span>
           </span>
           <span class="item-right">
-            <!-- 高优先级展示暂未启用，先隐藏红色「高」 -->
+            <!-- 优先级展示暂未启用，先全部隐藏
             <span
-              v-if="row.priority !== 'high'"
               class="reco-priority"
               :class="`reco-priority--${row.priority}`"
             >
               <i class="reco-priority__dot"></i>
               <span>{{ priorityLabel(row.priority) }}</span>
             </span>
+            -->
             <span class="chevron">›</span>
           </span>
         </component>
@@ -153,13 +153,13 @@ async function acceptSelected() {
 
     <div v-if="!collapsed" class="home-cbm-meta" role="note">
       <p class="home-section__subtitle home-cbm-meta__hint">{{ comingSoon ? t.homeCbmComingSoonHint : t.homeCbmSubtitle }}</p>
+      <!-- 优先级图例暂未启用，先全部隐藏
       <div class="home-legend home-cbm-meta__legend" aria-label="priority legend">
         <span class="home-legend__item"><i class="home-legend__dot bg-low"></i>{{ t.legendLow }}</span>
         <span class="home-legend__item"><i class="home-legend__dot bg-med"></i>{{ t.legendMedium }}</span>
-        <!-- 高优先级图例暂未启用
         <span class="home-legend__item"><i class="home-legend__dot bg-high"></i>{{ t.legendHigh }}</span>
-        -->
       </div>
+      -->
     </div>
   </section>
 

@@ -98,12 +98,112 @@ const backToHome = computed(() => {
   return { path: '/', query: { refresh: String(homeRefreshStamp.value) } }
 })
 
+function isGuidanceDataSyncRow(row: GuidanceRow) {
+  const seq = String(row.seq || '')
+  return seq === '17' || seq.startsWith('17.')
+}
+
+/**
+ * C1-C3 过滤后主序号可能不连续（如 1/3/3.4）。
+ * 重排规则：
+ * 1) 主序号按出现顺序压成 1..N，子序号先保留后缀（3.4 → 2.4）
+ * 2) 若该主项仍在：子项后缀按出现顺序重排为 .1/.2/...（2.4 → 2.1）
+ * 3) 若该主项已被滤掉：仅剩的子项提升为主序号（5.1 → 5；多个则首个升主项，其余 .1/.2/...）
+ * 示意图 / 数据同步判断仍使用真实 row.seq。
+ */
+function buildC1C3DisplaySeqMap(rows: GuidanceRow[]): Record<string, string> {
+  const majorOrder: number[] = []
+  const seen = new Set<number>()
+  rows.forEach((row) => {
+    const major = Number.parseInt(String(row.seq || '').split('.')[0] || '', 10)
+    if (!Number.isFinite(major) || seen.has(major)) return
+    seen.add(major)
+    majorOrder.push(major)
+  })
+
+  const majorMap = new Map<number, number>()
+  majorOrder.forEach((oldMajor, index) => {
+    majorMap.set(oldMajor, index + 1)
+  })
+
+  type Intermediate = { id: string; newMajor: number; isChild: boolean; childSuffix: string }
+  const intermediates: Intermediate[] = []
+  rows.forEach((row) => {
+    const parts = String(row.seq || '').split('.')
+    const oldMajor = Number.parseInt(parts[0] || '', 10)
+    const newMajor = majorMap.get(oldMajor)
+    if (newMajor == null) {
+      intermediates.push({ id: row.id, newMajor: -1, isChild: false, childSuffix: '' })
+      return
+    }
+    intermediates.push({
+      id: row.id,
+      newMajor,
+      isChild: parts.length > 1,
+      childSuffix: parts.length > 1 ? parts.slice(1).join('.') : '',
+    })
+  })
+
+  const byMajor = new Map<number, Intermediate[]>()
+  intermediates.forEach((item) => {
+    if (item.newMajor < 0) return
+    const list = byMajor.get(item.newMajor) || []
+    list.push(item)
+    byMajor.set(item.newMajor, list)
+  })
+
+  const out: Record<string, string> = {}
+  intermediates.forEach((item) => {
+    if (item.newMajor < 0) {
+      const raw = rows.find((r) => r.id === item.id)
+      out[item.id] = raw?.seq || ''
+    }
+  })
+
+  byMajor.forEach((group, newMajor) => {
+    const parents = group.filter((x) => !x.isChild)
+    const children = group.filter((x) => x.isChild)
+
+    parents.forEach((p) => {
+      out[p.id] = String(newMajor)
+    })
+
+    if (parents.length > 0) {
+      children.forEach((child, index) => {
+        out[child.id] = `${newMajor}.${index + 1}`
+      })
+      return
+    }
+
+    // 父项不存在：子项提升
+    if (children.length === 1) {
+      out[children[0].id] = String(newMajor)
+      return
+    }
+    children.forEach((child, index) => {
+      out[child.id] = index === 0 ? String(newMajor) : `${newMajor}.${index}`
+    })
+  })
+
+  return out
+}
+
 const visibleRows = computed(() => {
-  return guidanceRows.value.filter(row => {
+  const filtered = guidanceRows.value.filter((row) => {
     if (maintType.value === 'c1c3') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c4c6')
     if (maintType.value === 'c4c6') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c1c3')
     return true
   })
+
+  if (maintType.value !== 'c1c3') {
+    return filtered.map((row) => ({ ...row, displaySeq: row.seq }))
+  }
+
+  const displaySeqMap = buildC1C3DisplaySeqMap(filtered)
+  return filtered.map((row) => ({
+    ...row,
+    displaySeq: displaySeqMap[row.id] || row.seq,
+  }))
 })
 
 const EN_DESC: Record<string, string> = {
@@ -148,8 +248,7 @@ const rowDescription = computed(() => {
 })
 
 function isDataSyncRow(row: GuidanceRow) {
-  const seq = String(row.seq || '')
-  return seq === '17' || seq.startsWith('17.')
+  return isGuidanceDataSyncRow(row)
 }
 
 function isDataSyncStart(index: number) {
@@ -1017,7 +1116,7 @@ onUnmounted(() => {
                   </td>
                 </tr>
                 <tr :class="{ 'is-data-sync-row': isDataSyncRow(row) }">
-                <td class="tl-seq-cell">{{ row.seq }}</td>
+                <td class="tl-seq-cell">{{ row.displaySeq }}</td>
                 <td class="tl-desc-cell">
                   <span class="tl-desc-text">{{ rowDescription(row) }}</span>
                   <button v-if="SCHEMATIC_SEQS.has(row.seq)" type="button" class="tl-desc-btn tl-desc-btn--inline" @click="openSchematic(row.seq)">{{ lang === 'zh' ? '查看位置示意图' : 'View schematic' }}</button>
@@ -1125,7 +1224,7 @@ onUnmounted(() => {
           </p>
           <ul class="tl-submit-missing-list">
             <li v-for="row in incompleteRows" :key="row.id" class="tl-submit-missing-item">
-              <strong>{{ row.seq }}</strong>
+              <strong>{{ row.displaySeq }}</strong>
               <span>{{ rowDescription(row) }}</span>
             </li>
           </ul>

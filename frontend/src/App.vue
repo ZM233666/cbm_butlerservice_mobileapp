@@ -44,9 +44,9 @@ onUnmounted(() => {
 <template>
   <ScreenshotWatermark />
   <ToastHost />
-  <RouterView v-slot="{ Component }">
+  <RouterView v-slot="{ Component, route: viewRoute }">
     <KeepAlive include="TaskListView">
-      <component :is="Component" />
+      <component :is="Component" :key="viewRoute.fullPath" />
     </KeepAlive>
   </RouterView>
   <BottomNav v-if="showBottomNav" />

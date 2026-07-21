@@ -52,13 +52,8 @@ const selectedFseName = computed(() => {
 
 const maintDisplay = computed(() => {
   const m = String(maint.value || '').trim().toLowerCase()
-  if (lang.value === 'en') {
-    if (m === 'c1c3') return 'C1 Maintenance'
-    if (m === 'c4c6') return 'C4 Maintenance'
-    return String(m || '').toUpperCase()
-  }
-  if (m === 'c1c3') return 'C1级保养'
-  if (m === 'c4c6') return 'C4级保养'
+  if (m === 'c1c3') return 'C1/C3'
+  if (m === 'c4c6') return 'C4/C6'
   return String(m || '').toUpperCase()
 })
 
@@ -120,7 +115,7 @@ function buildDraftRow(): ManagerAssignment | null {
   const maint = String(data.maint || '').trim()
   const region = String(data.region || '').trim()
   const depot = String(data.depot || '').trim()
-  const depotText = `${region} / ${depot}`.trim()
+  const depotText = region && depot && region !== depot ? `${region} / ${depot}` : (depot || region)
   const deadline = String(data.deadline || '').trim()
   if (!vehicleNo && !maint && !depotText && !deadline) return null
 
@@ -161,8 +156,12 @@ function applyDraftFromStorage() {
     if (data.requiredCertificateName != null) requiredCertificateName.value = String(data.requiredCertificateName || '')
     if (data.assignee != null) assignee.value = String(data.assignee || '')
     if (data.maint != null) maint.value = String(data.maint || maint.value)
-    if (data.region != null) region.value = String(data.region || '')
-    if (data.depot != null) depot.value = String(data.depot || '')
+    if (data.region != null || data.depot != null) {
+      const r = String(data.region || '').trim()
+      const d = String(data.depot || '').trim()
+      depot.value = r && d && r !== d ? `${r} / ${d}` : (d || r)
+      region.value = r
+    }
     if (data.vehicleNo != null) vehicleNo.value = String(data.vehicleNo || '')
     if (data.plannedStart != null) plannedStart.value = String(data.plannedStart || '')
     if (data.deadline != null) deadline.value = String(data.deadline || '')
@@ -227,7 +226,6 @@ async function onAssign() {
   if (
     !assignee.value ||
     !maint.value ||
-    !region.value.trim() ||
     !depot.value.trim() ||
     !vehicleNo.value.trim() ||
     !plannedStart.value ||
@@ -239,7 +237,7 @@ async function onAssign() {
   }
 
   try {
-    const depotText = `${region.value.trim()} / ${depot.value.trim()}`.trim()
+    const depotText = depot.value.trim()
     await postAssignment({
       assignedToEmployeeId: assignee.value,
       maint: maint.value,
@@ -295,7 +293,7 @@ onMounted(async () => {
           <header class="mgr-step__head">
             <span class="mgr-step__no" aria-hidden="true">1</span>
             <div class="mgr-step__copy">
-              <p class="mgr-step__title">{{ lang === 'zh' ? '对象与人员' : 'Who & Where' }}</p>
+              <p class="mgr-step__title">{{ lang === 'zh' ? '任务人员' : 'Task Personnel' }}</p>
               <p class="mgr-step__sub">{{ lang === 'zh' ? '选择工程师并填写车辆与地点' : 'Pick an engineer and fill vehicle/location' }}</p>
             </div>
           </header>
@@ -319,14 +317,15 @@ onMounted(async () => {
               </select>
             </label>
             <label class="manager-field">
-              <span>{{ (t as any).mgrRegion }}</span>
-              <input v-model="region" type="text" :placeholder="(t as any).mgrRegion" required />
+              <span>{{ lang === 'zh' ? '服务地点/机务段' : 'Service Location / Depot' }}</span>
+              <input
+                v-model="depot"
+                type="text"
+                :placeholder="lang === 'zh' ? '服务地点/机务段' : 'Service Location / Depot'"
+                required
+              />
             </label>
             <label class="manager-field">
-              <span>{{ (t as any).mgrDepotName }}</span>
-              <input v-model="depot" type="text" :placeholder="(t as any).mgrDepotName" required />
-            </label>
-            <label class="manager-field manager-field--full">
               <span>{{ t.mgrVehicleNo }}</span>
               <input v-model="vehicleNo" type="text" :placeholder="t.mgrVehiclePlaceholder" required />
             </label>
@@ -356,7 +355,7 @@ onMounted(async () => {
           <header class="mgr-step__head">
             <span class="mgr-step__no" aria-hidden="true">3</span>
             <div class="mgr-step__copy">
-              <p class="mgr-step__title">{{ lang === 'zh' ? '定时间并确认与下发' : 'Review & Dispatch' }}</p>
+              <p class="mgr-step__title">{{ lang === 'zh' ? '任务周期并派发' : 'Schedule & Dispatch' }}</p>
               <p class="mgr-step__sub">{{ lang === 'zh' ? '确认摘要后下发任务' : 'Review summary then dispatch' }}</p>
             </div>
           </header>

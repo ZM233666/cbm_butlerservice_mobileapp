@@ -165,9 +165,83 @@
     return true;
   }
 
+  function buildC1C3DisplaySeqMap(rows) {
+    const majorOrder = [];
+    const seen = new Set();
+    rows.forEach((row) => {
+      const major = Number.parseInt(String(row.seq || "").split(".")[0] || "", 10);
+      if (!Number.isFinite(major) || seen.has(major)) return;
+      seen.add(major);
+      majorOrder.push(major);
+    });
+    const majorMap = new Map();
+    majorOrder.forEach((oldMajor, index) => {
+      majorMap.set(oldMajor, index + 1);
+    });
+
+    const intermediates = rows.map((row) => {
+      const parts = String(row.seq || "").split(".");
+      const oldMajor = Number.parseInt(parts[0] || "", 10);
+      const newMajor = majorMap.get(oldMajor);
+      if (newMajor == null) {
+        return { id: row.id, newMajor: -1, isChild: false, seq: row.seq };
+      }
+      return {
+        id: row.id,
+        newMajor,
+        isChild: parts.length > 1,
+        seq: row.seq,
+      };
+    });
+
+    const byMajor = new Map();
+    intermediates.forEach((item) => {
+      if (item.newMajor < 0) return;
+      const list = byMajor.get(item.newMajor) || [];
+      list.push(item);
+      byMajor.set(item.newMajor, list);
+    });
+
+    const out = {};
+    intermediates.forEach((item) => {
+      if (item.newMajor < 0) out[item.id] = item.seq;
+    });
+
+    byMajor.forEach((group, newMajor) => {
+      const parents = group.filter((x) => !x.isChild);
+      const children = group.filter((x) => x.isChild);
+      parents.forEach((p) => {
+        out[p.id] = String(newMajor);
+      });
+      if (parents.length > 0) {
+        children.forEach((child, index) => {
+          out[child.id] = `${newMajor}.${index + 1}`;
+        });
+        return;
+      }
+      if (children.length === 1) {
+        out[children[0].id] = String(newMajor);
+        return;
+      }
+      children.forEach((child, index) => {
+        out[child.id] = index === 0 ? String(newMajor) : `${newMajor}.${index}`;
+      });
+    });
+
+    return out;
+  }
+
   function visibleRows() {
     const maintType = getMaintType();
-    return guidanceRows.filter((row) => allowedByMaintCategory(row, maintType));
+    const filtered = guidanceRows.filter((row) => allowedByMaintCategory(row, maintType));
+    if (maintType !== "c1c3") {
+      return filtered.map((row) => ({ ...row, displaySeq: row.seq }));
+    }
+    const displaySeqMap = buildC1C3DisplaySeqMap(filtered);
+    return filtered.map((row) => ({
+      ...row,
+      displaySeq: displaySeqMap[row.id] || row.seq,
+    }));
   }
 
   function syncMaintDisplay() {
@@ -207,7 +281,7 @@
       const descHtml = buildDescCell(row);
       const uploadHtml = buildUploadCell(row);
       parts.push(
-        `<tr data-row-id="${escapeHtml(row.id)}"><td>${escapeHtml(row.seq)}</td><td class="tl-desc-cell">${descHtml}</td><td class="tl-upload-cell">${uploadHtml}</td></tr>`
+        `<tr data-row-id="${escapeHtml(row.id)}"><td>${escapeHtml(row.displaySeq || row.seq)}</td><td class="tl-desc-cell">${descHtml}</td><td class="tl-upload-cell">${uploadHtml}</td></tr>`
       );
     });
     tbody.innerHTML = parts.join("");

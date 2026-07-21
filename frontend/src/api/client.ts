@@ -161,11 +161,13 @@ export async function apiPostPublic<T>(path: string, body: unknown): Promise<T> 
     },
     body: JSON.stringify(body),
   })
+  const data = await res.json().catch(() => null)
   if (!res.ok) {
-    notifyApiError(res.status)
-    throw new ApiError(res.status, `POST ${path} failed`)
+    const msg = String((data as any)?.msg || (data as any)?.detail || '').trim()
+    if (!msg) notifyApiError(res.status)
+    throw new ApiError(res.status, msg || `POST ${path} failed`)
   }
-  return res.json()
+  return data as T
 }
 
 export async function apiGet<T>(path: string, params?: Record<string, string>): Promise<T> {

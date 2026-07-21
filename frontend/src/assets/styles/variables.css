@@ -2,6 +2,11 @@
   --kb-brand: #00467f;
   --kb-navy: #033e70;
   --kb-navy-soft: #0066b3;
+  /* Manager / Director exclusive accents */
+  --kb-exclusive: #d4a84b;
+  --kb-exclusive-bright: #e8c56a;
+  --kb-exclusive-deep: #b8892e;
+  --kb-exclusive-soft: rgba(212, 168, 75, 0.28);
   --page-bg: #f3f7fc;
   --zinc-200: #e4e4e7;
   --zinc-500: #71717a;

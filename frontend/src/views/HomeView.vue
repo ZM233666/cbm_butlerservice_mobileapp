@@ -178,7 +178,7 @@ async function acceptReco(card: TaskCard) {
 
 <template>
   <PageShell>
-    <header class="home-top" :aria-label="t.brand">
+    <header class="home-top" :class="{ 'home-top--exclusive': auth.isManager }" :aria-label="t.brand">
       <svg class="home-top__tech-lines" viewBox="0 0 260 170" aria-hidden="true">
         <defs>
           <linearGradient id="home-route-a" x1="0" y1="1" x2="1" y2="0">
@@ -187,10 +187,28 @@ async function acceptReco(card: TaskCard) {
             <stop offset="0.78" stop-color="#d8eaf6" stop-opacity="0.34" />
             <stop offset="1" stop-color="#d8eaf6" stop-opacity="0" />
           </linearGradient>
+          <linearGradient id="home-route-exclusive" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#b8892e" stop-opacity="0" />
+            <stop offset="0.35" stop-color="#d4a84b" stop-opacity="0.42" />
+            <stop offset="0.72" stop-color="#e8c56a" stop-opacity="0.55" />
+            <stop offset="1" stop-color="#f5e6b8" stop-opacity="0" />
+          </linearGradient>
         </defs>
-        <line class="home-top__ray" stroke="url(#home-route-a)" x1="260" y1="10" x2="-10" y2="124" />
-        <line class="home-top__ray home-top__ray--middle" stroke="url(#home-route-a)" x1="260" y1="24" x2="42" y2="170" />
-        <line class="home-top__ray home-top__ray--short" stroke="url(#home-route-a)" x1="248" y1="-4" x2="112" y2="170" />
+        <line
+          class="home-top__ray"
+          :stroke="auth.isManager ? 'url(#home-route-exclusive)' : 'url(#home-route-a)'"
+          x1="260" y1="10" x2="-10" y2="124"
+        />
+        <line
+          class="home-top__ray home-top__ray--middle"
+          :stroke="auth.isManager ? 'url(#home-route-exclusive)' : 'url(#home-route-a)'"
+          x1="260" y1="24" x2="42" y2="170"
+        />
+        <line
+          class="home-top__ray home-top__ray--short"
+          :stroke="auth.isManager ? 'url(#home-route-exclusive)' : 'url(#home-route-a)'"
+          x1="248" y1="-4" x2="112" y2="170"
+        />
       </svg>
       <div class="home-top__row">
         <img
@@ -338,6 +356,25 @@ async function acceptReco(card: TaskCard) {
   height: 0.24rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
+}
+
+.home-top--exclusive .home-top__title::after {
+  background: linear-gradient(90deg, var(--kb-exclusive-deep, #b8892e), var(--kb-exclusive-bright, #e8c56a));
+  box-shadow: 0 0 10px rgba(212, 168, 75, 0.45);
+}
+
+.home-top--exclusive .home-top__tech-lines line {
+  stroke-width: 1.55;
+}
+
+.home-top--exclusive :deep(.profile-card__icon),
+.home-top--exclusive :deep(.profile-card__icon--at) {
+  color: var(--kb-exclusive-bright, #e8c56a);
+}
+
+.home-top--exclusive :deep(.profile-card__role) {
+  background: rgba(212, 168, 75, 0.28);
+  color: #fff8e8;
 }
 
 .home-top__profile {

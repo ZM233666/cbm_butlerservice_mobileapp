@@ -133,4 +133,20 @@ router.beforeEach(async (to) => {
   return true
 })
 
+router.onError((err, to) => {
+  const msg = String((err as Error)?.message || err || '')
+  const isChunkError =
+    msg.includes('Failed to fetch dynamically imported module')
+    || msg.includes('Importing a module script failed')
+    || msg.includes('Loading chunk')
+    || msg.includes('ChunkLoadError')
+  if (!isChunkError) return
+  const key = 'butler.chunk-reload'
+  const last = Number(sessionStorage.getItem(key) || 0)
+  if (Date.now() - last < 10_000) return
+  sessionStorage.setItem(key, String(Date.now()))
+  const target = to?.fullPath || window.location.pathname + window.location.search
+  window.location.assign(target)
+})
+
 export default router

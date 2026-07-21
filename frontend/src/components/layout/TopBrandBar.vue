@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import LangSwitch from '@/components/common/LangSwitch.vue'
 import type { RouteLocationRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 defineProps<{
   title?: string
@@ -8,10 +9,12 @@ defineProps<{
   backTo?: RouteLocationRaw
   backLabel?: string
 }>()
+
+const auth = useAuthStore()
 </script>
 
 <template>
-  <header class="top-brand-bar" aria-label="品牌栏">
+  <header class="top-brand-bar" :class="{ 'top-brand-bar--exclusive': auth.isManager }" aria-label="品牌栏">
     <div class="top-brand-bar__left">
       <router-link v-if="backTo" class="top-brand-bar__back" :to="backTo">{{ backLabel }}</router-link>
       <img v-else class="top-brand-bar__logo" src="/RVSChinaDT_Logo.png" width="364" height="230" alt="RVS-CHINA DIGITAL TEAM" decoding="async" />
@@ -32,6 +35,11 @@ defineProps<{
   background: #ffffff;
   border-bottom: 1px solid #e0e0e0;
   position: relative;
+}
+
+.top-brand-bar--exclusive {
+  border-bottom-color: rgba(212, 168, 75, 0.55);
+  box-shadow: 0 1px 0 rgba(232, 197, 106, 0.35);
 }
 
 .top-brand-bar__left {

@@ -24,7 +24,7 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
 </script>
 
 <template>
-  <nav class="bottom-nav" aria-label="主导航">
+  <nav class="bottom-nav" :class="{ 'bottom-nav--exclusive': auth.isManager }" aria-label="主导航">
     <router-link
       v-for="item in visibleItems"
       :key="item.to"
@@ -207,6 +207,14 @@ const visibleItems = computed(() => items.value.filter(i => auth.canAccess(i.to)
 
 .bottom-nav__item.is-active::before {
   background: var(--kb-brand, #00467f);
+}
+
+.bottom-nav--exclusive .bottom-nav__item.is-active {
+  color: var(--kb-exclusive-deep, #b8892e);
+}
+
+.bottom-nav--exclusive .bottom-nav__item.is-active::before {
+  background: linear-gradient(90deg, var(--kb-exclusive-deep, #b8892e), var(--kb-exclusive-bright, #e8c56a));
 }
 
 .bottom-nav__icon {

@@ -79,12 +79,18 @@ function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
 
 
 export async function loginUser(payload: LoginPayload): Promise<{ user: Partial<User>; token: string; refreshToken: string }> {
-  const resp = await apiPostPublic<BackendOk<LoginData>>('/api/login/', {
-    username: payload.username,
-    password: md5(payload.password),
-    captcha: payload.captcha ?? '',
-    captchaKey: payload.captchaKey,
-  })
+  let resp: BackendOk<LoginData>
+  try {
+    resp = await apiPostPublic<BackendOk<LoginData>>('/api/login/', {
+      username: payload.username,
+      password: md5(payload.password),
+      captcha: payload.captcha ?? '',
+      captchaKey: payload.captchaKey,
+    })
+  } catch (err) {
+    const msg = String((err as Error)?.message || '').trim()
+    throw new Error(msg || 'login_failed')
+  }
 
   if (!resp || resp.code !== 2000) {
     throw new Error(String((resp as any)?.msg || 'login_failed'))

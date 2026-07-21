@@ -248,7 +248,7 @@ onMounted(() => {
 <template>
   <div class="page page--my">
     <TopBrandBar />
-    <header class="my-header">
+    <header class="my-header" :class="{ 'my-header--exclusive': auth.isManager }">
       <div class="my-header__avatar" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="40" height="40" fill="none">
           <circle cx="12" cy="9" r="3.5" fill="currentColor" />
@@ -492,6 +492,15 @@ onMounted(() => {
   flex-shrink: 0;
   color: #fff;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.my-header--exclusive .my-header__avatar {
+  border-color: var(--kb-exclusive, #d4a84b);
+  color: var(--kb-exclusive-bright, #e8c56a);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 232, 180, 0.28),
+    0 0 0 1px rgba(212, 168, 75, 0.35),
+    0 0 14px rgba(212, 168, 75, 0.28);
+  background: linear-gradient(180deg, rgba(232, 197, 106, 0.18), rgba(184, 137, 46, 0.1));
 }
 .my-header__meta { min-width: 0; align-self: center; }
 .my-header__name {

@@ -26,6 +26,13 @@ const copy = computed(() => {
       errFillAll: 'Please fill in all fields',
       errLoginFail: 'Login failed',
       errCaptchaLoad: 'Failed to load captcha, please refresh',
+      errWrongPassword: 'Incorrect username or password',
+      errAccountMissing: 'Account does not exist',
+      errAccountLocked: 'Account is locked. Contact an administrator',
+      errCaptchaRequired: 'Please enter the verification code',
+      errCaptchaWrong: 'Incorrect verification code',
+      errCaptchaExpired: 'Verification code expired. Please refresh',
+      errNetwork: 'Unable to reach login service. Check local backend',
       copyrightTail: 'All rights reserved',
     } as const
   }
@@ -41,9 +48,65 @@ const copy = computed(() => {
     errFillAll: '请填写全部字段',
     errLoginFail: '登录失败',
     errCaptchaLoad: '验证码加载失败，请刷新',
+    errWrongPassword: '账号或密码不正确',
+    errAccountMissing: '登录账号不存在',
+    errAccountLocked: '账号已锁定，请联系管理员解锁',
+    errCaptchaRequired: '请输入图形验证码',
+    errCaptchaWrong: '图形验证码不正确',
+    errCaptchaExpired: '验证码已过期，请刷新后重试',
+    errNetwork: '无法连接登录服务，请检查本地后端是否已启动',
     copyrightTail: '版权所有',
   } as const
 })
+
+function mapLoginErrorMessage(raw: string): string {
+  const msg = String(raw || '').trim()
+  if (!msg || msg === 'Error' || msg === 'login_failed') return copy.value.errLoginFail
+  const lower = msg.toLowerCase()
+  if (
+    lower.includes('does not exist')
+    || msg.includes('不存在')
+    || msg.includes('未注册')
+  ) return copy.value.errAccountMissing
+  if (
+    lower.includes('locked')
+    || msg.includes('锁定')
+    || msg.includes('已锁定')
+  ) return copy.value.errAccountLocked
+  if (
+    lower.includes('expired')
+    || msg.includes('过期')
+  ) return copy.value.errCaptchaExpired
+  if (
+    (lower.includes('verification code') && (lower.includes('incorrect') || lower.includes('wrong')))
+    || msg.includes('验证码错误')
+    || msg.includes('验证码不正确')
+    || msg.includes('图片验证码')
+  ) return copy.value.errCaptchaWrong
+  if (
+    (lower.includes('verification code') && lower.includes('required'))
+    || msg.includes('验证码不能为空')
+    || msg.includes('请输入验证码')
+    || msg.includes('Verification code is required')
+  ) return copy.value.errCaptchaRequired
+  if (
+    lower.includes('password')
+    || lower.includes('incorrect')
+    || msg.includes('密码')
+    || msg.includes('账号/密码')
+  ) return copy.value.errWrongPassword
+  if (
+    lower.includes('failed to fetch')
+    || lower.includes('network')
+    || lower.includes('econnrefused')
+    || msg.includes('连接')
+  ) return copy.value.errNetwork
+  // 避免把底层 Django 字段异常原文直接暴露给用户
+  if (lower.includes("expected a number") || lower.includes('field ')) {
+    return copy.value.errCaptchaRequired
+  }
+  return msg
+}
 
 const username = ref('')
 const password = ref('')
@@ -55,10 +118,10 @@ const loadingCaptcha = ref(false)
 const submitting = ref(false)
 const error = ref('')
 
-async function loadCaptcha() {
+async function loadCaptcha(opts?: { clearError?: boolean }) {
   if (loadingCaptcha.value) return
   loadingCaptcha.value = true
-  error.value = ''
+  if (opts?.clearError !== false) error.value = ''
   try {
     const data = await fetchCaptcha()
     if (!data) {
@@ -78,7 +141,7 @@ async function loadCaptcha() {
   }
 }
 
-onMounted(loadCaptcha)
+onMounted(() => { void loadCaptcha() })
 
 async function submit() {
   error.value = ''
@@ -101,10 +164,10 @@ async function submit() {
     router.replace(next)
   } catch (e: unknown) {
     const msg = String((e as Error)?.message || '').trim()
-    error.value = msg && msg !== 'Error' ? `${copy.value.errLoginFail}: ${msg}` : copy.value.errLoginFail
-    // 登录失败时刷新验证码
+    error.value = mapLoginErrorMessage(msg)
+    // 登录失败时刷新验证码，但不要清空刚展示的错误信息
     captchaInput.value = ''
-    if (captchaRequired.value) await loadCaptcha()
+    if (captchaRequired.value) await loadCaptcha({ clearError: false })
   } finally {
     submitting.value = false
   }
@@ -162,7 +225,7 @@ async function submit() {
                 class="captcha-img-btn"
                 :disabled="loadingCaptcha || submitting"
                 :aria-label="copy.captchaRefresh"
-                @click="loadCaptcha"
+                @click="() => loadCaptcha()"
               >
                 <img
                   v-if="captchaImg"

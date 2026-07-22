@@ -2813,6 +2813,12 @@ button.my-info-row.my-info-row--action {
   margin-top: 0.55rem;
 }
 
+.manager-submit:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .manager-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

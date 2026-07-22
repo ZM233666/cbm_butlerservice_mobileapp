@@ -15,6 +15,9 @@ export function clearRequestCache(prefix?: string) {
   for (const key of cache.keys()) {
     if (key.startsWith(prefix)) cache.delete(key)
   }
+  for (const key of inflight.keys()) {
+    if (key.startsWith(prefix)) inflight.delete(key)
+  }
 }
 
 export async function cachedRequest<T>(

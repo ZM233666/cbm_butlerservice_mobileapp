@@ -24,6 +24,7 @@ const depot = ref('')
 const vehicleNo = ref('')
 const plannedStart = ref('')
 const deadline = ref('')
+const assigning = ref(false)
 
 const hintText = computed(() => {
   if (!hintKey.value) return ''
@@ -223,6 +224,8 @@ async function onMonthChange() {
 }
 
 async function onAssign() {
+  if (assigning.value) return
+
   if (
     !assignee.value ||
     !maint.value ||
@@ -236,9 +239,13 @@ async function onAssign() {
     return
   }
 
+  assigning.value = true
+  hintKey.value = 'mgrHintAssigning'
+  hintErr.value = false
+
   try {
     const depotText = depot.value.trim()
-    await postAssignment({
+    const result = await postAssignment({
       assignedToEmployeeId: assignee.value,
       maint: maint.value,
       depot: depotText,
@@ -255,6 +262,16 @@ async function onAssign() {
     hintKey.value = 'mgrHintAssignOk'
     hintErr.value = false
     try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+
+    // 先本地插入返回的任务，避免等 reload 期间列表空白/滞后
+    const created = result?.assignment
+    if (created && created.id) {
+      const rest = assignments.value.filter(
+        (a) => !String(a.id || '').startsWith('draft:') && a.id !== created.id,
+      )
+      assignments.value = [created, ...rest]
+    }
+
     requiredCertificateName.value = ''
     region.value = ''
     depot.value = ''
@@ -264,6 +281,8 @@ async function onAssign() {
   } catch {
     hintKey.value = 'mgrHintAssignFail'
     hintErr.value = true
+  } finally {
+    assigning.value = false
   }
 }
 
@@ -373,10 +392,17 @@ onMounted(async () => {
             </div>
           </div>
           <div class="manager-actions">
-            <button type="button" class="manager-submit manager-submit--ghost" @click="saveDraft">
+            <button
+              type="button"
+              class="manager-submit manager-submit--ghost"
+              :disabled="assigning"
+              @click="saveDraft"
+            >
               {{ (t as any).mgrSaveDraft }}
             </button>
-            <button type="submit" class="manager-submit">{{ t.mgrAssignBtn }}</button>
+            <button type="submit" class="manager-submit" :disabled="assigning" :aria-busy="assigning">
+              {{ assigning ? t.mgrAssigning : t.mgrAssignBtn }}
+            </button>
           </div>
           <p class="manager-hint" :style="{ color: hintErr ? '#dc2626' : '#0f766e' }">{{ hintText }}</p>
         </section>

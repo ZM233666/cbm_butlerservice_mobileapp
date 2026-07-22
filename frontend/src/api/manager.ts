@@ -1,6 +1,6 @@
 import { apiGet, apiPost } from './client'
-import type { ManagerDashboard } from '@/types/manager'
-import { cachedRequest } from './requestCache'
+import type { ManagerAssignment, ManagerDashboard } from '@/types/manager'
+import { cachedRequest, clearRequestCache } from './requestCache'
 
 export function fetchManagerDashboard(month?: string): Promise<ManagerDashboard> {
   const params: Record<string, string> = {}
@@ -22,5 +22,15 @@ export interface CreateAssignmentPayload {
 }
 
 export function postAssignment(payload: CreateAssignmentPayload) {
-  return apiPost<{ ok: boolean }>('/api/manager/assignments', payload)
+  return apiPost<{ ok: boolean; assignment?: ManagerAssignment }>('/api/manager/assignments', payload).then((data) => {
+    // 与工程师 createTaskCentreTask 一致：写成功后清缓存，列表/看板立刻能拉到新数据
+    clearRequestCache('manager-dashboard:')
+    const assigneeId = String(payload.assignedToEmployeeId || '').trim()
+    if (assigneeId) {
+      clearRequestCache(`home-config:${assigneeId}`)
+      clearRequestCache(`task-centre:${assigneeId}`)
+      clearRequestCache(`task-status:${assigneeId}`)
+    }
+    return data
+  })
 }

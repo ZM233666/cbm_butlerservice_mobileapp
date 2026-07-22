@@ -457,6 +457,20 @@ body.tl-page {
   object-fit: cover;
 }
 
+.tl-thumb__preview-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.tl-thumb__preview-btn:focus-visible {
+  outline: 2px solid var(--tl-brand);
+  outline-offset: 1px;
+}
+
 .tl-thumb__meta {
   font-size: 0.65rem;
   color: #71717a;
@@ -467,6 +481,65 @@ body.tl-page {
 
 .tl-thumb__meta-line {
   display: block;
+}
+
+.tl-thumb__retry {
+  margin-top: 0.2rem;
+  min-height: 1.55rem;
+  padding: 0.12rem 0.55rem;
+  border: 1px solid rgba(0, 70, 127, 0.28);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--tl-brand);
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tl-thumb__retry:active {
+  opacity: 0.88;
+}
+
+.tl-thumb__replace {
+  display: block;
+  text-align: center;
+  padding: 0.2rem 0.35rem 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--tl-brand);
+  cursor: pointer;
+}
+
+.tl-upload-slot.is-failed .tl-thumb {
+  border-color: rgba(185, 28, 28, 0.35);
+}
+
+.tl-upload-slot.is-queued .tl-thumb__meta-line,
+.tl-upload-slot.is-processing .tl-thumb__meta-line,
+.tl-upload-slot.is-uploading .tl-thumb__meta-line {
+  color: var(--tl-brand);
+}
+
+.tl-upload-slot.is-failed .tl-thumb__meta-line {
+  color: #b91c1c;
+}
+
+.tl-modal__fig--preview {
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  background: #0f172a0a;
+}
+
+.tl-modal__fig--preview img {
+  max-width: 100%;
+  max-height: min(62vh, 28rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform 0.12s ease;
 }
 
 .tl-issue-wrap {

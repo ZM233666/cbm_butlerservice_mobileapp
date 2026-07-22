@@ -19,6 +19,9 @@ ENV HOST=0.0.0.0
 ENV PORT=3100
 ENV UPLOADS_DIR=/data/uploads/task
 ENV MAX_UPLOAD_MB=30
+ENV AUTH_UPSTREAM_MAX_CONCURRENCY=16
+ENV AUTH_UPSTREAM_QUEUE_MAX=64
+ENV AUTH_UPSTREAM_QUEUE_WAIT_MS=3000
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

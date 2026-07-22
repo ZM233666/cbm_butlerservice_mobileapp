@@ -4,6 +4,11 @@ function normalizeText(v) {
   return String(v || "").trim();
 }
 
+function positiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function mapDjangoRoleToNode(roleKey, roleName, isSuperuser) {
   const key = normalizeText(roleKey).toLowerCase();
   const name = normalizeText(roleName).toLowerCase();
@@ -103,6 +108,17 @@ function createAuthCache(opts = {}) {
     return hit.value;
   }
 
+  function has(key) {
+    const k = String(key || "");
+    const hit = map.get(k);
+    if (!hit) return false;
+    if (Date.now() > hit.expireAt) {
+      map.delete(k);
+      return false;
+    }
+    return true;
+  }
+
   function set(key, value, ttl = ttlMs) {
     map.set(String(key || ""), { value, expireAt: Date.now() + ttl });
   }
@@ -115,7 +131,7 @@ function createAuthCache(opts = {}) {
     map.clear();
   }
 
-  return { get, set, setNegative, clear, ttlMs, negativeTtlMs };
+  return { get, has, set, setNegative, clear, ttlMs, negativeTtlMs };
 }
 
 function isRemoteDbSaturationError(payload) {
@@ -140,6 +156,279 @@ function isManagerRole(role) {
   );
 }
 
+function createAuthUpstreamError(code, status, message) {
+  const err = new Error(message || code);
+  err.code = code;
+  err.status = status;
+  return err;
+}
+
+/**
+ * 全局认证上游并发目标按 worker 数均分到每个进程。
+ * 例：AUTH_UPSTREAM_MAX_CONCURRENCY=16 + 8 workers → 每 worker 2。
+ * 单进程 / 关闭 cluster 时使用全部全局额度。
+ */
+function resolveAuthUpstreamWorkerLimit(env = process.env) {
+  const globalMax = positiveInt(env.AUTH_UPSTREAM_MAX_CONCURRENCY, 16);
+  const rawEnabled = String(env.NODE_CLUSTER_ENABLED || "").trim().toLowerCase();
+  if (rawEnabled === "0" || rawEnabled === "false" || rawEnabled === "no") {
+    return globalMax;
+  }
+  const useCluster =
+    rawEnabled === "1" ||
+    rawEnabled === "true" ||
+    rawEnabled === "yes" ||
+    String(env.NODE_ENV || "").trim().toLowerCase() === "production";
+  if (!useCluster) return globalMax;
+  const workers = Math.min(16, positiveInt(env.NODE_CLUSTER_WORKERS, 8));
+  return Math.max(1, Math.ceil(globalMax / workers));
+}
+
+function createInFlightMap() {
+  const map = new Map();
+
+  function run(key, factory) {
+    const cacheKey = String(key || "");
+    const existing = map.get(cacheKey);
+    if (existing) return existing;
+    const pending = Promise.resolve()
+      .then(() => factory())
+      .finally(() => {
+        if (map.get(cacheKey) === pending) map.delete(cacheKey);
+      });
+    map.set(cacheKey, pending);
+    return pending;
+  }
+
+  return {
+    run,
+    size() {
+      return map.size;
+    },
+    clear() {
+      map.clear();
+    },
+  };
+}
+
+function createConcurrencyLimiter(opts = {}) {
+  const maxConcurrent = Math.max(1, positiveInt(opts.maxConcurrent, 2));
+  const maxQueue = Math.max(0, positiveInt(opts.maxQueue, 64));
+  const queueWaitMs = Math.max(1, positiveInt(opts.queueWaitMs, 3000));
+  let active = 0;
+  const queue = [];
+
+  function dequeue(entry) {
+    const idx = queue.indexOf(entry);
+    if (idx >= 0) queue.splice(idx, 1);
+  }
+
+  function pump() {
+    while (active < maxConcurrent && queue.length > 0) {
+      const next = queue.shift();
+      if (!next) break;
+      clearTimeout(next.timer);
+      active += 1;
+      next.resolve(runTracked);
+    }
+  }
+
+  async function runTracked(fn) {
+    try {
+      return await fn();
+    } finally {
+      active = Math.max(0, active - 1);
+      pump();
+    }
+  }
+
+  async function run(fn) {
+    if (active < maxConcurrent) {
+      active += 1;
+      return runTracked(fn);
+    }
+    if (queue.length >= maxQueue) {
+      throw createAuthUpstreamError(
+        "auth_upstream_queue_full",
+        503,
+        "auth_upstream_unavailable",
+      );
+    }
+    const runner = await new Promise((resolve, reject) => {
+      const entry = {
+        resolve,
+        reject,
+        timer: null,
+      };
+      entry.timer = setTimeout(() => {
+        dequeue(entry);
+        reject(
+          createAuthUpstreamError(
+            "auth_upstream_queue_timeout",
+            503,
+            "auth_upstream_unavailable",
+          ),
+        );
+      }, queueWaitMs);
+      queue.push(entry);
+    });
+    return runner(fn);
+  }
+
+  return {
+    run,
+    getStats() {
+      return { active, queued: queue.length, maxConcurrent, maxQueue, queueWaitMs };
+    },
+  };
+}
+
+/**
+ * Django /api/system/user/user_info/ 拉取器：缓存 + 同 token 合并 + 上游并发限制。
+ * 无效 token → 返回 null；上游不可用 → throw（503/504），且不写负缓存。
+ * 可选 clusterCoordinator：跨 worker 全局合并/限流（IPC 不传明文 JWT）。
+ */
+function createDjangoUserInfoFetcher(options = {}) {
+  const cache = options.cache;
+  const tokenCacheKey = options.tokenCacheKey;
+  const runWithTimeout = options.runWithTimeout;
+  const getTimeoutMs = options.getTimeoutMs || (() => 30_000);
+  const getUpstreamUrl = options.getUpstreamUrl;
+  const limiter = options.limiter;
+  const inFlight = options.inFlight;
+  const clusterCoordinator = options.clusterCoordinator || null;
+  const isCircuitOpen = options.isCircuitOpen || (() => false);
+  const openCircuit = options.openCircuit || (() => {});
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const logError = options.logError || (() => {});
+
+  async function executeUpstream(rawToken, cacheKey) {
+    if (!clusterCoordinator && isCircuitOpen()) {
+      throw createAuthUpstreamError(
+        "auth_upstream_circuit_open",
+        503,
+        "auth_upstream_unavailable",
+      );
+    }
+    try {
+      const { upstreamRes, payload } = await runWithTimeout(async (signal) => {
+        const response = await fetchImpl(getUpstreamUrl(), {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+            Authorization: `JWT ${rawToken}`,
+          },
+          signal,
+        });
+        const responsePayload = await response.json().catch(() => null);
+        return { upstreamRes: response, payload: responsePayload };
+      }, getTimeoutMs());
+
+      if (isRemoteDbSaturationError(payload)) {
+        openCircuit(60 * 1000);
+        throw createAuthUpstreamError(
+          "auth_upstream_db_saturated",
+          503,
+          "auth_upstream_unavailable",
+        );
+      }
+
+      const status = Number(upstreamRes && upstreamRes.status) || 0;
+      if (status === 401 || status === 403) {
+        cache.setNegative(cacheKey);
+        return null;
+      }
+      if (status >= 500) {
+        openCircuit(30 * 1000);
+        throw createAuthUpstreamError(
+          "auth_upstream_5xx",
+          503,
+          "auth_upstream_unavailable",
+        );
+      }
+      if (!upstreamRes.ok) {
+        openCircuit(30 * 1000);
+        throw createAuthUpstreamError(
+          "auth_upstream_unavailable",
+          503,
+          "auth_upstream_unavailable",
+        );
+      }
+
+      if (!payload || payload.code !== 2000 || !payload.data) {
+        if (isRemoteDbSaturationError(payload)) {
+          openCircuit(60 * 1000);
+          throw createAuthUpstreamError(
+            "auth_upstream_db_saturated",
+            503,
+            "auth_upstream_unavailable",
+          );
+        }
+        cache.setNegative(cacheKey);
+        return null;
+      }
+
+      cache.set(cacheKey, payload.data);
+      return payload.data;
+    } catch (err) {
+      if (err && (err.code === "upstream_timeout" || err.status === 504)) {
+        openCircuit(30 * 1000);
+        throw err;
+      }
+      if (
+        err &&
+        (err.code === "auth_upstream_db_saturated" ||
+          err.code === "auth_upstream_5xx" ||
+          err.code === "auth_upstream_unavailable" ||
+          err.code === "auth_upstream_circuit_open" ||
+          err.code === "auth_upstream_queue_full" ||
+          err.code === "auth_upstream_queue_timeout")
+      ) {
+        throw err;
+      }
+      logError("Django user_info lookup failed", err);
+      openCircuit(30 * 1000);
+      throw createAuthUpstreamError(
+        "auth_upstream_unavailable",
+        503,
+        "auth_upstream_unavailable",
+      );
+    }
+  }
+
+  async function fetchOnce(rawToken, cacheKey) {
+    return limiter.run(() => executeUpstream(rawToken, cacheKey));
+  }
+
+  async function fetchDjangoUserInfo(token) {
+    const raw = String(token || "").trim();
+    if (!raw) return null;
+
+    const cacheKey = tokenCacheKey(raw);
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+    if (clusterCoordinator) {
+      const data = await clusterCoordinator.run(cacheKey, () => executeUpstream(raw, cacheKey));
+      // waiters 不跑 executeUpstream，需把 primary 回传结果写入本 worker 缓存
+      if (data == null) cache.setNegative(cacheKey);
+      else cache.set(cacheKey, data);
+      return data;
+    }
+
+    if (isCircuitOpen()) {
+      throw createAuthUpstreamError(
+        "auth_upstream_circuit_open",
+        503,
+        "auth_upstream_unavailable",
+      );
+    }
+
+    return inFlight.run(cacheKey, () => fetchOnce(raw, cacheKey));
+  }
+
+  return { fetchDjangoUserInfo };
+}
+
 module.exports = {
   VALID_NODE_ROLES,
   mapDjangoRoleToNode,
@@ -150,4 +439,10 @@ module.exports = {
   createAuthCache,
   isRemoteDbSaturationError,
   isManagerRole,
+  positiveInt,
+  createAuthUpstreamError,
+  resolveAuthUpstreamWorkerLimit,
+  createInFlightMap,
+  createConcurrencyLimiter,
+  createDjangoUserInfoFetcher,
 };

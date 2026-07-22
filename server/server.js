@@ -59,8 +59,11 @@ const {
   isLocalAuthAllowed,
   isRemoteAuthSkipped,
   createAuthCache,
-  isRemoteDbSaturationError,
   isManagerRole,
+  positiveInt,
+  createInFlightMap,
+  createConcurrencyLimiter,
+  createDjangoUserInfoFetcher,
 } = require("./services/django-auth");
 const {
   fetchH5ProfileFromDb,
@@ -72,6 +75,7 @@ const { buildNormalizedTaskFilename, buildLegacyUploadFilename } = require("./up
 const { validateTaskSubmitPayload, validateTaskDraftPayload } = require("./task-submit-payload");
 const { validateUploadMetadata, validateStoredImage } = require("./image-upload-validation");
 const { runWithTimeout, upstreamTimeoutMs } = require("./services/fetch-timeout");
+const { createAuthUpstreamClusterWorker } = require("./services/auth-upstream-cluster");
 
 const projectRoot = path.resolve(__dirname, "..");
 const cfg = buildConfig(projectRoot);
@@ -625,6 +629,24 @@ const djangoAuthCache = createAuthCache({
 const djangoApiCache = createApiCache({ defaultTtlMs: cfg.apiCacheHomeConfigTtlMs, maxEntries: 800 });
 let remoteAuthCircuitOpenUntil = 0;
 
+// 单进程：使用全局并发额度。Cluster worker：由 primary IPC 做全局限流/合并/熔断。
+const AUTH_UPSTREAM_GLOBAL_MAX = positiveInt(process.env.AUTH_UPSTREAM_MAX_CONCURRENCY, 16);
+const AUTH_UPSTREAM_QUEUE_MAX = positiveInt(process.env.AUTH_UPSTREAM_QUEUE_MAX, 64);
+const AUTH_UPSTREAM_QUEUE_WAIT_MS = positiveInt(process.env.AUTH_UPSTREAM_QUEUE_WAIT_MS, 3000);
+const useClusterAuthCoordinator = !!(cluster.isWorker && typeof process.send === "function");
+const authUpstreamInFlight = createInFlightMap();
+const authUpstreamLimiter = createConcurrencyLimiter({
+  maxConcurrent: AUTH_UPSTREAM_GLOBAL_MAX,
+  maxQueue: AUTH_UPSTREAM_QUEUE_MAX,
+  queueWaitMs: AUTH_UPSTREAM_QUEUE_WAIT_MS,
+});
+const authUpstreamClusterWorker = useClusterAuthCoordinator
+  ? createAuthUpstreamClusterWorker({
+      // 显式前缀，避免测试/同 PID 场景下 requestId 碰撞导致等待者永不返回
+      requestIdPrefix: `w${cluster.worker && cluster.worker.id != null ? cluster.worker.id : 0}-p${process.pid}`,
+    })
+  : null;
+
 function invalidateEmployeeTaskCache(employeeId) {
   const id = String(employeeId || "").trim();
   if (!id) return;
@@ -646,45 +668,22 @@ function tokenCacheKey(token) {
   return crypto.createHash("sha256").update(String(token || "")).digest("hex");
 }
 
-async function fetchDjangoUserInfo(token) {
-  const raw = String(token || "").trim();
-  if (!raw) return null;
-  if (Date.now() < remoteAuthCircuitOpenUntil) return null;
-
-  const cacheKey = tokenCacheKey(raw);
-  const cached = djangoAuthCache.get(cacheKey);
-  if (cached) return cached;
-
-  const upstream = `${REMOTE_API_BASE}/api/system/user/user_info/`;
-  try {
-    const { upstreamRes, payload } = await runWithTimeout(async (signal) => {
-      const response = await fetch(upstream, {
-        method: "GET",
-        headers: {
-          accept: "application/json",
-          Authorization: `JWT ${raw}`,
-        },
-        signal,
-      });
-      const responsePayload = await response.json().catch(() => null);
-      return { upstreamRes: response, payload: responsePayload };
-    }, upstreamTimeoutMs("GET"));
-    if (isRemoteDbSaturationError(payload)) {
-      remoteAuthCircuitOpenUntil = Date.now() + 60 * 1000;
-      error("Django auth circuit open: remote DB saturated");
-      return null;
-    }
-    if (!upstreamRes.ok) return null;
-    if (!payload || payload.code !== 2000 || !payload.data) return null;
-    djangoAuthCache.set(cacheKey, payload.data);
-    return payload.data;
-  } catch (err) {
-    error("Django user_info lookup failed", err);
-    remoteAuthCircuitOpenUntil = Date.now() + 30 * 1000;
-    if (err && err.code === "upstream_timeout") throw err;
-    return null;
-  }
-}
+const { fetchDjangoUserInfo } = createDjangoUserInfoFetcher({
+  cache: djangoAuthCache,
+  tokenCacheKey,
+  runWithTimeout,
+  getTimeoutMs: () => upstreamTimeoutMs("GET"),
+  getUpstreamUrl: () => `${REMOTE_API_BASE}/api/system/user/user_info/`,
+  limiter: authUpstreamLimiter,
+  inFlight: authUpstreamInFlight,
+  clusterCoordinator: authUpstreamClusterWorker,
+  isCircuitOpen: () => Date.now() < remoteAuthCircuitOpenUntil,
+  openCircuit: (ms) => {
+    remoteAuthCircuitOpenUntil = Date.now() + Math.max(0, Number(ms) || 0);
+  },
+  fetchImpl: globalThis.fetch.bind(globalThis),
+  logError: error,
+});
 
 function resolveLocalAuthUser(token) {
   if (!ALLOW_LOCAL_AUTH) return null;
@@ -707,14 +706,40 @@ function resolveCachedDjangoIdentityUser(token) {
   return mergeIdentityWithLocalProfile(existing, identity);
 }
 
-async function resolveDjangoAuthUser(token) {
+const djangoAuthUserInFlight = createInFlightMap();
+
+/** H5 Profile：本地 api-cache 去重 +（cluster 时）跨 worker 合并，避免鉴权路径打爆 Django */
+async function loadH5ProfileForAuth(employeeId, token) {
+  const id = String(employeeId || "").trim();
+  if (!id) {
+    const err = new Error("employee_id_required");
+    err.status = 400;
+    throw err;
+  }
+  const localKey = `user-profile:${id}`;
+  return djangoApiCache.getOrLoad(
+    localKey,
+    async () => {
+      if (authUpstreamClusterWorker) {
+        return authUpstreamClusterWorker.run(
+          `h5-profile:${tokenCacheKey(id)}`,
+          () => fetchH5ProfileFromDb(id, token),
+        );
+      }
+      return fetchH5ProfileFromDb(id, token);
+    },
+    cfg.apiCacheUserProfileTtlMs,
+  );
+}
+
+async function resolveDjangoAuthUserOnce(token) {
   const djangoInfo = await fetchDjangoUserInfo(token);
   const identity = mapDjangoUserInfoToLocalUser(djangoInfo);
   if (!identity) return null;
 
   if (isProfileDataFromDb()) {
     try {
-      const profile = await fetchH5ProfileFromDb(identity.employeeId, token);
+      const profile = await loadH5ProfileForAuth(identity.employeeId, token);
       if (profile && profile.employeeId) {
         const profileEmp = String(profile.employeeId).trim();
         const authEmp = identity.employeeId;
@@ -767,6 +792,13 @@ async function resolveDjangoAuthUser(token) {
     return upserted.error ? merged : upserted.user;
   }
   return merged;
+}
+
+async function resolveDjangoAuthUser(token) {
+  const raw = String(token || "").trim();
+  if (!raw) return null;
+  // 同 Token 鉴权解析合并，避免 user_info 合并后 Profile 仍被打 20 次
+  return djangoAuthUserInFlight.run(tokenCacheKey(raw), () => resolveDjangoAuthUserOnce(raw));
 }
 
 function resolveJwtIdentityFallback(req, token) {
@@ -878,8 +910,8 @@ app.use("/api", async (req, res, next) => {
     next();
   } catch (err) {
     error("Auth middleware failed", err);
-    const timedOut = err && err.code === "upstream_timeout";
-    return res.status(timedOut ? 504 : 502).json({
+    const timedOut = err && (err.code === "upstream_timeout" || Number(err.status) === 504);
+    return res.status(timedOut ? 504 : 503).json({
       ok: false,
       error: timedOut ? "auth_upstream_timeout" : "auth_upstream_unavailable",
     });
@@ -1352,11 +1384,7 @@ app.get("/api/users/self", async (req, res) => {
   if (isProfileDataFromDb()) {
     try {
       const token = authFromRequest(req);
-      const profile = await djangoApiCache.getOrLoad(
-        `user-profile:${employeeId}`,
-        () => fetchH5ProfileFromDb(employeeId, token),
-        cfg.apiCacheUserProfileTtlMs,
-      );
+      const profile = await loadH5ProfileForAuth(employeeId, token);
       return res.json({ ok: true, user: profile });
     } catch (err) {
       if (actor && actor.employeeId) {
@@ -2127,6 +2155,12 @@ server.listen(cfg.port, cfg.host, () => {
   info(`Task data source: ${isTaskDataFromDb() ? "db" : "json"}`);
   info(`Uploads dir: ${cfg.uploadsDir}`);
   info(`Auth cache TTL: ${djangoAuthCache.ttlMs}ms`);
+  info(
+    useClusterAuthCoordinator
+      ? `Auth upstream mode: cluster-primary (globalMax=${AUTH_UPSTREAM_GLOBAL_MAX})`
+      : `Auth upstream limit: ${AUTH_UPSTREAM_GLOBAL_MAX}` +
+        ` (queueMax=${AUTH_UPSTREAM_QUEUE_MAX}, queueWaitMs=${AUTH_UPSTREAM_QUEUE_WAIT_MS})`,
+  );
   const lanUrls = getLanIPv4Urls(cfg.port);
   if (lanUrls.length) {
     info("LAN access URLs:");

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import { useI18n } from '@/composables/useI18n'
 import PageShell from '@/components/layout/PageShell.vue'
 import TopBrandBar from '@/components/layout/TopBrandBar.vue'
 import TaskUploadSlot from '@/components/task/TaskUploadSlot.vue'
+import type { SlotUploadStatus } from '@/components/task/TaskUploadSlot.vue'
 import { fetchGuidanceTasks, fetchHomeConfig, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit, type TaskSubmitResponse } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
@@ -25,17 +26,56 @@ const toastStore = useToastStore()
 
 const SCHEMATIC_SEQS = new Set(['1','2','3','3.1','3.2','3.3','4','5','5.1','6','6.1','7','8','8.1','8.2','9','9.1','10','11','11.1','12','13','14','15','17.1','17.2','17.3','17.4','17.5','17.6'])
 const FALLBACK_UPLOAD_MAX_BYTES = 30 * 1024 * 1024
+const LOW_RES_MAX_EDGE = 1000
+
+type ClientCaptureMeta = { capturedAt: string; latitude?: number; longitude?: number; accuracy?: number }
 
 const maintType = ref<'c4c6' | 'c1c3'>('c4c6')
 const taskDetail = ref<TaskDetail | null>(null)
 const guidanceRows = ref<GuidanceRow[]>([])
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture'] }>>({})
 const localPreviewRecords = ref<Record<string, string>>({})
-const processingSlots = ref<Record<string, boolean>>({})
-const uploadingSlots = ref<Record<string, boolean>>({})
+const slotUploadStatus = ref<Record<string, SlotUploadStatus>>({})
 const issueRecords = ref<Record<string, { text: string; updatedAt: string }>>({})
 const uploadMaxBytes = ref(FALLBACK_UPLOAD_MAX_BYTES)
 const uploadAllowedContentTypePrefixes = ref(['image/'])
+
+type PreparedUpload = {
+  slotId: string
+  slotLabel: string
+  uploadFile: File
+  clientMeta: ClientCaptureMeta
+  token: number
+  taskId: string
+}
+
+type PendingRetrySource = {
+  slotId: string
+  slotLabel: string
+  sourceFile: File
+  token: number
+  taskId: string
+}
+
+type UploadQueueItem = {
+  slotId: string
+  token: number
+  taskId: string
+}
+
+const preparedUploads = ref<Record<string, PreparedUpload>>({})
+const pendingRetrySources = ref<Record<string, PendingRetrySource>>({})
+const uploadQueue = ref<UploadQueueItem[]>([])
+const slotTokens: Record<string, number> = {}
+let uploadPumpRunning = false
+let uploadPageAlive = true
+let hydrateGeneration = 0
+
+const previewOpen = ref(false)
+const previewSrc = ref('')
+const previewZoom = ref(1)
+const previewSlotId = ref('')
+const previewBlobUrl = ref('')
 
 const schematicOpen = ref(false)
 const schematicSrc = ref('')
@@ -490,8 +530,6 @@ function saveIssue() {
   issueOpen.value = false
 }
 
-type ClientCaptureMeta = { capturedAt: string; latitude?: number; longitude?: number; accuracy?: number }
-
 let lastGeo: { latitude: number; longitude: number; accuracy?: number; fetchedAt: number } | null = null
 
 function isGeoFresh() {
@@ -636,7 +674,14 @@ async function hydrateTaskPage() {
   taskDetail.value = null
   uploadRecords.value = {}
   issueRecords.value = {}
-  Object.keys(localPreviewRecords.value).forEach((slotId) => cleanupLocalPreview(slotId))
+  preparedUploads.value = {}
+  pendingRetrySources.value = {}
+  uploadQueue.value = []
+  slotUploadStatus.value = {}
+  revokeAllLocalPreviews()
+  closeUploadPreview()
+  hydrateGeneration += 1
+  const hydrateToken = hydrateGeneration
 
   const cached = readTaskListCache()
   if (cached) {
@@ -654,11 +699,14 @@ async function hydrateTaskPage() {
     if (cached.maintType === 'c1c3' || cached.maintType === 'c4c6') maintType.value = cached.maintType
   }
 
+  if (hydrateToken !== hydrateGeneration) return
+
   if (guidanceRowsMemoryCache?.length) {
     guidanceRows.value = guidanceRowsMemoryCache
   } else if (!guidanceRows.value.length) {
     try {
       const data = await fetchGuidanceTasks()
+      if (hydrateToken !== hydrateGeneration) return
       guidanceRows.value = data.rows || []
       guidanceRowsMemoryCache = guidanceRows.value
     } catch { toast('Load failed') }
@@ -666,9 +714,11 @@ async function hydrateTaskPage() {
 
   if (auth.user?.employeeId) {
     await loadUploadConfig(auth.user.employeeId)
+    if (hydrateToken !== hydrateGeneration) return
     try {
       if (mainTaskId.value) {
         const detailData = await fetchTaskDetail(mainTaskId.value)
+        if (hydrateToken !== hydrateGeneration) return
         if (detailData?.task) {
           taskDetail.value = detailData.task
           if (detailData.task.maint === 'c1c3' || detailData.task.maint === 'c4c6') {
@@ -687,6 +737,7 @@ async function hydrateTaskPage() {
 
       if (!taskDetail.value) {
         const statusData = await fetchTaskStatus(auth.user.employeeId)
+        if (hydrateToken !== hydrateGeneration) return
         const entry = effectiveTaskKey.value
           ? statusData?.statuses?.[effectiveTaskKey.value]
           : statusData?.statuses?.[maintType.value]
@@ -699,6 +750,7 @@ async function hydrateTaskPage() {
   if (mainTaskId.value) {
     try {
       const latest = await fetchLatestTaskSubmit(mainTaskId.value)
+      if (hydrateToken !== hydrateGeneration) return
       if (latest && latest.found) {
         const uploads = latest.uploads && typeof latest.uploads === 'object' ? latest.uploads : {}
         Object.entries(uploads).forEach(([slot, item]) => {
@@ -724,10 +776,55 @@ async function hydrateTaskPage() {
       // ignore: keep page usable even when no historical draft available
     }
   }
+
+  if (hydrateToken !== hydrateGeneration) return
+
+  const nextStatus: Record<string, SlotUploadStatus> = { ...slotUploadStatus.value }
+  Object.keys(uploadRecords.value).forEach((slotId) => {
+    if (uploadRecords.value[slotId]?.url) nextStatus[slotId] = 'success'
+  })
+  slotUploadStatus.value = nextStatus
 }
 
 function displayedUploadUrl(slotId: string) {
-  return uploadRecords.value[slotId]?.url || localPreviewRecords.value[slotId] || ''
+  // 优先本地预览：更换失败时仍展示待传新图，避免误以为旧服务器图已替换成功
+  return localPreviewRecords.value[slotId] || uploadRecords.value[slotId]?.url || ''
+}
+
+function slotStatusOf(slotId: string): SlotUploadStatus {
+  return slotUploadStatus.value[slotId] || 'idle'
+}
+
+function setSlotUploadStatus(slotId: string, status: SlotUploadStatus) {
+  slotUploadStatus.value = { ...slotUploadStatus.value, [slotId]: status }
+}
+
+function hasBusyUploads() {
+  return Object.values(slotUploadStatus.value).some(
+    (status) => status === 'processing' || status === 'queued' || status === 'uploading',
+  )
+}
+
+function hasUnresolvedFailedUploads() {
+  return Object.values(slotUploadStatus.value).some((status) => status === 'failed')
+}
+
+function leaveWhileUploadingMessage() {
+  return lang.value === 'zh'
+    ? '仍有图片正在处理或上传，离开页面可能导致未完成上传丢失。确定离开吗？'
+    : 'Images are still processing or uploading. Leaving may lose unfinished uploads. Leave anyway?'
+}
+
+function unresolvedFailedUploadMessage() {
+  return lang.value === 'zh'
+    ? '仍有图片上传失败，请先重试或更换后再提交'
+    : 'Some uploads failed. Retry or replace them before submitting.'
+}
+
+function lowResWarningMessage() {
+  return lang.value === 'zh'
+    ? '图片分辨率较低，可能无法看清细节'
+    : 'Image resolution is low; details may be hard to see'
 }
 
 function cleanupLocalPreview(slotId: string) {
@@ -736,6 +833,75 @@ function cleanupLocalPreview(slotId: string) {
     URL.revokeObjectURL(previewUrl)
   }
   delete localPreviewRecords.value[slotId]
+}
+
+function revokeAllLocalPreviews() {
+  Object.keys(localPreviewRecords.value).forEach((slotId) => cleanupLocalPreview(slotId))
+}
+
+function removeQueueItemExact(item: UploadQueueItem) {
+  uploadQueue.value = uploadQueue.value.filter(
+    (q) => !(q.slotId === item.slotId && q.token === item.token && q.taskId === item.taskId),
+  )
+}
+
+/** 仅移除当前任务下该槽位的排队项，避免误删其他任务同名槽 */
+function removeSlotFromUploadQueue(slotId: string, taskId = mainTaskId.value) {
+  uploadQueue.value = uploadQueue.value.filter(
+    (q) => !(q.slotId === slotId && q.taskId === taskId),
+  )
+}
+
+function isActiveUploadJob(slotId: string, token: number, taskId: string) {
+  const job = preparedUploads.value[slotId]
+  return !!job
+    && job.token === token
+    && job.taskId === taskId
+    && mainTaskId.value === taskId
+}
+
+function clearPendingRetrySource(slotId: string) {
+  if (!pendingRetrySources.value[slotId]) return
+  const next = { ...pendingRetrySources.value }
+  delete next[slotId]
+  pendingRetrySources.value = next
+}
+
+function openUploadPreview(slotId: string) {
+  const url = displayedUploadUrl(slotId)
+  if (!url) return
+  previewSlotId.value = slotId
+  previewBlobUrl.value = localPreviewRecords.value[slotId] || ''
+  previewSrc.value = url
+  previewZoom.value = 1
+  previewOpen.value = true
+}
+
+function closeUploadPreview() {
+  previewOpen.value = false
+  previewSrc.value = ''
+  previewZoom.value = 1
+  previewSlotId.value = ''
+  previewBlobUrl.value = ''
+}
+
+function setPreviewZoom(next: number) {
+  previewZoom.value = Math.min(4, Math.max(1, next))
+}
+
+/** 上传成功后：若正在放大预览该本地 blob，先切到服务器 URL 再释放 */
+function cleanupLocalPreviewAfterSuccess(slotId: string, serverUrl: string) {
+  const localUrl = localPreviewRecords.value[slotId]
+  if (
+    previewOpen.value
+    && previewSlotId.value === slotId
+    && localUrl
+    && (previewSrc.value === localUrl || previewBlobUrl.value === localUrl)
+  ) {
+    previewSrc.value = serverUrl
+    previewBlobUrl.value = ''
+  }
+  cleanupLocalPreview(slotId)
 }
 
 function imageBitmapToJpegFile(bitmap: ImageBitmap, filenameBase: string, quality = 0.82): Promise<File> {
@@ -776,47 +942,260 @@ async function resizeImageBitmap(bitmap: ImageBitmap): Promise<ImageBitmap> {
   }
 }
 
-async function compressImageForUpload(file: File): Promise<File> {
-  if (!file.type.startsWith('image/')) return file
-  // 小文件直接上传，避免额外前处理开销
-  if (file.size <= 1.2 * 1024 * 1024) return file
+async function prepareImageViaHtmlImage(
+  file: File,
+  filenameBase: string,
+  keepOriginal: boolean,
+): Promise<{ uploadFile: File; width: number | null; height: number | null }> {
+  const srcUrl = URL.createObjectURL(file)
   try {
-    const filenameBase = String(file.name || 'upload').replace(/\.[^.]+$/, '') || 'upload'
-    if ('createImageBitmap' in window) {
-      const bitmap = await resizeImageBitmap(await createImageBitmap(file))
-      try {
-        return await imageBitmapToJpegFile(bitmap, filenameBase)
-      } finally {
-        bitmap.close()
-      }
+    const img = new Image()
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('image_decode_failed'))
+      img.src = srcUrl
+    })
+    const width = img.naturalWidth || 0
+    const height = img.naturalHeight || 0
+    if (keepOriginal) return { uploadFile: file, width, height }
+
+    const MAX_EDGE = 1920
+    const scale = Math.min(1, MAX_EDGE / Math.max(width || 1, height || 1))
+    const outW = Math.max(1, Math.round((width || 1) * scale))
+    const outH = Math.max(1, Math.round((height || 1) * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = outW
+    canvas.height = outH
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('canvas_ctx_unavailable')
+    ctx.drawImage(img, 0, 0, outW, outH)
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82))
+    if (!blob) throw new Error('image_compress_failed')
+    return {
+      uploadFile: new File([blob], `${filenameBase}.jpg`, { type: 'image/jpeg', lastModified: Date.now() }),
+      width,
+      height,
     }
-    const srcUrl = URL.createObjectURL(file)
-    try {
-      const img = new Image()
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve()
-        img.onerror = () => reject(new Error('image_decode_failed'))
-        img.src = srcUrl
-      })
-      const MAX_EDGE = 1920
-      const scale = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth || 1, img.naturalHeight || 1))
-      const width = Math.max(1, Math.round((img.naturalWidth || 1) * scale))
-      const height = Math.max(1, Math.round((img.naturalHeight || 1) * scale))
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return file
-      ctx.drawImage(img, 0, 0, width, height)
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82))
-      if (!blob) return file
-      return new File([blob], `${filenameBase}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
-    } finally {
-      URL.revokeObjectURL(srcUrl)
-    }
-  } catch {
-    return file
+  } finally {
+    URL.revokeObjectURL(srcUrl)
   }
+}
+
+/** 一次解码完成尺寸检查与（必要时）压缩；createImageBitmap 失败时回退 Image（兼容 HEIC/AVIF） */
+async function prepareImageForUpload(file: File): Promise<{
+  uploadFile: File
+  width: number | null
+  height: number | null
+}> {
+  if (!file.type.startsWith('image/')) {
+    return { uploadFile: file, width: null, height: null }
+  }
+
+  const filenameBase = String(file.name || 'upload').replace(/\.[^.]+$/, '') || 'upload'
+  const keepOriginal = file.size <= 1.2 * 1024 * 1024
+
+  if ('createImageBitmap' in window) {
+    try {
+      let bitmap = await createImageBitmap(file)
+      const width = bitmap.width
+      const height = bitmap.height
+      try {
+        if (keepOriginal) {
+          bitmap.close()
+          return { uploadFile: file, width, height }
+        }
+        bitmap = await resizeImageBitmap(bitmap)
+        try {
+          const uploadFile = await imageBitmapToJpegFile(bitmap, filenameBase)
+          return { uploadFile, width, height }
+        } finally {
+          bitmap.close()
+        }
+      } catch {
+        try { bitmap.close() } catch { /* ignore */ }
+        // 继续尝试 Image 回退
+      }
+    } catch {
+      // createImageBitmap 不支持该格式时回退
+    }
+  }
+
+  return prepareImageViaHtmlImage(file, filenameBase, keepOriginal)
+}
+
+function enqueuePreparedUpload(job: PreparedUpload) {
+  clearPendingRetrySource(job.slotId)
+  preparedUploads.value = { ...preparedUploads.value, [job.slotId]: job }
+  removeSlotFromUploadQueue(job.slotId, job.taskId)
+  const item: UploadQueueItem = { slotId: job.slotId, token: job.token, taskId: job.taskId }
+  uploadQueue.value = [...uploadQueue.value, item]
+  setSlotUploadStatus(job.slotId, 'queued')
+  void pumpUploadQueue()
+}
+
+async function pumpUploadQueue() {
+  if (uploadPumpRunning) return
+  uploadPumpRunning = true
+  try {
+    while (uploadPageAlive && uploadQueue.value.length > 0) {
+      const item = uploadQueue.value[0]
+      if (!item) break
+
+      const job = preparedUploads.value[item.slotId]
+      if (!job || job.token !== item.token || job.taskId !== item.taskId) {
+        // 陈旧队列项：只删这一项，绝不按 slotId 误伤新任务
+        removeQueueItemExact(item)
+        continue
+      }
+
+      const { slotId, token, taskId } = item
+      if (mainTaskId.value !== taskId) {
+        // 页面已切到其他任务：丢弃旧任务排队项，不碰新任务状态
+        removeQueueItemExact(item)
+        continue
+      }
+
+      setSlotUploadStatus(slotId, 'uploading')
+      try {
+        const data = await uploadImage(slotId, job.uploadFile, job.slotLabel || slotId, job.clientMeta, {
+          taskId,
+          employeeId: auth.user?.employeeId || '',
+        })
+        if (!uploadPageAlive || !isActiveUploadJob(slotId, token, taskId)) {
+          removeQueueItemExact(item)
+          continue
+        }
+        uploadRecords.value[slotId] = { url: data.url, capture: data.capture }
+        cleanupLocalPreviewAfterSuccess(slotId, data.url)
+        const nextPrepared = { ...preparedUploads.value }
+        delete nextPrepared[slotId]
+        preparedUploads.value = nextPrepared
+        clearPendingRetrySource(slotId)
+        setSlotUploadStatus(slotId, 'success')
+        persistTaskListCache()
+      } catch {
+        if (!uploadPageAlive || !isActiveUploadJob(slotId, token, taskId)) {
+          removeQueueItemExact(item)
+          continue
+        }
+        setSlotUploadStatus(slotId, 'failed')
+        toast(t.value.uploadFail)
+      }
+      removeQueueItemExact(item)
+    }
+  } finally {
+    uploadPumpRunning = false
+    if (uploadPageAlive && uploadQueue.value.length > 0) {
+      void pumpUploadQueue()
+    }
+  }
+}
+
+async function prepareAndEnqueueUpload(
+  slotId: string,
+  slotLabel: string,
+  file: File,
+  token: number,
+  taskId = mainTaskId.value,
+) {
+  if (mainTaskId.value !== taskId) return
+  setSlotUploadStatus(slotId, 'processing')
+  try {
+    const prepared = await prepareImageForUpload(file)
+    if (!uploadPageAlive || slotTokens[slotId] !== token || mainTaskId.value !== taskId) return
+
+    if (prepared.width != null && prepared.height != null
+      && Math.max(prepared.width, prepared.height) < LOW_RES_MAX_EDGE) {
+      toast(lowResWarningMessage(), 'warn', 3200)
+    }
+
+    if (prepared.uploadFile.size > uploadMaxBytes.value) {
+      toast(uploadTooLargeMessage(), 'error')
+      cleanupLocalPreview(slotId)
+      const nextPrepared = { ...preparedUploads.value }
+      delete nextPrepared[slotId]
+      preparedUploads.value = nextPrepared
+      clearPendingRetrySource(slotId)
+      setSlotUploadStatus(slotId, uploadRecords.value[slotId]?.url ? 'success' : 'idle')
+      return
+    }
+
+    const geoPromise = isGeoFresh() ? Promise.resolve(lastGeo) : getGeo(2500)
+    const exifMeta = await readExifMeta(file)
+    if (!uploadPageAlive || slotTokens[slotId] !== token || mainTaskId.value !== taskId) return
+
+    const geo = (exifMeta.latitude != null && exifMeta.longitude != null) ? null : await geoPromise
+    if (!uploadPageAlive || slotTokens[slotId] !== token || mainTaskId.value !== taskId) return
+
+    const clientMeta: ClientCaptureMeta = {
+      capturedAt: exifMeta.capturedAt || new Date().toISOString(),
+    }
+    if (exifMeta.latitude != null && exifMeta.longitude != null) {
+      clientMeta.latitude = exifMeta.latitude
+      clientMeta.longitude = exifMeta.longitude
+    } else if (geo) {
+      clientMeta.latitude = geo.latitude
+      clientMeta.longitude = geo.longitude
+      if (geo.accuracy != null) clientMeta.accuracy = geo.accuracy
+    }
+
+    enqueuePreparedUpload({
+      slotId,
+      slotLabel: slotLabel || slotId,
+      uploadFile: prepared.uploadFile,
+      clientMeta,
+      token,
+      taskId,
+    })
+  } catch {
+    if (!uploadPageAlive || slotTokens[slotId] !== token || mainTaskId.value !== taskId) return
+    // 预处理失败：只保留原图供完整重试，绝不把未校验原图直接入队
+    const nextPrepared = { ...preparedUploads.value }
+    delete nextPrepared[slotId]
+    preparedUploads.value = nextPrepared
+    pendingRetrySources.value = {
+      ...pendingRetrySources.value,
+      [slotId]: {
+        slotId,
+        slotLabel: slotLabel || slotId,
+        sourceFile: file,
+        token,
+        taskId,
+      },
+    }
+    setSlotUploadStatus(slotId, 'failed')
+    toast(t.value.uploadFail)
+  }
+}
+
+function retryUpload(slotId: string) {
+  if (!isTaskDoing.value) return
+  if (slotStatusOf(slotId) !== 'failed') return
+
+  const prepared = preparedUploads.value[slotId]
+  if (prepared && prepared.taskId === mainTaskId.value) {
+    // 网络上传失败：已校验过的 uploadFile，直接重新入队
+    removeSlotFromUploadQueue(slotId, prepared.taskId)
+    uploadQueue.value = [...uploadQueue.value, {
+      slotId: prepared.slotId,
+      token: prepared.token,
+      taskId: prepared.taskId,
+    }]
+    setSlotUploadStatus(slotId, 'queued')
+    void pumpUploadQueue()
+    return
+  }
+
+  const source = pendingRetrySources.value[slotId]
+  if (!source || source.taskId !== mainTaskId.value) return
+  // 预处理失败：重新走完整压缩 / 大小校验
+  const token = (slotTokens[slotId] || 0) + 1
+  slotTokens[slotId] = token
+  pendingRetrySources.value = {
+    ...pendingRetrySources.value,
+    [slotId]: { ...source, token },
+  }
+  void prepareAndEnqueueUpload(slotId, source.slotLabel, source.sourceFile, token, source.taskId)
 }
 
 async function handleUpload(slotId: string, slotLabel: string, event: Event) {
@@ -832,53 +1211,43 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
     input.value = ''
     return
   }
+
+  const taskId = mainTaskId.value
+  const token = (slotTokens[slotId] || 0) + 1
+  slotTokens[slotId] = token
+  removeSlotFromUploadQueue(slotId, taskId)
+  clearPendingRetrySource(slotId)
+  const nextPrepared = { ...preparedUploads.value }
+  delete nextPrepared[slotId]
+  preparedUploads.value = nextPrepared
+
   const previewUrl = URL.createObjectURL(file)
   cleanupLocalPreview(slotId)
   localPreviewRecords.value[slotId] = previewUrl
-  processingSlots.value[slotId] = true
+  if (previewOpen.value && previewSlotId.value === slotId) {
+    previewSrc.value = previewUrl
+    previewBlobUrl.value = previewUrl
+  }
   persistTaskListCache()
   await nextTick()
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-  try {
-    const uploadFile = await compressImageForUpload(file)
-    if (uploadFile.size > uploadMaxBytes.value) {
-      toast(uploadTooLargeMessage(), 'error')
-      cleanupLocalPreview(slotId)
-      input.value = ''
-      return
-    }
-    const geoPromise = isGeoFresh() ? Promise.resolve(lastGeo) : getGeo(2500)
-    const exifMeta = await readExifMeta(file)
-    const geo = (exifMeta.latitude != null && exifMeta.longitude != null) ? null : await geoPromise
-    const clientMeta: ClientCaptureMeta = {
-      capturedAt: exifMeta.capturedAt || new Date().toISOString(),
-    }
-    if (exifMeta.latitude != null && exifMeta.longitude != null) {
-      clientMeta.latitude = exifMeta.latitude
-      clientMeta.longitude = exifMeta.longitude
-    } else if (geo) {
-      clientMeta.latitude = geo.latitude
-      clientMeta.longitude = geo.longitude
-      if (geo.accuracy != null) clientMeta.accuracy = geo.accuracy
-    }
 
-    processingSlots.value[slotId] = false
-    uploadingSlots.value[slotId] = true
-    const data = await uploadImage(slotId, uploadFile, slotLabel || slotId, clientMeta, {
-      taskId: mainTaskId.value,
-      employeeId: auth.user?.employeeId || '',
-    })
-    uploadRecords.value[slotId] = { url: data.url, capture: data.capture }
-    cleanupLocalPreview(slotId)
-    persistTaskListCache()
-  } catch {
-    toast(t.value.uploadFail)
-    cleanupLocalPreview(slotId)
-    input.value = ''
+  try {
+    await prepareAndEnqueueUpload(slotId, slotLabel || slotId, file, token, taskId)
   } finally {
-    processingSlots.value[slotId] = false
-    uploadingSlots.value[slotId] = false
+    input.value = ''
   }
+}
+
+function onBeforeUnload(event: BeforeUnloadEvent) {
+  if (!hasBusyUploads()) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+function confirmLeaveWhileBusy(): boolean {
+  if (!hasBusyUploads()) return true
+  return window.confirm(leaveWhileUploadingMessage())
 }
 
 async function setTaskStatus(status: 'todo' | 'doing' | 'done' | 'rejected'): Promise<boolean> {
@@ -992,6 +1361,19 @@ async function finalizeSubmit(submitResp: TaskSubmitResponse) {
 }
 
 async function onSubmit() {
+  if (hasBusyUploads()) {
+    toast(
+      lang.value === 'zh'
+        ? '仍有图片正在处理或上传，请稍后再提交'
+        : 'Images are still processing or uploading. Please wait before submitting.',
+      'warn',
+    )
+    return
+  }
+  if (hasUnresolvedFailedUploads()) {
+    toast(unresolvedFailedUploadMessage(), 'warn')
+    return
+  }
   if (!isSubmitReady.value) { submitConfirmOpen.value = true; return }
   try {
     const submitResp = await postTaskSubmit(buildTaskSubmitPayload())
@@ -1000,6 +1382,19 @@ async function onSubmit() {
 }
 
 async function confirmSubmitWithMissingUploads() {
+  if (hasBusyUploads()) {
+    toast(
+      lang.value === 'zh'
+        ? '仍有图片正在处理或上传，请稍后再提交'
+        : 'Images are still processing or uploading. Please wait before submitting.',
+      'warn',
+    )
+    return
+  }
+  if (hasUnresolvedFailedUploads()) {
+    toast(unresolvedFailedUploadMessage(), 'warn')
+    return
+  }
   submitConfirmOpen.value = false
   try {
     const hasAnyUpload = Object.values(uploadRecords.value).some((row) => String(row?.url || '').trim())
@@ -1066,6 +1461,8 @@ async function submitEditRequest() {
 }
 
 onMounted(() => {
+  uploadPageAlive = true
+  window.addEventListener('beforeunload', onBeforeUnload)
   hydrateTaskPage()
 })
 
@@ -1077,8 +1474,33 @@ watch([uploadRecords, issueRecords, currentTaskStatus, maintType], () => {
   persistTaskListCache()
 }, { deep: true })
 
+onBeforeRouteUpdate((to, from, next) => {
+  const nextTaskId = String(to.query.taskId || to.query.k || '').trim()
+  const prevTaskId = String(from.query.taskId || from.query.k || '').trim()
+  if (nextTaskId && prevTaskId && nextTaskId !== prevTaskId && !confirmLeaveWhileBusy()) {
+    next(false)
+    return
+  }
+  next()
+})
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (!confirmLeaveWhileBusy()) {
+    next(false)
+    return
+  }
+  next()
+})
+
 onUnmounted(() => {
-  Object.keys(localPreviewRecords.value).forEach((slotId) => cleanupLocalPreview(slotId))
+  uploadPageAlive = false
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  uploadQueue.value = []
+  preparedUploads.value = {}
+  pendingRetrySources.value = {}
+  slotUploadStatus.value = {}
+  closeUploadPreview()
+  revokeAllLocalPreviews()
 })
 </script>
 
@@ -1132,11 +1554,12 @@ onUnmounted(() => {
                           :label="btn.label"
                           :input-id="`f-${btn.slot}-${bi}`"
                           :image-url="displayedUploadUrl(btn.slot)"
-                          :processing="!!processingSlots[btn.slot]"
-                          :uploading="!!uploadingSlots[btn.slot]"
+                          :status="slotStatusOf(btn.slot)"
                           :meta-lines="uploadMetaLines(btn.slot)"
                           :disabled="!isTaskDoing"
                           @change="handleUpload(btn.slot, btn.label, $event)"
+                          @retry="retryUpload(btn.slot)"
+                          @preview="openUploadPreview(btn.slot)"
                         />
                       </div>
                     </template>
@@ -1175,6 +1598,24 @@ onUnmounted(() => {
   </div>
 
   <Teleport to="body">
+    <div v-if="previewOpen" class="tl-modal-backdrop" role="presentation" @click.self="closeUploadPreview">
+      <div class="tl-modal tl-modal--preview" role="dialog" aria-modal="true" :aria-label="lang === 'zh' ? '图片预览' : 'Image preview'">
+        <div class="tl-modal__inner">
+          <h3>{{ lang === 'zh' ? '图片预览' : 'Image preview' }}</h3>
+          <figure class="tl-modal__fig tl-modal__fig--preview">
+            <img :src="previewSrc" alt="" :style="{ transform: `scale(${previewZoom})` }" />
+          </figure>
+          <div class="tl-modal__tools">
+            <button type="button" class="tl-modal__tool" :disabled="previewZoom <= 1" @click="setPreviewZoom(previewZoom - 0.25)">-</button>
+            <span class="tl-modal__zoom">{{ Math.round(previewZoom * 100) }}%</span>
+            <button type="button" class="tl-modal__tool" :disabled="previewZoom >= 4" @click="setPreviewZoom(previewZoom + 0.25)">+</button>
+            <button type="button" class="tl-modal__tool tl-modal__tool--ghost" @click="setPreviewZoom(1)">{{ t.zoomReset }}</button>
+          </div>
+          <button type="button" class="tl-modal__close" @click="closeUploadPreview">{{ t.close }}</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="schematicOpen" class="tl-modal-backdrop" role="presentation" @click.self="schematicOpen = false">
       <div class="tl-modal" role="dialog" aria-modal="true" :aria-label="t.schematicTitle">
         <div class="tl-modal__inner">

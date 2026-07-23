@@ -221,7 +221,7 @@ async function acceptReco(card: TaskCard) {
         />
         <LangSwitch class="home-top__lang" />
       </div>
-      <h1 class="home-top__title">Digital CBM</h1>
+      <h1 class="home-top__title">DIGITAL CBM</h1>
       <ProfileCard class="home-top__profile" />
     </header>
 

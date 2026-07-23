@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 
 const i18nMap = {
   zh: {
-    back: '← 返回', title: '任务列表', basicInfo: '基本信息', subtask: '子任务',
+    back: '← 返回', title: '作业列表', basicInfo: '基本信息', subtask: '子任务',
     employee: '员工工号', depot: '车辆段', project: '项目编号', train: '列车号',
     maint: '修程', deadline: '截止日期', taskid: '主任务 ID',
     colSeq: '序号', colDesc: '操作说明', colUpload: '上传图片',
@@ -35,8 +35,8 @@ const i18nMap = {
     noUpload: '无需上传',
 
     // Home: Action tasks
-    homeActionTasksTitle: '行动任务',
-    homeActionTasksSubtitle: '查看并管理行动任务',
+    homeActionTasksTitle: '行动作业',
+    homeActionTasksSubtitle: '查看并管理行动作业',
     homeNoTasksFound: '暂无任务',
     filterTodo: '待办',
     filterDoing: '进行中',
@@ -259,7 +259,7 @@ const i18nMap = {
     photoCapturedLoc: '拍摄地点',
   },
   en: {
-    back: '← Back', title: 'Task List', basicInfo: 'Basic Info', subtask: 'Subtask',
+    back: '← Back', title: 'Job List', basicInfo: 'Basic Info', subtask: 'Subtask',
     employee: 'Employee ID', depot: 'Depot', project: 'Project No.', train: 'Train No.',
     maint: 'Maintenance Type', deadline: 'Deadline', taskid: 'Main Task ID',
     colSeq: 'No.', colDesc: 'Instructions', colUpload: 'Upload',
@@ -290,8 +290,8 @@ const i18nMap = {
     noUpload: 'No upload',
 
     // Home: Action tasks
-    homeActionTasksTitle: 'ACTION TASKS',
-    homeActionTasksSubtitle: 'View & Manage Action Tasks',
+    homeActionTasksTitle: 'ACTION JOBS',
+    homeActionTasksSubtitle: 'View & Manage Action Jobs',
     homeNoTasksFound: 'No tasks found',
     filterTodo: 'TO DO',
     filterDoing: 'DOING',
@@ -451,7 +451,7 @@ const i18nMap = {
     tcServiceSuffix: ' Service',
 
     // Manager dashboard
-    mgrTitle: 'My Published Task Summary',
+    mgrTitle: 'My Published Job Summary',
     mgrSubtitle: '',
     mgrMonth: 'Month',
     mgrTaskOverview: 'Total Published Tasks',

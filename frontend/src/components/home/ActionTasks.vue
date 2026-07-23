@@ -295,7 +295,7 @@ watch(
 </script>
 
 <template>
-  <section class="home-section" aria-label="Action Tasks">
+  <section class="home-section" aria-label="Action Jobs">
     <div class="home-section__header">
       <h2 class="home-section__title">{{ t.homeActionTasksTitle }}</h2>
     </div>

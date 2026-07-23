@@ -312,7 +312,7 @@
   function buildDescCell(row) {
     const text = escapeHtml(row.description);
     if (SCHEMATIC_SEQS.has(row.seq)) {
-      const link = lang === "zh" ? "查看位置示意图" : "View schematic";
+      const link = lang === "zh" ? "获取帮助" : "Get help";
       const imgUrl = `/PicSamples/${encodeURIComponent(row.seq)}.png`;
       return `<span class="tl-desc-text">${text}</span><button type="button" class="tl-desc-btn tl-desc-btn--inline" data-schematic="${escapeHtml(imgUrl)}">${escapeHtml(link)}</button>`;
     }

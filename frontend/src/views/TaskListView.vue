@@ -1541,7 +1541,7 @@ onUnmounted(() => {
                 <td class="tl-seq-cell">{{ row.displaySeq }}</td>
                 <td class="tl-desc-cell">
                   <span class="tl-desc-text">{{ rowDescription(row) }}</span>
-                  <button v-if="SCHEMATIC_SEQS.has(row.seq)" type="button" class="tl-desc-btn tl-desc-btn--inline" @click="openSchematic(row.seq)">{{ lang === 'zh' ? '查看位置示意图' : 'View schematic' }}</button>
+                  <button v-if="SCHEMATIC_SEQS.has(row.seq)" type="button" class="tl-desc-btn tl-desc-btn--inline" @click="openSchematic(row.seq)">{{ lang === 'zh' ? '获取帮助' : 'Get help' }}</button>
                 </td>
                 <td class="tl-upload-cell">
                   <div class="tl-upload-stack">

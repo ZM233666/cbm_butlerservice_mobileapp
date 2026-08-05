@@ -4,6 +4,7 @@ import { fetchManagerDashboard } from '@/api/manager'
 import type { ManagerDashboard, ManagerVehicle, ManagerReport } from '@/types/manager'
 import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
+import { formatMaintLabel } from '@/utils/maint'
 
 const { t } = useI18n()
 const month = ref(new Date().toISOString().slice(0, 7))
@@ -126,7 +127,7 @@ onMounted(() => load())
       <ul class="manager-list">
         <li v-if="!vehicles.length" class="manager-list__empty">{{ t.mgrNoVehicles }}</li>
         <li v-for="v in vehicles" :key="v.vehicleNo" class="manager-list__item">
-          <strong>{{ v.vehicleNo }}</strong> · {{ v.maint.toUpperCase() }} · {{ t.mgrOwner }} {{ v.assignedTo?.name || v.assignedTo?.employeeId || '-' }} · {{ t.mgrDue }} {{ v.deadline || '-' }}
+          <strong>{{ v.vehicleNo }}</strong> · {{ formatMaintLabel(v.maint) }} · {{ t.mgrOwner }} {{ v.assignedTo?.name || v.assignedTo?.employeeId || '-' }} · {{ t.mgrDue }} {{ v.deadline || '-' }}
         </li>
       </ul>
     </div>

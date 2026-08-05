@@ -39,18 +39,18 @@ function buildHomeConfig(raw) {
   return {
     tasks: [
       {
-        maint: "c4c6",
-        title: "C4/C6",
+        maint: "c4",
+        title: "C4",
         meta: "CCBII · Maintenance",
         deadline: "2026-04-30",
-        href: "/task-list.html?maint=c4c6",
+        href: "/task-list.html?maint=c4",
       },
       {
-        maint: "c1c3",
-        title: "C1/C3",
+        maint: "c1",
+        title: "C1",
         meta: "CCBII · Maintenance",
         deadline: "2026-04-30",
-        href: "/task-list.html?maint=c1c3",
+        href: "/task-list.html?maint=c1",
       },
     ],
   };

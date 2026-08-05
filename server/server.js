@@ -120,12 +120,12 @@ function normalizeIsoTime(raw) {
   return d.toISOString();
 }
 
-function normalizeMaint(raw) {
-  const v = String(raw || "").trim().toLowerCase();
-  if (v === "c1c3") return "c1c3";
-  if (v === "c4c6" || v === "c4-c6") return "c4c6";
-  return "";
-}
+const {
+  normalizeMaint,
+  maintToTemplate,
+  formatMaintLabel,
+  MAINT_LEVELS,
+} = require("./services/maint");
 
 function normalizeStatus(raw) {
   const v = String(raw || "").trim().toLowerCase();

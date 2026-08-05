@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { TaskCard } from '@/types/task'
 import { useI18n } from '@/composables/useI18n'
 import { getDaysUntilDeadline } from '@/composables/useDeadlineAlert'
+import { formatMaintLabel, maintToTemplate } from '@/utils/maint'
 
 const props = withDefaults(defineProps<{
   tasks: TaskCard[]
@@ -50,8 +51,12 @@ function closeModal() {
 }
 
 function maintLabel(card: TaskCard) {
-  const m = String(card.maint || '').toLowerCase()
-  return m === 'c1c3' ? 'C1/C3' : (m === 'c4c6' ? 'C4/C6' : m.toUpperCase())
+  return formatMaintLabel(card.maint)
+}
+
+function maintBadgeClass(card: TaskCard) {
+  const tpl = maintToTemplate(card.maint)
+  return tpl === 'c1c3' ? 'maint-badge--c1c3' : 'maint-badge--c4c6'
 }
 
 function normalizePriority(value: unknown): RecoPriority | null {
@@ -127,7 +132,7 @@ async function acceptSelected() {
             <span class="status-ring"></span>
             <span
               class="maint-badge"
-              :class="String(row.card.maint || '').toLowerCase() === 'c4c6' ? 'maint-badge--c4c6' : 'maint-badge--c1c3'"
+              :class="maintBadgeClass(row.card)"
             >{{ maintLabel(row.card) }}</span>
           </span>
           <span class="item-content">

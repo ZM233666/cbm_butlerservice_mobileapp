@@ -9,8 +9,15 @@ import MonthPicker from '@/components/common/MonthPicker.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import { createTaskCentreTask, fetchTaskCentre } from '@/api/tasks'
 import type { TaskCentreResponse } from '@/types/task'
+import {
+  MAINT_LEVELS,
+  type MaintLevel,
+  formatMaintLabel,
+  maintToTemplate,
+} from '@/utils/maint'
 
-type TaskTemplate = 'c1c3' | 'c4c6' | 'custom'
+type TaskTemplate = MaintLevel
+// 后续版本如需 Custom：改为 MaintLevel | 'custom'
 
 function nowMonth(): string {
   const d = new Date()
@@ -38,8 +45,8 @@ let loadVersion = 0
 let addVersion = 0
 
 const form = ref({
-  template: 'c1c3' as TaskTemplate,
-  customName: '',
+  template: 'c1' as TaskTemplate,
+  // customName: '', // Custom 任务名称（后续版本恢复）
   trainModel: '',
   requiredAttachments: 19,
   serviceCity: '',
@@ -84,10 +91,15 @@ const attachmentStats = computed(() => {
   }
 })
 
-watch(() => form.value.template, (v) => {
-  if (v === 'c1c3') form.value.requiredAttachments = checklistCounts.value.c1c3
-  else if (v === 'c4c6') form.value.requiredAttachments = checklistCounts.value.c4c6
+function syncRequiredAttachments(template: TaskTemplate) {
+  const tpl = maintToTemplate(template)
+  if (tpl === 'c1c3') form.value.requiredAttachments = checklistCounts.value.c1c3
+  else if (tpl === 'c4c6') form.value.requiredAttachments = checklistCounts.value.c4c6
   else form.value.requiredAttachments = Math.max(0, form.value.requiredAttachments || 0)
+}
+
+watch(() => form.value.template, (v) => {
+  syncRequiredAttachments(v)
 })
 
 watch(() => form.value.endDate, (v) => {
@@ -104,7 +116,7 @@ const canAddTask = computed(() => {
   const endOk = !!String(form.value.endDate || '').trim()
   if (!templateOk || !trainOk || !cityOk || !endOk) return false
   if (String(form.value.endDate || '').trim() < todayMin.value) return false
-  if (form.value.template === 'custom' && !String(form.value.customName || '').trim()) return false
+  // if (form.value.template === 'custom' && !String(form.value.customName || '').trim()) return false
   return true
 })
 
@@ -133,8 +145,7 @@ async function loadCentre() {
         c1c3: Number(counts.c1c3) || checklistCounts.value.c1c3,
         c4c6: Number(counts.c4c6) || checklistCounts.value.c4c6,
       }
-      if (form.value.template === 'c1c3') form.value.requiredAttachments = checklistCounts.value.c1c3
-      else if (form.value.template === 'c4c6') form.value.requiredAttachments = checklistCounts.value.c4c6
+      syncRequiredAttachments(form.value.template)
     }
   } catch {
     if (currentVersion !== loadVersion) return
@@ -160,9 +171,8 @@ watch(
 )
 
 function templateTitle(tp: TaskTemplate) {
-  if (tp === 'c1c3') return t.value.tcTemplateC1C3
-  if (tp === 'c4c6') return t.value.tcTemplateC4C6
-  return t.value.tcTemplateCustom
+  // if (tp === 'custom') return t.value.tcTemplateCustom
+  return formatMaintLabel(tp)
 }
 
 async function addTask() {
@@ -172,16 +182,19 @@ async function addTask() {
 
   const currentAddVersion = addVersion
   adding.value = true
-  const name = form.value.template === 'custom'
-    ? form.value.customName.trim()
-    : `${templateTitle(form.value.template)}${t.value.tcServiceSuffix}`
+  // Custom 恢复时：
+  // const name = form.value.template === 'custom'
+  //   ? form.value.customName.trim()
+  //   : `${templateTitle(form.value.template)}${t.value.tcServiceSuffix}`
+  const name = `${templateTitle(form.value.template)}${t.value.tcServiceSuffix}`
   if (!name) {
     adding.value = false
     return
   }
 
   try {
-    const maint = form.value.template === 'c1c3' ? 'c1c3' : 'c4c6'
+    // Custom 恢复时：const maint = form.value.template === 'custom' ? 'c4' : form.value.template
+    const maint = form.value.template
     await createTaskCentreTask({
       employeeId: id,
       maint,
@@ -203,7 +216,7 @@ async function addTask() {
     if (currentAddVersion !== addVersion || employeeId.value !== id) return
     toast.show(t.value.tcAdded, 'success', 1800)
 
-    form.value.customName = ''
+    // form.value.customName = ''
     form.value.trainModel = ''
     form.value.serviceCity = ''
     form.value.endDate = ''
@@ -304,15 +317,20 @@ async function addTask() {
               <label class="tc-step__field--maintenance">
                 <span>{{ t.tcTemplate }}</span>
                 <select v-model="form.template">
-                  <option value="c1c3">{{ t.tcTemplateC1C3 }}</option>
-                  <option value="c4c6">{{ t.tcTemplateC4C6 }}</option>
+                  <option v-for="level in MAINT_LEVELS" :key="level" :value="level">
+                    {{ formatMaintLabel(level) }}
+                  </option>
+                  <!-- Custom（后续版本恢复）
                   <option value="custom">{{ t.tcTemplateCustom }}</option>
+                  -->
                 </select>
               </label>
               <span class="tc-step__pill tc-step__pill--inline" :title="t.tcChecklistCountTitle">
                 {{ t.tcChecklistCount.replace('{n}', String(form.requiredAttachments)) }}
               </span>
+              <!-- Custom 任务名称（后续版本恢复）
               <label v-if="form.template === 'custom'" class="tc-step__field--full"><span>{{ t.tcCustomName }}</span><input v-model="form.customName" :placeholder="t.tcCustomPlaceholder" /></label>
+              -->
             </div>
           </section>
 

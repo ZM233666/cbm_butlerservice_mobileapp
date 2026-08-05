@@ -149,7 +149,18 @@
 
   function getMaintType() {
     const el = document.getElementById("f-maint-type");
-    return el && el.value === "c1c3" ? "c1c3" : "c4c6";
+    const raw = String((el && el.value) || "").trim().toLowerCase().replace(/[/\s_-]/g, "");
+    if (raw === "c1" || raw === "c2" || raw === "c3" || raw === "c1c3") return "c1c3";
+    if (raw === "c4" || raw === "c5" || raw === "c6" || raw === "c4c6") return "c4c6";
+    return "c4c6";
+  }
+
+  function displayMaintLabel(raw) {
+    const v = String(raw || "").trim().toLowerCase().replace(/[/\s_-]/g, "");
+    if (v === "c1c3") return "C1～C3";
+    if (v === "c4c6") return "C4～C6";
+    if (["c1", "c2", "c3", "c4", "c5", "c6"].includes(v)) return v.toUpperCase();
+    return String(raw || "").toUpperCase() || "-";
   }
 
   function allowedByMaintCategory(row, maintType) {
@@ -249,7 +260,7 @@
     const label = document.getElementById("f-maint-type-label");
     if (!hidden || !label) return;
     const t = i18n[lang];
-    label.value = hidden.value === "c1c3" ? t.maintC1C3 : t.maintC4C6;
+    label.value = displayMaintLabel(hidden.value);
   }
 
   function escapeHtml(s) {

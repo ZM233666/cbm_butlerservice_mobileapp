@@ -12,6 +12,7 @@ import { fetchGuidanceTasks, fetchHomeConfig, fetchTaskStatus, fetchTaskDetail, 
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
 import type { GuidanceRow, TaskDetail } from '@/types/task'
+import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
 import * as exifr from 'exifr'
 
 defineOptions({ name: 'TaskListView' })
@@ -30,7 +31,7 @@ const LOW_RES_MAX_EDGE = 1000
 
 type ClientCaptureMeta = { capturedAt: string; latitude?: number; longitude?: number; accuracy?: number }
 
-const maintType = ref<'c4c6' | 'c1c3'>('c4c6')
+const maintType = ref<string>('c4')
 const taskDetail = ref<TaskDetail | null>(null)
 const guidanceRows = ref<GuidanceRow[]>([])
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture'] }>>({})
@@ -126,10 +127,11 @@ function displayField(value: string | undefined | null) {
 const basicDepot = computed(() => displayField(taskDetail.value?.depot))
 const basicTrainNo = computed(() => displayField(taskDetail.value?.trainNo))
 const basicEmployeeId = computed(() => displayField(taskDetail.value?.employeeId || auth.user?.employeeId))
-const basicMaintLabel = computed(() => {
-  const maint = String(taskDetail.value?.maint || maintType.value || '').trim()
-  return maint === 'c1c3' ? t.value.maintC1C3 : t.value.maintC4C6
-})
+const basicMaintLabel = computed(() =>
+  formatMaintLabel(taskDetail.value?.maint || maintType.value),
+)
+
+const maintTemplate = computed(() => maintToTemplate(maintType.value) || 'c4c6')
 const basicTaskId = computed(() => displayField(taskDetail.value?.taskId || mainTaskId.value))
 const basicDeadline = computed(() => displayField(taskDetail.value?.deadline || String(route.query.deadline || '')))
 const homeRefreshStamp = ref(0)
@@ -229,13 +231,14 @@ function buildC1C3DisplaySeqMap(rows: GuidanceRow[]): Record<string, string> {
 }
 
 const visibleRows = computed(() => {
+  const template = maintTemplate.value
   const filtered = guidanceRows.value.filter((row) => {
-    if (maintType.value === 'c1c3') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c4c6')
-    if (maintType.value === 'c4c6') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c1c3')
+    if (template === 'c1c3') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c4c6')
+    if (template === 'c4c6') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c1c3')
     return true
   })
 
-  if (maintType.value !== 'c1c3') {
+  if (template !== 'c1c3') {
     return filtered.map((row) => ({ ...row, displaySeq: row.seq }))
   }
 
@@ -642,7 +645,7 @@ function readTaskListCache() {
       issueRecords?: Record<string, { text: string; updatedAt: string }>
       currentTaskStatus?: 'todo' | 'doing' | 'done' | 'rejected'
       taskRejected?: boolean
-      maintType?: 'c4c6' | 'c1c3'
+      maintType?: string
     } : null
   } catch {
     return null
@@ -666,10 +669,19 @@ function clearTaskListCache() {
   } catch { /* ignore */ }
 }
 
+function applyMaintFromQueryOrDetail(raw: unknown) {
+  const normalized = normalizeMaint(raw)
+  if (normalized) {
+    maintType.value = normalized
+    return
+  }
+  const compact = String(raw || '').trim().toLowerCase().replace(/[/\s_-]/g, '')
+  // 保留未迁移的历史聚合值，便于筛选模版
+  if (compact === 'c1c3' || compact === 'c4c6') maintType.value = compact
+}
+
 async function hydrateTaskPage() {
-  const m = route.query.maint as string
-  if (m === 'c1c3') maintType.value = 'c1c3'
-  else if (m === 'c4c6') maintType.value = 'c4c6'
+  applyMaintFromQueryOrDetail(route.query.maint)
 
   taskDetail.value = null
   uploadRecords.value = {}
@@ -696,7 +708,7 @@ async function hydrateTaskPage() {
     } else if (cached.taskRejected) {
       currentTaskStatus.value = 'rejected'
     }
-    if (cached.maintType === 'c1c3' || cached.maintType === 'c4c6') maintType.value = cached.maintType
+    if (cached.maintType) applyMaintFromQueryOrDetail(cached.maintType)
   }
 
   if (hydrateToken !== hydrateGeneration) return
@@ -721,9 +733,7 @@ async function hydrateTaskPage() {
         if (hydrateToken !== hydrateGeneration) return
         if (detailData?.task) {
           taskDetail.value = detailData.task
-          if (detailData.task.maint === 'c1c3' || detailData.task.maint === 'c4c6') {
-            maintType.value = detailData.task.maint
-          }
+          if (detailData.task.maint) applyMaintFromQueryOrDetail(detailData.task.maint)
           if (
             detailData.task.status === 'todo'
             || detailData.task.status === 'doing'

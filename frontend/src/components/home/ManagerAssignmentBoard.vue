@@ -6,6 +6,7 @@ import type { FseMember, ManagerAssignment, ManagerDashboard } from '@/types/man
 import { fetchUsers } from '@/api/users'
 import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
+import { MAINT_LEVELS, formatMaintLabel } from '@/utils/maint'
 
 const auth = useAuthStore()
 const { t, lang } = useI18n()
@@ -18,7 +19,7 @@ const fseMembers = ref<FseMember[]>([])
 
 const requiredCertificateName = ref('')
 const assignee = ref('')
-const maint = ref('c4c6')
+const maint = ref('c4')
 const region = ref('')
 const depot = ref('')
 const vehicleNo = ref('')
@@ -51,12 +52,7 @@ const selectedFseName = computed(() => {
   return filteredFseMembers.value.find(m => String(m.employeeId) === id)?.name || ''
 })
 
-const maintDisplay = computed(() => {
-  const m = String(maint.value || '').trim().toLowerCase()
-  if (m === 'c1c3') return 'C1/C3'
-  if (m === 'c4c6') return 'C4/C6'
-  return String(m || '').toUpperCase()
-})
+const maintDisplay = computed(() => formatMaintLabel(maint.value))
 
 const dispatchSummary = computed(() => {
   const v = vehicleNo.value.trim() || (lang.value === 'en' ? '—' : '—')
@@ -133,7 +129,7 @@ function buildDraftRow(): ManagerAssignment | null {
   return {
     id,
     vehicleNo: vehicleNo || '-',
-    maint: maint || 'c4c6',
+    maint: maint || 'c4',
     depot: depotText,
     assignedTo: assigneeName ? { name: assigneeName, employeeId: assigneeId || undefined } : { employeeId: assigneeId || undefined },
     status: 'draft',
@@ -363,8 +359,9 @@ onMounted(async () => {
             <label class="manager-field manager-field--full">
               <span>{{ t.mgrMaint }}</span>
               <select v-model="maint" required>
-                <option value="c4c6">C4/C6</option>
-                <option value="c1c3">C1/C3</option>
+                <option v-for="level in MAINT_LEVELS" :key="level" :value="level">
+                  {{ formatMaintLabel(level) }}
+                </option>
               </select>
             </label>
           </div>
@@ -431,7 +428,7 @@ onMounted(async () => {
             <tr v-for="assignment in assignments" :key="assignment.id">
               <td>{{ assignment.id }}</td>
               <td>{{ assignment.vehicleNo || '-' }}</td>
-              <td>{{ assignment.maint.toUpperCase() }}</td>
+              <td>{{ formatMaintLabel(assignment.maint) }}</td>
               <td>{{ assignment.depot || '-' }}</td>
               <td>{{ assignment.assignedTo?.name || assignment.assignedTo?.employeeId || '-' }}</td>
               <td>{{ managerStatusLabel(assignment.status) }}</td>

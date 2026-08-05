@@ -1,3 +1,5 @@
+const { normalizeMaint, maintToTemplate, formatMaintLabel, MAINT_LEVELS } = require("./maint");
+
 const DEFAULT_FSE_MEMBERS = [
   { employeeId: "20028289", name: "Maison Miao", email: "maison.miao@knorr-bremse.com" },
   { employeeId: "20030123", name: "Liam Chen", email: "liam.chen@knorr-bremse.com" },
@@ -6,13 +8,6 @@ const DEFAULT_FSE_MEMBERS = [
 
 function normalizeText(v) {
   return String(v || "").trim();
-}
-
-function normalizeMaint(v) {
-  const raw = String(v || "").trim().toLowerCase();
-  if (raw === "c1c3") return "c1c3";
-  if (raw === "c4c6" || raw === "c4-c6") return "c4c6";
-  return "";
 }
 
 function normalizeStatus(v) {
@@ -66,7 +61,7 @@ function normalizeAssignment(raw) {
   const assignedTo = row.assignedTo && typeof row.assignedTo === "object" ? row.assignedTo : {};
   return {
     id,
-    maint: normalizeMaint(row.maint) || "c4c6",
+    maint: normalizeMaint(row.maint) || "c4",
     vehicleNo: normalizeText(row.vehicleNo),
     depot: normalizeText(row.depot),
     requiresSpecialWorkCertificate: normalizeBoolean(row.requiresSpecialWorkCertificate),
@@ -181,10 +176,9 @@ function buildManagerDashboard(payload) {
     progress,
     vehiclesNeedService: vehiclesNeedService.slice(0, 10),
     reports,
-    byMaint: {
-      c1c3: assignments.filter((x) => x.maint === "c1c3").length,
-      c4c6: assignments.filter((x) => x.maint === "c4c6").length,
-    },
+    byMaint: Object.fromEntries(
+      MAINT_LEVELS.map((level) => [level, assignments.filter((x) => x.maint === level).length])
+    ),
     fseMembers: store.fseMembers,
     fseWorkload,
     assignments: assignments.slice(0, 50),

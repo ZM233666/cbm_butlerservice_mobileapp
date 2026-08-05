@@ -1,6 +1,8 @@
 const VALID_ROLES = new Set(["fse", "manager"]);
 const VALID_STATUS = new Set(["todo", "doing", "done"]);
 
+const { normalizeMaint, maintToTemplate, formatMaintLabel, MAINT_LEVELS } = require("./maint");
+
 function normalizeText(v) {
   return String(v || "").trim();
 }
@@ -13,13 +15,6 @@ function normalizeRole(v) {
 function defaultRegionByRole(role) {
   if (role === "manager") return "Suzhou";
   if (role === "fse") return "Shanghai";
-  return "";
-}
-
-function normalizeMaint(v) {
-  const raw = normalizeText(v).toLowerCase();
-  if (raw === "c1c3") return "c1c3";
-  if (raw === "c4c6" || raw === "c4-c6") return "c4c6";
   return "";
 }
 
@@ -149,7 +144,7 @@ function normalizeWorkOrder(input) {
   return {
     id,
     source: normalizeText(src.source) || "",
-    maint: normalizeMaint(src.maint) || "c4c6",
+    maint: normalizeMaint(src.maint) || "c4",
     vehicleNo: normalizeText(src.vehicleNo),
     title: normalizeText(src.title) || `${normalizeText(src.vehicleNo) || "Vehicle"} Service`,
     deadline: normalizeText(src.deadline),
@@ -312,11 +307,11 @@ function filterWorkOrders(store, query) {
 function buildWorkOrderStats(store, query) {
   const rows = filterWorkOrders(store, query);
   const byStatus = { todo: 0, doing: 0, done: 0 };
-  const byMaint = { c1c3: 0, c4c6: 0 };
+  const byMaint = Object.fromEntries(MAINT_LEVELS.map((level) => [level, 0]));
   const byAssignee = {};
   rows.forEach((row) => {
     byStatus[row.status] += 1;
-    if (row.maint === "c1c3" || row.maint === "c4c6") byMaint[row.maint] += 1;
+    if (row.maint && byMaint[row.maint] != null) byMaint[row.maint] += 1;
     const key = row.assignedTo.employeeId || "unassigned";
     if (!byAssignee[key]) {
       byAssignee[key] = {

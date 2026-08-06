@@ -9,7 +9,7 @@ import type { UserCertificate } from '@/types/user'
 
 const auth = useAuthStore()
 const router = useRouter()
-const user = computed(() => auth.user!)
+const user = computed(() => auth.user)
 const { t, lang } = useI18n()
 
 const aboutOpen = ref(false)
@@ -248,7 +248,7 @@ onMounted(() => {
 <template>
   <div class="page page--my">
     <TopBrandBar />
-    <header class="my-header" :class="{ 'my-header--exclusive': auth.isManager }">
+    <header v-if="user" class="my-header" :class="{ 'my-header--exclusive': auth.isManager }">
       <div class="my-header__avatar" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="40" height="40" fill="none">
           <circle cx="12" cy="9" r="3.5" fill="currentColor" />

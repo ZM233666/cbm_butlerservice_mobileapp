@@ -3,16 +3,16 @@ import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
-const user = auth.user!
+const user = computed(() => auth.user)
 
 const roleText = computed(() => {
-  const raw = String(auth.roleLabel || user.role || '').trim()
+  const raw = String(auth.roleLabel || user.value?.role || '').trim()
   if (!raw || /[\s\u4e00-\u9fff]/.test(raw)) return raw
   return raw.replace(/([a-z])([A-Z])/g, '$1 $2')
 })
 
 /** 卡片空间有限：只展示本地部分 + @，完整地址放 title 悬停可见 */
-const emailFull = computed(() => String(user.email || '').trim())
+const emailFull = computed(() => String(user.value?.email || '').trim())
 const emailDisplay = computed(() => {
   const full = emailFull.value
   if (!full) return '-'
@@ -23,7 +23,7 @@ const emailDisplay = computed(() => {
 </script>
 
 <template>
-  <section class="profile-card" aria-label="User Profile">
+  <section v-if="user" class="profile-card" aria-label="User Profile">
     <div class="profile-card__grid">
       <div class="profile-card__cell profile-card__cell--name">
         <span class="profile-card__icon" aria-hidden="true">

@@ -67,6 +67,7 @@ async function load(m?: string) {
   } catch (e: unknown) {
     const err = e as { status?: number }
     if (err.status === 404) { hintKey.value = 'mgrHintApiMissing'; hintErr.value = true }
+    else if (err.status === 403) { hintKey.value = 'mgrHintForbidden'; hintErr.value = true }
     else { hintKey.value = 'mgrHintLoadFail'; hintErr.value = true }
   }
 }

@@ -755,7 +755,14 @@ async function resolveDjangoAuthUserOnce(token) {
           email: String(profile.email || "").trim(),
           department: String(profile.department || "").trim(),
           region: String(profile.region || "").trim(),
-          role: String(profile.role || identity.role || "fse").trim().toLowerCase(),
+          // H5 profile 若因映射偏严落成 fse，但 user_info 已判定为 manager，保留 manager，避免前端进经理页却 403
+          role: (() => {
+            const fromProfile = String(profile.role || "").trim().toLowerCase();
+            const fromIdentity = String(identity.role || "").trim().toLowerCase();
+            if (isManagerRole(fromProfile)) return fromProfile;
+            if (isManagerRole(fromIdentity)) return fromIdentity === "manager" ? "manager" : fromIdentity;
+            return fromProfile || fromIdentity || "fse";
+          })(),
           roleDisplayName: String(profile.roleDisplayName || "").trim() || undefined,
           specialWorkCertificates: Array.isArray(profile.specialWorkCertificates)
             ? profile.specialWorkCertificates

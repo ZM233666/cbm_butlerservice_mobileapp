@@ -1,6 +1,7 @@
 import { apiGet, apiGetPublic, apiPost, apiPostForm, apiPostPublic } from './client'
 import type { User } from '@/types/user'
 import type { UserCertificate } from '@/types/user'
+import { ROLE_FS_DIRECTOR, ROLE_FS_MANAGER, ROLE_RS_MANAGER, roleNameImpliesManager } from '@/types/user'
 import { md5 } from '@/utils/md5'
 
 export interface LoginPayload {
@@ -41,40 +42,36 @@ export interface UserInfoData {
 function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
   const ri = info?.role_info?.[0]
   const roleKey = String(ri?.key || '').trim().toLowerCase()
-  const roleName = String(ri?.name || '').trim().toLowerCase()
+  const roleNameRaw = String(ri?.name || '').trim()
+  const roleName = roleNameRaw.toLowerCase()
 
-  if (roleKey === 'fse' || roleName === 'fieldserviceengineer') return 'fse'
-
-  // Regional Service Manager（admin/superadmin 也归入管理员视图）
-  if (
-    roleKey === 'rsmanager' ||
-    roleKey === 'rsm' ||
-    roleKey === 'manager' ||
-    roleKey === 'admin' ||
-    roleKey === 'superadmin' ||
-    roleKey === 'regionalservicemanager' ||
-    roleName === 'regionalservicemanager' ||
-    roleName === '管理员' ||
-    roleName === '超级管理员'
-  )
-    return 'rsmanager'
-
-  // Field Service Manager
-  if (roleKey === 'fieldservicemanager' || roleKey === 'fsm' || roleName === 'fieldservicemanager') return 'fieldservicemanager'
-
-  // Field Service Director
-  if (roleKey === 'fieldservicedirector' || roleKey === 'fsd' || roleName === 'fieldservicedirector') return 'fieldservicedirector'
-
-  // External contractor
+  // External contractor（仍按原约定，不进 manager 金页）
   if (
     roleKey === 'externalcontractor' ||
     roleName === 'externalcontractor' ||
     roleKey === 'contractor' ||
-    roleKey === 'third_party' // 兼容旧后端/旧约定
-  )
+    roleKey === 'third_party'
+  ) {
     return 'externalcontractor'
+  }
 
-  return undefined
+  // 金色 manager 页：角色 name 含 manager / director（不区分大小写）
+  if (roleNameImpliesManager(roleNameRaw)) {
+    if (roleName.includes('director') || roleKey === 'fsd' || roleKey === 'fieldservicedirector') {
+      return ROLE_FS_DIRECTOR
+    }
+    if (
+      roleName.includes('fieldservicemanager') ||
+      roleKey === 'fsm' ||
+      roleKey === 'fieldservicemanager'
+    ) {
+      return ROLE_FS_MANAGER
+    }
+    return ROLE_RS_MANAGER
+  }
+
+  // 其余一律按 engineer 白页
+  return 'fse'
 }
 
 
@@ -137,8 +134,8 @@ export async function fetchUserInfo(username: string) {
   const displayName = String(data.name || '').trim()
   const email = data.email == null ? '' : String(data.email).trim()
   const deptName = String(data.dept_info?.dept_name || '').trim()
-  // is_superuser 时兜底归入 rsmanager 视图
-  const role = mapRoleFromUserInfo(data) ?? ((data as any).is_superuser ? 'rsmanager' : undefined)
+  // 角色仅由 role_info[0].name 是否含 manager/director 决定（见 mapRoleFromUserInfo）
+  const role = mapRoleFromUserInfo(data)
 
   const roleDisplayName = String(data.role_info?.[0]?.name || '').trim()
 

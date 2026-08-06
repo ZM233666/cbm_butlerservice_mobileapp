@@ -10,11 +10,14 @@ const {
   isRemoteDbSaturationError,
 } = require("../server/services/django-auth");
 
-test("mapDjangoRoleToNode should map FSE and manager roles", () => {
+test("mapDjangoRoleToNode should map by role name containing manager/director", () => {
   assert.equal(mapDjangoRoleToNode("FSE", "FieldServiceEngineer", false), "fse");
   assert.equal(mapDjangoRoleToNode("RSM", "RegionalServiceManager", false), "manager");
-  assert.equal(mapDjangoRoleToNode("admin", "管理员", false), "manager");
-  assert.equal(mapDjangoRoleToNode("", "", true), "manager");
+  assert.equal(mapDjangoRoleToNode("FSD", "FieldServiceDirector", false), "manager");
+  assert.equal(mapDjangoRoleToNode("FSM", "Field Service Manager", false), "manager");
+  // name 不含 manager/director 时不再因 key/admin/superuser 进入 manager
+  assert.equal(mapDjangoRoleToNode("admin", "管理员", false), "fse");
+  assert.equal(mapDjangoRoleToNode("", "", true), "fse");
 });
 
 test("mapDjangoUserInfoToLocalUser should map django user_info payload", () => {

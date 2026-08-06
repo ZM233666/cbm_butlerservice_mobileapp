@@ -9,30 +9,22 @@ function positiveInt(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function roleNameImpliesManager(roleName) {
+  const name = normalizeText(roleName).toLowerCase();
+  if (!name) return false;
+  return name.includes("manager") || name.includes("director");
+}
+
 function mapDjangoRoleToNode(roleKey, roleName, isSuperuser) {
   const key = normalizeText(roleKey).toLowerCase();
   const name = normalizeText(roleName).toLowerCase();
 
-  if (key === "fse" || name === "fieldserviceengineer") return "fse";
-  if (
-    key === "rsm" ||
-    key === "rsmanager" ||
-    key === "fsm" ||
-    key === "fieldservicemanager" ||
-    key === "fsd" ||
-    key === "fieldservicedirector" ||
-    key === "admin" ||
-    key === "superadmin" ||
-    name === "regionalservicemanager" ||
-    name === "fieldservicemanager" ||
-    name === "fieldservicedirector" ||
-    name === "管理员" ||
-    name === "超级管理员" ||
-    isSuperuser
-  ) {
-    return "manager";
+  // 与 H5 一致：角色 name 含 manager / director → manager；其余为 engineer
+  if (key === "ext" || name === "externalcontractor" || key === "contractor" || key === "third_party") {
+    return "fse";
   }
-  if (key === "ext" || name === "externalcontractor") return "fse";
+  if (roleNameImpliesManager(roleName)) return "manager";
+  void isSuperuser;
   return "fse";
 }
 

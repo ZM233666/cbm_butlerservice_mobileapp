@@ -9,6 +9,7 @@ import {
   ROLE_LABELS,
   ROLE_RS_MANAGER,
   isValidRole,
+  roleNameImpliesManager,
 } from '@/types/user'
 import { fetchUserInfo, fetchLocalUserProfile } from '@/api/users'
 import { clearRequestCache } from '@/api/requestCache'
@@ -129,8 +130,13 @@ export const useAuthStore = defineStore('auth', () => {
     if (fromApi) return fromApi
     return ROLE_LABELS[i18n.lang][role.value]
   })
-  const isManager = computed(() => role.value === ROLE_RS_MANAGER || role.value === ROLE_FS_MANAGER || role.value === ROLE_FS_DIRECTOR)
-  const isFse = computed(() => role.value === ROLE_FSE)
+  // 金色 manager 页：以角色 name（roleDisplayName）是否含 manager/director 为准
+  const isManager = computed(() => {
+    const displayName = String(user.value?.roleDisplayName || '').trim()
+    if (displayName) return roleNameImpliesManager(displayName)
+    return role.value === ROLE_RS_MANAGER || role.value === ROLE_FS_MANAGER || role.value === ROLE_FS_DIRECTOR
+  })
+  const isFse = computed(() => !isManager.value && role.value === ROLE_FSE)
   const isThirdParty = computed(() => role.value === ROLE_EXTERNAL_CONTRACTOR)
 
   function login(input: Partial<User>, accessToken?: string, refresh?: string) {

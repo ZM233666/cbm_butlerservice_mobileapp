@@ -10,6 +10,16 @@ const roleText = computed(() => {
   if (!raw || /[\s\u4e00-\u9fff]/.test(raw)) return raw
   return raw.replace(/([a-z])([A-Z])/g, '$1 $2')
 })
+
+/** 卡片空间有限：只展示本地部分 + @，完整地址放 title 悬停可见 */
+const emailFull = computed(() => String(user.email || '').trim())
+const emailDisplay = computed(() => {
+  const full = emailFull.value
+  if (!full) return '-'
+  const at = full.indexOf('@')
+  if (at <= 0) return full
+  return `${full.slice(0, at + 1)}`
+})
 </script>
 
 <template>
@@ -32,7 +42,7 @@ const roleText = computed(() => {
         <span class="profile-card__icon profile-card__icon--mail" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </span>
-        <p class="profile-card__email" :title="user.email || '-'">{{ user.email || '-' }}</p>
+        <p class="profile-card__email" :title="emailFull || '-'">{{ emailDisplay }}</p>
       </div>
     </div>
   </section>

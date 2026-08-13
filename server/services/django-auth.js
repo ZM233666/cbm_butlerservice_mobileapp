@@ -19,31 +19,12 @@ function mapDjangoRoleToNode(roleKey, roleName, isSuperuser) {
   const key = normalizeText(roleKey).toLowerCase();
   const name = normalizeText(roleName).toLowerCase();
 
-  // External contractor（仍按 engineer 侧能力，不进 manager API）
+  // 与 H5 一致：角色 name 含 manager / director → manager；其余为 engineer
   if (key === "ext" || name === "externalcontractor" || key === "contractor" || key === "third_party") {
     return "fse";
   }
-  // 与 H5 / 前端对齐：name 含 manager/director，或已知 key
-  if (
-    key === "fsd" ||
-    key === "fieldservicedirector" ||
-    name.includes("director")
-  ) {
-    return "manager";
-  }
-  if (
-    key === "fsm" ||
-    key === "fieldservicemanager" ||
-    key === "rsm" ||
-    key === "rsmanager" ||
-    key === "regionalservicemanager" ||
-    key === "admin" ||
-    key === "superadmin" ||
-    roleNameImpliesManager(roleName) ||
-    isSuperuser
-  ) {
-    return "manager";
-  }
+  if (roleNameImpliesManager(roleName)) return "manager";
+  void isSuperuser;
   return "fse";
 }
 

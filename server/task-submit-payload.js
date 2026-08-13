@@ -32,11 +32,19 @@ function normalizeUploadsMap(uploads) {
 
 function normalizeIssueEntry(meta) {
   if (!meta || typeof meta !== "object") return null;
+  let status = String(meta.status || "").trim().toLowerCase();
+  if (status === "normal") status = "ok";
   const text = String(meta.text || "").trim();
-  if (!text) return null;
-  const row = { text };
+  if (status !== "ok" && status !== "abnormal" && status !== "undetectable" && !text) {
+    return null;
+  }
+  const row = {};
+  if (status === "ok" || status === "abnormal" || status === "undetectable") {
+    row.status = status;
+  }
+  if (text) row.text = text;
   if (meta.updatedAt) row.updatedAt = String(meta.updatedAt);
-  return row;
+  return Object.keys(row).length ? row : null;
 }
 
 function normalizeIssuesMap(issues) {

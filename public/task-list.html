@@ -112,9 +112,18 @@
 
     <dialog class="tl-modal tl-modal--issue" id="dlg-issue" aria-labelledby="issue-title">
       <div class="tl-modal__inner">
-        <h3 id="issue-title">上报问题</h3>
-        <p class="tl-issue-help" id="issue-help">请输入拍照和检查过程中遇到的问题。</p>
-        <textarea id="issue-text" class="tl-issue-text" placeholder="请描述问题现象、位置和处理建议"></textarea>
+        <h3 id="issue-title">检查结果</h3>
+        <p class="tl-issue-help" id="issue-help">请选择本项检查结果。发现异常或无法检测时需填写说明。</p>
+        <label class="tl-issue-field">
+          <span class="tl-issue-field__label" id="issue-status-label">请选择检查结果</span>
+          <select id="issue-status" class="tl-issue-select">
+            <option value="">请选择检查结果</option>
+            <option value="ok">检查正常</option>
+            <option value="abnormal">发现异常</option>
+            <option value="undetectable">无法检测</option>
+          </select>
+        </label>
+        <textarea id="issue-text" class="tl-issue-text" hidden placeholder="请描述异常现象或无法检测的原因"></textarea>
         <div class="tl-issue-actions">
           <button type="button" class="tl-issue-action tl-issue-action--ghost" id="issue-cancel">取消</button>
           <button type="button" class="tl-issue-action tl-issue-action--primary" id="issue-save">保存</button>

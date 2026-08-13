@@ -11,7 +11,7 @@ import type { SlotUploadStatus } from '@/components/task/TaskUploadSlot.vue'
 import { fetchGuidanceTasks, fetchHomeConfig, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit, type TaskSubmitResponse } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
-import type { GuidanceRow, TaskDetail } from '@/types/task'
+import type { GuidanceRow, InspectionRecord, InspectionStatus, TaskDetail } from '@/types/task'
 import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
 import * as exifr from 'exifr'
 
@@ -37,7 +37,7 @@ const guidanceRows = ref<GuidanceRow[]>([])
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture'] }>>({})
 const localPreviewRecords = ref<Record<string, string>>({})
 const slotUploadStatus = ref<Record<string, SlotUploadStatus>>({})
-const issueRecords = ref<Record<string, { text: string; updatedAt: string }>>({})
+const issueRecords = ref<Record<string, InspectionRecord>>({})
 const uploadMaxBytes = ref(FALLBACK_UPLOAD_MAX_BYTES)
 const uploadAllowedContentTypePrefixes = ref(['image/'])
 
@@ -98,7 +98,10 @@ let pinchStartZoom = 1
 
 const issueOpen = ref(false)
 const issueRowId = ref('')
+const issueStatus = ref<InspectionStatus | ''>('')
 const issueText = ref('')
+const flashingRowId = ref('')
+let flashTimer: ReturnType<typeof setTimeout> | null = null
 const submitConfirmOpen = ref(false)
 const currentTaskStatus = ref<'todo' | 'doing' | 'done' | 'rejected'>('todo')
 const editRequestOpen = ref(false)
@@ -146,14 +149,14 @@ function isGuidanceDataSyncRow(row: GuidanceRow) {
 }
 
 /**
- * C1-C3 过滤后主序号可能不连续（如 1/3/3.4）。
+ * 过滤或重排后，No. 列按行出现顺序从 1 起连续编号。
  * 重排规则：
  * 1) 主序号按出现顺序压成 1..N，子序号先保留后缀（3.4 → 2.4）
  * 2) 若该主项仍在：子项后缀按出现顺序重排为 .1/.2/...（2.4 → 2.1）
  * 3) 若该主项已被滤掉：仅剩的子项提升为主序号（5.1 → 5；多个则首个升主项，其余 .1/.2/...）
  * 示意图 / 数据同步判断仍使用真实 row.seq。
  */
-function buildC1C3DisplaySeqMap(rows: GuidanceRow[]): Record<string, string> {
+function buildDisplaySeqMap(rows: GuidanceRow[]): Record<string, string> {
   const majorOrder: number[] = []
   const seen = new Set<number>()
   rows.forEach((row) => {
@@ -238,11 +241,7 @@ const visibleRows = computed(() => {
     return true
   })
 
-  if (template !== 'c1c3') {
-    return filtered.map((row) => ({ ...row, displaySeq: row.seq }))
-  }
-
-  const displaySeqMap = buildC1C3DisplaySeqMap(filtered)
+  const displaySeqMap = buildDisplaySeqMap(filtered)
   return filtered.map((row) => ({
     ...row,
     displaySeq: displaySeqMap[row.id] || row.seq,
@@ -323,6 +322,92 @@ const incompleteRows = computed(() => {
     return buttons.some((b) => !uploadRecords.value[b.slot]?.url)
   })
 })
+
+const INSPECTION_STATUSES: InspectionStatus[] = ['ok', 'abnormal', 'undetectable']
+
+function normalizeIssueRecord(raw: unknown): InspectionRecord | null {
+  if (!raw || typeof raw !== 'object') return null
+  const item = raw as { status?: string; text?: string; updatedAt?: string }
+  const text = String(item.text || '').trim()
+  const statusRaw = String(item.status || '').trim().toLowerCase()
+  const status = (statusRaw === 'normal' ? 'ok' : statusRaw) as InspectionStatus | ''
+  if (INSPECTION_STATUSES.includes(status as InspectionStatus)) {
+    return {
+      status: status as InspectionStatus,
+      text,
+      updatedAt: String(item.updatedAt || ''),
+    }
+  }
+  if (text) {
+    return { status: 'abnormal', text, updatedAt: String(item.updatedAt || '') }
+  }
+  return null
+}
+
+function isIssueComplete(raw: unknown): boolean {
+  const rec = normalizeIssueRecord(raw)
+  if (!rec) return false
+  if (rec.status === 'ok') return true
+  return rec.text.trim().length > 0
+}
+
+function issueBtnClass(rowId: string) {
+  const rec = normalizeIssueRecord(issueRecords.value[rowId])
+  if (!isIssueComplete(rec)) return {}
+  return {
+    'is-filled': true,
+    'is-ok': rec?.status === 'ok',
+    'is-abnormal': rec?.status === 'abnormal',
+    'is-undetectable': rec?.status === 'undetectable',
+  }
+}
+
+function inspectionStatusLabel(status: InspectionStatus | '' | undefined) {
+  if (status === 'ok') return t.value.issueStatusOk
+  if (status === 'abnormal') return t.value.issueStatusAbnormal
+  if (status === 'undetectable') return t.value.issueStatusUndetectable
+  return ''
+}
+
+function issueNoteDisplay(rowId: string) {
+  const rec = normalizeIssueRecord(issueRecords.value[rowId])
+  if (!rec) return ''
+  const label = inspectionStatusLabel(rec.status)
+  if (rec.status === 'ok' || !rec.text) return label
+  return `${label}：${rec.text}`
+}
+
+function issueNotePreview(rowId: string) {
+  const text = issueNoteDisplay(rowId)
+  if (!text) return ''
+  return text.length > 44 ? `${text.slice(0, 44)}...` : text
+}
+
+const issueDetailRequired = computed(() => issueStatus.value === 'abnormal' || issueStatus.value === 'undetectable')
+const issuePlaceholderText = computed(() => {
+  if (issueStatus.value === 'undetectable') return t.value.issuePlaceholderUndetectable
+  if (issueStatus.value === 'abnormal') return t.value.issuePlaceholderAbnormal
+  return t.value.issuePlaceholder
+})
+
+const incompleteInspectionRows = computed(() =>
+  visibleRows.value.filter((row) => !isIssueComplete(issueRecords.value[row.id])),
+)
+
+function focusFirstIncompleteInspection() {
+  const first = incompleteInspectionRows.value[0]
+  if (!first) return
+  flashingRowId.value = first.id
+  void nextTick(() => {
+    const el = document.querySelector(`[data-row-id="${CSS.escape(first.id)}"]`) as HTMLElement | null
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+  if (flashTimer) clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => {
+    if (flashingRowId.value === first.id) flashingRowId.value = ''
+    flashTimer = null
+  }, 1200)
+}
 const isTaskDone = computed(() => currentTaskStatus.value === 'done')
 const isTaskTodo = computed(() => currentTaskStatus.value === 'todo')
 const isTaskDoing = computed(() => currentTaskStatus.value === 'doing')
@@ -515,21 +600,37 @@ function openSchematic(seq: string) {
 function openIssue(rowId: string) {
   if (!isTaskDoing.value) return
   issueRowId.value = rowId
-  issueText.value = issueRecords.value[rowId]?.text || ''
+  const rec = normalizeIssueRecord(issueRecords.value[rowId])
+  issueStatus.value = rec?.status || ''
+  issueText.value = rec?.text || ''
   issueOpen.value = true
+}
+
+function onIssueStatusChange() {
+  if (!issueDetailRequired.value) issueText.value = ''
 }
 
 function saveIssue() {
   if (!isTaskDoing.value) return
   if (!issueRowId.value) return
-  const text = issueText.value.trim()
-  if (text) {
-    issueRecords.value[issueRowId.value] = { text, updatedAt: new Date().toISOString() }
-    toast(t.value.issueSaved)
-  } else {
-    delete issueRecords.value[issueRowId.value]
-    toast(t.value.issueCleared)
+  if (!issueStatus.value) {
+    toast(t.value.issueNeedStatus, 'warn')
+    return
   }
+  const text = issueText.value.trim()
+  if (issueDetailRequired.value && !text) {
+    toast(t.value.issueNeedDetail, 'warn')
+    return
+  }
+  issueRecords.value = {
+    ...issueRecords.value,
+    [issueRowId.value]: {
+      status: issueStatus.value,
+      text: issueStatus.value === 'ok' ? '' : text,
+      updatedAt: new Date().toISOString(),
+    },
+  }
+  toast(t.value.issueSaved)
   issueOpen.value = false
 }
 
@@ -640,13 +741,14 @@ function taskListCacheKey() {
 function readTaskListCache() {
   try {
     const raw = sessionStorage.getItem(taskListCacheKey())
-    return raw ? JSON.parse(raw) as {
+    if (!raw) return null
+    return JSON.parse(raw) as {
       uploadRecords?: Record<string, { url: string; capture?: UploadResult['capture'] }>
-      issueRecords?: Record<string, { text: string; updatedAt: string }>
+      issueRecords?: Record<string, InspectionRecord>
       currentTaskStatus?: 'todo' | 'doing' | 'done' | 'rejected'
       taskRejected?: boolean
       maintType?: string
-    } : null
+    }
   } catch {
     return null
   }
@@ -701,7 +803,12 @@ async function hydrateTaskPage() {
       uploadRecords.value = cached.uploadRecords
     }
     if (cached.issueRecords && typeof cached.issueRecords === 'object') {
-      issueRecords.value = cached.issueRecords
+      const next: Record<string, InspectionRecord> = {}
+      Object.entries(cached.issueRecords).forEach(([rowId, item]) => {
+        const rec = normalizeIssueRecord(item)
+        if (rec) next[rowId] = rec
+      })
+      issueRecords.value = next
     }
     if (cached.currentTaskStatus === 'todo' || cached.currentTaskStatus === 'doing' || cached.currentTaskStatus === 'done' || cached.currentTaskStatus === 'rejected') {
       currentTaskStatus.value = cached.currentTaskStatus
@@ -773,12 +880,9 @@ async function hydrateTaskPage() {
         })
         const issues = latest.issues && typeof latest.issues === 'object' ? latest.issues : {}
         Object.entries(issues).forEach(([rowId, item]) => {
-          const text = String((item as any)?.text || '').trim()
-          if (!text) return
-          issueRecords.value[rowId] = {
-            text,
-            updatedAt: String((item as any)?.updatedAt || new Date().toISOString()),
-          }
+          const rec = normalizeIssueRecord(item)
+          if (!rec) return
+          issueRecords.value[rowId] = rec
         })
         persistTaskListCache()
       }
@@ -1384,6 +1488,11 @@ async function onSubmit() {
     toast(unresolvedFailedUploadMessage(), 'warn')
     return
   }
+  if (incompleteInspectionRows.value.length) {
+    toast(t.value.submitNeedAllResults, 'warn')
+    focusFirstIncompleteInspection()
+    return
+  }
   if (!isSubmitReady.value) { submitConfirmOpen.value = true; return }
   try {
     const submitResp = await postTaskSubmit(buildTaskSubmitPayload())
@@ -1403,6 +1512,11 @@ async function confirmSubmitWithMissingUploads() {
   }
   if (hasUnresolvedFailedUploads()) {
     toast(unresolvedFailedUploadMessage(), 'warn')
+    return
+  }
+  if (incompleteInspectionRows.value.length) {
+    toast(t.value.submitNeedAllResults, 'warn')
+    focusFirstIncompleteInspection()
     return
   }
   submitConfirmOpen.value = false
@@ -1511,6 +1625,10 @@ onUnmounted(() => {
   slotUploadStatus.value = {}
   closeUploadPreview()
   revokeAllLocalPreviews()
+  if (flashTimer) {
+    clearTimeout(flashTimer)
+    flashTimer = null
+  }
 })
 </script>
 
@@ -1547,7 +1665,10 @@ onUnmounted(() => {
                     </div>
                   </td>
                 </tr>
-                <tr :class="{ 'is-data-sync-row': isDataSyncRow(row) }">
+                <tr
+                  :data-row-id="row.id"
+                  :class="{ 'is-data-sync-row': isDataSyncRow(row), 'is-flash': flashingRowId === row.id }"
+                >
                 <td class="tl-seq-cell">{{ row.displaySeq }}</td>
                 <td class="tl-desc-cell">
                   <span class="tl-desc-text">{{ rowDescription(row) }}</span>
@@ -1575,8 +1696,14 @@ onUnmounted(() => {
                     </template>
                     <span v-else class="tl-upload-na">{{ row.uploadHint || t.noUpload }}</span>
                     <div class="tl-issue-wrap">
-                      <div v-if="issueRecords[row.id]?.text" class="tl-issue-note">{{ t.issueNotePrefix }}{{ issueRecords[row.id].text.slice(0, 44) }}{{ issueRecords[row.id].text.length > 44 ? '...' : '' }}</div>
-                      <button type="button" class="tl-issue-btn" :disabled="!isTaskDoing" @click="openIssue(row.id)">{{ t.reportIssue }}</button>
+                      <div v-if="issueNotePreview(row.id)" class="tl-issue-note">{{ issueNotePreview(row.id) }}</div>
+                      <button
+                        type="button"
+                        class="tl-issue-btn"
+                        :class="issueBtnClass(row.id)"
+                        :disabled="!isTaskDoing"
+                        @click="openIssue(row.id)"
+                      >{{ t.reportIssue }}</button>
                     </div>
                   </div>
                 </td>
@@ -1657,7 +1784,21 @@ onUnmounted(() => {
         <div class="tl-modal__inner">
           <h3>{{ t.issueDialogTitle }}</h3>
           <p class="tl-issue-help">{{ t.issueDialogHelp }}</p>
-          <textarea v-model="issueText" class="tl-issue-text" :placeholder="t.issuePlaceholder"></textarea>
+          <label class="tl-issue-field">
+            <span class="tl-issue-field__label">{{ t.issueStatusPlaceholder }}</span>
+            <select v-model="issueStatus" class="tl-issue-select" @change="onIssueStatusChange">
+              <option value="">{{ t.issueStatusPlaceholder }}</option>
+              <option value="ok">{{ t.issueStatusOk }}</option>
+              <option value="abnormal">{{ t.issueStatusAbnormal }}</option>
+              <option value="undetectable">{{ t.issueStatusUndetectable }}</option>
+            </select>
+          </label>
+          <textarea
+            v-if="issueDetailRequired"
+            v-model="issueText"
+            class="tl-issue-text"
+            :placeholder="issuePlaceholderText"
+          ></textarea>
           <div class="tl-issue-actions">
             <button type="button" class="tl-issue-action tl-issue-action--ghost" @click="issueOpen = false">{{ t.issueCancel }}</button>
             <button type="button" class="tl-issue-action tl-issue-action--primary" @click="saveIssue">{{ t.issueSave }}</button>

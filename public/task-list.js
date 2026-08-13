@@ -78,15 +78,24 @@
       locationDenied: "定位权限被拒绝，请在浏览器设置中允许定位",
       locationTimeout: "定位超时，已继续上传",
       locationFailed: "定位获取失败，已继续上传",
-      reportIssue: "上报问题",
-      issueDialogTitle: "上报问题",
-      issueDialogHelp: "请输入拍照和检查过程中遇到的问题。",
-      issuePlaceholder: "请描述问题现象、位置和处理建议",
+      reportIssue: "检查结果",
+      issueDialogTitle: "检查结果",
+      issueDialogHelp: "请选择本项检查结果。发现异常或无法检测时需填写说明。",
+      issuePlaceholder: "请描述异常现象或无法检测的原因",
+      issuePlaceholderAbnormal: "请描述异常现象",
+      issuePlaceholderUndetectable: "请说明无法检测的原因",
+      issueStatusPlaceholder: "请选择检查结果",
+      issueStatusOk: "检查正常",
+      issueStatusAbnormal: "发现异常",
+      issueStatusUndetectable: "无法检测",
+      issueNeedStatus: "请先选择检查结果",
+      issueNeedDetail: "请填写异常现象或无法检测的原因",
+      submitNeedAllResults: "请先完成本任务全部检查结果后再提交",
       issueSave: "保存",
       issueCancel: "取消",
-      issueSaved: "问题已保存",
-      issueCleared: "问题已清除",
-      issueNotePrefix: "已上报：",
+      issueSaved: "检查结果已保存",
+      issueCleared: "检查结果已清除",
+      issueNotePrefix: "",
       schematicTitle: "位置示意图",
       zoomReset: "重置",
       close: "关闭",
@@ -126,15 +135,24 @@
       locationDenied: "Location permission denied. Please allow location in browser settings",
       locationTimeout: "Location timeout, upload continued",
       locationFailed: "Location failed, upload continued",
-      reportIssue: "Report Issue",
-      issueDialogTitle: "Report Issue",
-      issueDialogHelp: "Describe issues found during photo taking and inspection.",
-      issuePlaceholder: "Describe symptom, location and suggestion",
+      reportIssue: "Inspection Result",
+      issueDialogTitle: "Inspection Result",
+      issueDialogHelp: "Select the inspection result. Details are required for Abnormal or Unable to inspect.",
+      issuePlaceholder: "Describe the abnormality or why it cannot be inspected",
+      issuePlaceholderAbnormal: "Describe the abnormality",
+      issuePlaceholderUndetectable: "Explain why it cannot be inspected",
+      issueStatusPlaceholder: "Select inspection result",
+      issueStatusOk: "Normal",
+      issueStatusAbnormal: "Abnormal",
+      issueStatusUndetectable: "Unable to inspect",
+      issueNeedStatus: "Please select an inspection result",
+      issueNeedDetail: "Please describe the abnormality or why it cannot be inspected",
+      submitNeedAllResults: "Complete all inspection results before submitting",
       issueSave: "Save",
       issueCancel: "Cancel",
-      issueSaved: "Issue saved",
-      issueCleared: "Issue cleared",
-      issueNotePrefix: "Reported: ",
+      issueSaved: "Inspection result saved",
+      issueCleared: "Inspection result cleared",
+      issueNotePrefix: "",
       schematicTitle: "Schematic",
       zoomReset: "Reset",
       close: "Close",
@@ -176,7 +194,7 @@
     return true;
   }
 
-  function buildC1C3DisplaySeqMap(rows) {
+  function buildDisplaySeqMap(rows) {
     const majorOrder = [];
     const seen = new Set();
     rows.forEach((row) => {
@@ -245,10 +263,7 @@
   function visibleRows() {
     const maintType = getMaintType();
     const filtered = guidanceRows.filter((row) => allowedByMaintCategory(row, maintType));
-    if (maintType !== "c1c3") {
-      return filtered.map((row) => ({ ...row, displaySeq: row.seq }));
-    }
-    const displaySeqMap = buildC1C3DisplaySeqMap(filtered);
+    const displaySeqMap = buildDisplaySeqMap(filtered);
     return filtered.map((row) => ({
       ...row,
       displaySeq: displaySeqMap[row.id] || row.seq,
@@ -358,19 +373,56 @@
     </div>`;
   }
 
-  function refreshIssueNotes() {
+  function normalizeIssueRecord(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const text = String(raw.text || "").trim();
+    let status = String(raw.status || "").trim().toLowerCase();
+    if (status === "normal") status = "ok";
+    if (status === "ok" || status === "abnormal" || status === "undetectable") {
+      return { status, text, updatedAt: String(raw.updatedAt || "") };
+    }
+    if (text) return { status: "abnormal", text, updatedAt: String(raw.updatedAt || "") };
+    return null;
+  }
+
+  function isIssueComplete(raw) {
+    const rec = normalizeIssueRecord(raw);
+    if (!rec) return false;
+    if (rec.status === "ok") return true;
+    return rec.text.length > 0;
+  }
+
+  function inspectionStatusLabel(status) {
     const t = i18n[lang];
+    if (status === "ok") return t.issueStatusOk;
+    if (status === "abnormal") return t.issueStatusAbnormal;
+    if (status === "undetectable") return t.issueStatusUndetectable;
+    return "";
+  }
+
+  function issueNoteDisplay(rec) {
+    const item = normalizeIssueRecord(rec);
+    if (!item) return "";
+    const label = inspectionStatusLabel(item.status);
+    if (item.status === "ok" || !item.text) return label;
+    return `${label}：${item.text}`;
+  }
+
+  function refreshIssueNotes() {
     const store = window.__issueRecords || {};
     document.querySelectorAll("[data-issue-note]").forEach((el) => {
       const rowId = el.getAttribute("data-issue-note") || "";
-      const issue = store[rowId];
-      if (!issue || !issue.text) {
-        el.textContent = "";
-        return;
-      }
-      const text = String(issue.text).trim();
-      const short = text.length > 44 ? text.slice(0, 44) + "..." : text;
-      el.textContent = `${t.issueNotePrefix}${short}`;
+      const text = issueNoteDisplay(store[rowId]);
+      el.textContent = text.length > 44 ? text.slice(0, 44) + "..." : text;
+    });
+    document.querySelectorAll("[data-issue-row]").forEach((el) => {
+      const rowId = el.getAttribute("data-issue-row") || "";
+      const rec = normalizeIssueRecord(store[rowId]);
+      const complete = isIssueComplete(store[rowId]);
+      el.classList.toggle("is-filled", complete);
+      el.classList.toggle("is-ok", complete && rec?.status === "ok");
+      el.classList.toggle("is-abnormal", complete && rec?.status === "abnormal");
+      el.classList.toggle("is-undetectable", complete && rec?.status === "undetectable");
     });
   }
 
@@ -427,6 +479,7 @@
     const zr = document.getElementById("dlg-zoom-reset");
     const issueTitle = document.getElementById("issue-title");
     const issueHelp = document.getElementById("issue-help");
+    const issueStatus = document.getElementById("issue-status");
     const issueText = document.getElementById("issue-text");
     const issueSave = document.getElementById("issue-save");
     const issueCancel = document.getElementById("issue-cancel");
@@ -435,6 +488,17 @@
     if (zr) zr.textContent = t.zoomReset;
     if (issueTitle) issueTitle.textContent = t.issueDialogTitle;
     if (issueHelp) issueHelp.textContent = t.issueDialogHelp;
+    if (issueStatus) {
+      const options = [
+        ["", t.issueStatusPlaceholder],
+        ["ok", t.issueStatusOk],
+        ["abnormal", t.issueStatusAbnormal],
+        ["undetectable", t.issueStatusUndetectable],
+      ];
+      issueStatus.innerHTML = options
+        .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`)
+        .join("");
+    }
     if (issueText) issueText.setAttribute("placeholder", t.issuePlaceholder);
     if (issueSave) issueSave.textContent = t.issueSave;
     if (issueCancel) issueCancel.textContent = t.issueCancel;
@@ -645,7 +709,7 @@
     const uploads = collectUploadState();
     const issues = collectIssueState();
     const hasUpload = Object.keys(uploads).length > 0;
-    const hasIssue = Object.values(issues).some((v) => v && String(v.text || "").trim());
+    const hasIssue = Object.values(issues).some((v) => isIssueComplete(v));
     return hasUpload || hasIssue;
   }
 
@@ -658,6 +722,37 @@
 
   function isSubmitReady() {
     return getIncompleteSlots().length === 0;
+  }
+
+  function getIncompleteInspectionRows() {
+    const store = window.__issueRecords || {};
+    return visibleRows().filter((row) => !isIssueComplete(store[row.id]));
+  }
+
+  function focusFirstIncompleteInspection() {
+    const first = getIncompleteInspectionRows()[0];
+    if (!first) return;
+    document.querySelectorAll("tr.is-flash").forEach((n) => n.classList.remove("is-flash"));
+    const selector = `[data-row-id="${typeof CSS !== "undefined" && CSS.escape ? CSS.escape(first.id) : String(first.id).replace(/"/g, '\\"')}"]`;
+    const el = document.querySelector(selector);
+    if (!el) return;
+    el.classList.add("is-flash");
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => el.classList.remove("is-flash"), 1200);
+  }
+
+  function syncIssueDetailVisibility() {
+    const statusEl = document.getElementById("issue-status");
+    const textEl = document.getElementById("issue-text");
+    if (!statusEl || !textEl) return;
+    const status = String(statusEl.value || "").trim();
+    const needDetail = status === "abnormal" || status === "undetectable";
+    textEl.hidden = !needDetail;
+    const t = i18n[lang];
+    if (status === "undetectable") textEl.setAttribute("placeholder", t.issuePlaceholderUndetectable);
+    else if (status === "abnormal") textEl.setAttribute("placeholder", t.issuePlaceholderAbnormal);
+    else textEl.setAttribute("placeholder", t.issuePlaceholder);
+    if (!needDetail) textEl.value = "";
   }
 
   function readTaskStatusStore() {
@@ -726,14 +821,18 @@
     const btn = document.getElementById("btn-submit");
     if (!btn) return;
     const t = i18n[lang];
-    const missing = getIncompleteSlots();
-    const ready = missing.length === 0;
-    btn.disabled = !ready;
-    if (ready) {
+    const missingResults = getIncompleteInspectionRows().length;
+    const missingPhotos = getIncompleteSlots().length;
+    btn.disabled = false;
+    if (missingResults) {
+      btn.title = t.submitNeedAllResults;
+      return;
+    }
+    if (!missingPhotos) {
       btn.title = t.submitReady;
       return;
     }
-    btn.title = `${t.submitPendingPrefix}${missing.length}`;
+    btn.title = `${t.submitPendingPrefix}${missingPhotos}`;
   }
 
   document.getElementById("tl-lang")?.addEventListener("click", () => {
@@ -747,21 +846,28 @@
   document.getElementById("issue-cancel")?.addEventListener("click", () => {
     document.getElementById("dlg-issue")?.close();
   });
+  document.getElementById("issue-status")?.addEventListener("change", syncIssueDetailVisibility);
   document.getElementById("issue-save")?.addEventListener("click", () => {
+    const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
-    if (!textEl || !activeIssueRowId) return;
+    if (!statusEl || !textEl || !activeIssueRowId) return;
+    const status = String(statusEl.value || "").trim();
     const content = textEl.value.trim();
-    window.__issueRecords = window.__issueRecords || {};
-    if (content) {
-      window.__issueRecords[activeIssueRowId] = {
-        text: content,
-        updatedAt: new Date().toISOString(),
-      };
-      toast(i18n[lang].issueSaved);
-    } else {
-      delete window.__issueRecords[activeIssueRowId];
-      toast(i18n[lang].issueCleared);
+    if (!status) {
+      toast(i18n[lang].issueNeedStatus);
+      return;
     }
+    if ((status === "abnormal" || status === "undetectable") && !content) {
+      toast(i18n[lang].issueNeedDetail);
+      return;
+    }
+    window.__issueRecords = window.__issueRecords || {};
+    window.__issueRecords[activeIssueRowId] = {
+      status,
+      text: status === "ok" ? "" : content,
+      updatedAt: new Date().toISOString(),
+    };
+    toast(i18n[lang].issueSaved);
     refreshIssueNotes();
     document.getElementById("dlg-issue")?.close();
     updateSubmitButtonState();
@@ -805,11 +911,15 @@
     if (!rowId) return;
     activeIssueRowId = rowId;
     const dlg = document.getElementById("dlg-issue");
+    const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
-    if (!dlg || !textEl) return;
-    textEl.value = window.__issueRecords?.[rowId]?.text || "";
+    if (!dlg || !statusEl || !textEl) return;
+    const rec = normalizeIssueRecord(window.__issueRecords?.[rowId]);
+    statusEl.value = rec?.status || "";
+    textEl.value = rec?.text || "";
+    syncIssueDetailVisibility();
     dlg.showModal();
-    textEl.focus();
+    statusEl.focus();
   }
 
   function getGeoPosition(timeoutMs) {
@@ -1042,10 +1152,22 @@
   });
 
   document.getElementById("btn-submit")?.addEventListener("click", async () => {
-    if (!isSubmitReady()) {
-      toast(i18n[lang].submitNeedAllUploads);
+    if (getIncompleteInspectionRows().length) {
+      toast(i18n[lang].submitNeedAllResults);
+      focusFirstIncompleteInspection();
       updateSubmitButtonState();
       return;
+    }
+    if (!isSubmitReady()) {
+      const ok = window.confirm(
+        lang === "zh"
+          ? "仍有必填照片未上传。确认继续提交？"
+          : "Some required photos are still missing. Submit anyway?"
+      );
+      if (!ok) {
+        updateSubmitButtonState();
+        return;
+      }
     }
     const body = {
       basicInfo: collectBasicInfo(),

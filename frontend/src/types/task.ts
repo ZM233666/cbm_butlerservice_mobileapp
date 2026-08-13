@@ -76,6 +76,14 @@ export interface TaskStatusEntry {
 
 export type TaskStatusStore = Record<string, TaskStatusEntry>
 
+export type InspectionStatus = 'ok' | 'abnormal' | 'undetectable'
+
+export interface InspectionRecord {
+  status: InspectionStatus
+  text: string
+  updatedAt: string
+}
+
 export interface GuidanceRow {
   id: string
   seq: string

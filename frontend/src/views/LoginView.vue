@@ -68,9 +68,19 @@ function mapLoginErrorMessage(raw: string): string {
     || msg.includes('不存在')
     || msg.includes('未注册')
   ) return copy.value.errAccountMissing
+  // 密码错误提示里常带 “will be locked / 将被锁定”，必须先于真正锁定判断
   if (
-    lower.includes('locked')
-    || msg.includes('锁定')
+    lower.includes('will be locked')
+    || msg.includes('将被锁定')
+    || lower.includes('password')
+    || lower.includes('incorrect')
+    || msg.includes('密码')
+    || msg.includes('账号/密码')
+  ) return copy.value.errWrongPassword
+  if (
+    lower.includes('has been locked')
+    || lower.includes('account is locked')
+    || msg.includes('已被锁定')
     || msg.includes('已锁定')
   ) return copy.value.errAccountLocked
   if (
@@ -89,12 +99,6 @@ function mapLoginErrorMessage(raw: string): string {
     || msg.includes('请输入验证码')
     || msg.includes('Verification code is required')
   ) return copy.value.errCaptchaRequired
-  if (
-    lower.includes('password')
-    || lower.includes('incorrect')
-    || msg.includes('密码')
-    || msg.includes('账号/密码')
-  ) return copy.value.errWrongPassword
   if (
     lower.includes('failed to fetch')
     || lower.includes('network')

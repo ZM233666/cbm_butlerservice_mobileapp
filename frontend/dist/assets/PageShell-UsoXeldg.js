@@ -1,0 +1,1 @@
+import{d as t,p as a,c as o,U as n,e as r,t as c,n as l,l as p,_}from"./index-C-hjZ2up.js";const i={class:"page page-shell"},d={class:"site-copyright"},h=t({__name:"PageShell",setup(f){const{t:e}=a();return(s,g)=>(p(),o("div",i,[n(s.$slots,"default",{},void 0),r("p",d,"© 2026 Knorr-Bremse. "+c(l(e).copyrightTail),1)]))}}),u=_(h,[["__scopeId","data-v-b76ef0ee"]]);export{u as P};

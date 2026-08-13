@@ -13,11 +13,15 @@
           "slot": "r1-LOCO",
           "label": "LOCO Number"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "1",
+        "c1c3": "1"
+      }
     },
     {
       "id": "r8",
-      "seq": "2",
+      "seq": "8",
       "description": "EBV：对 C4/C5/C6 后回段首次的管家式服务要求：接地线状态进行确认，检查 EBVA/B 插座内部插针状态，拍照并存入系统附件",
       "scopeTags": [
         "c4c6"
@@ -31,11 +35,14 @@
           "slot": "r8-EBVB-SK",
           "label": "EBVB SOCKET"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "2"
+      }
     },
     {
       "id": "r8-1",
-      "seq": "2.1",
+      "seq": "8.1",
       "description": "检查 EBV 大小闸手柄各位置定位准确，推动过程中无过大阻力；EBV 航空插头卡扣是否到位，需要拍照并存入系统附件。备注：照片中航空插头的定位销需清晰可见",
       "scopeTags": [
         "all"
@@ -49,11 +56,15 @@
           "slot": "r8-1-EBVB-PL",
           "label": "EBVB PLUG"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "2.1",
+        "c1c3": "2"
+      }
     },
     {
       "id": "r8-2",
-      "seq": "2.2",
+      "seq": "8.2",
       "description": "EBV 21 号阀相关管路连接，NB11 相关管路的连接需要检查（C1～C3 仅检查状态，C4～C6 检查拍照并存入系统附件）",
       "scopeTags": [
         "c4c6"
@@ -75,11 +86,14 @@
           "slot": "r8-2-NB11-B",
           "label": "NB11 CABB"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "2.2"
+      }
     },
     {
       "id": "r9",
-      "seq": "3",
+      "seq": "9",
       "description": "LCDM：对 C4/C5/C6 后回段首次的管家式服务要求：LCDM 需要检查通讯线缆和电源线是否卡扣到位并记录 LCDM 序列号。备注：照片中航空插头的定位销需清晰可见",
       "scopeTags": [
         "c4c6"
@@ -101,11 +115,14 @@
           "slot": "r9-LCDMB-SN",
           "label": "LCDMB SN"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "3"
+      }
     },
     {
       "id": "r9-1",
-      "seq": "3.1",
+      "seq": "9.1",
       "description": "检查 LCDM 外观无损坏，屏幕显示正常，无花/白/黑屏或亮线，各按钮功能正常；LCDM 软件版本需要确认：货运机车 4.19；160KM 车型为 1.4。拍照并存入系统附件",
       "scopeTags": [
         "all"
@@ -119,11 +136,15 @@
           "slot": "r9-1-LCDMB-SW",
           "label": "LCDMB SW"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "3.1",
+        "c1c3": "3"
+      }
     },
     {
       "id": "r2",
-      "seq": "4",
+      "seq": "2",
       "description": "BCM 铭牌：拍照并存入系统附件",
       "scopeTags": [
         "c4c6"
@@ -133,11 +154,14 @@
           "slot": "r2-BCM-SN",
           "label": "BCM SN"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "4"
+      }
     },
     {
       "id": "r4",
-      "seq": "5",
+      "seq": "4",
       "description": "BCM 外观状态：BCM 的 HARTING SOCKET 必须检查螺栓有无拧紧并拍照存入系统附件。备注：包括底部的 3 颗螺栓同样需要用手探知是否有松动。",
       "scopeTags": [
         "all"
@@ -147,11 +171,15 @@
           "slot": "r4-BCM-PLUG",
           "label": "BCM PLUG"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "5",
+        "c1c3": "4"
+      }
     },
     {
       "id": "r3",
-      "seq": "6",
+      "seq": "3",
       "description": "IPM 部件号/序列号照片：拍照并存入系统附件。注：此处的 IPM SN 为西屋公司的序列号（非 KB 的 SN）",
       "scopeTags": [
         "all"
@@ -165,11 +193,15 @@
           "slot": "r3-IPM-SN",
           "label": "IPM SN"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "6",
+        "c1c3": "5"
+      }
     },
     {
       "id": "r3-1",
-      "seq": "6.1",
+      "seq": "3.1",
       "description": "对 C4/C5/C6 后回段首次的管家式服务，要对 IPM 所有插座内部插针进行一次目测检查并拍照存入系统附件，同时确认客户是否将 J7/J8 拧紧。",
       "scopeTags": [
         "c4c6"
@@ -179,11 +211,14 @@
           "slot": "r3-1-IPM-SOCKET2",
           "label": "IPM SOCKET"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "6.1"
+      }
     },
     {
       "id": "r3-2",
-      "seq": "6.2",
+      "seq": "3.2",
       "description": "对 C4/C5/C6 后回段首次的管家式服务，J6 插头需要目测检查，拍照存入系统附件（为区分 IPM J6 照片命名，此处命名为 IPM J6C）",
       "scopeTags": [
         "c4c6"
@@ -193,11 +228,14 @@
           "slot": "r3-2-IPM-J6C",
           "label": "IPM J6C"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "6.2"
+      }
     },
     {
       "id": "r3-3",
-      "seq": "6.3",
+      "seq": "3.3",
       "description": "检查完毕后将 J1/J4/J5/J6 插头恢复正常拍照存入系统附件。备注：照片中航空插头的定位销需清晰可见",
       "scopeTags": [
         "c4c6"
@@ -219,20 +257,26 @@
           "slot": "r3-3-J6",
           "label": "IPM J6"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "6.3"
+      }
     },
     {
       "id": "r3-4",
-      "seq": "6.4",
+      "seq": "3.4",
       "description": "对 C1/C2/C3 检查时也需要对上述插头的紧固状态进行检查（照片可自己本地保存）。",
       "scopeTags": [
         "c1c3"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c1c3": "5.1"
+      }
     },
     {
       "id": "r5",
-      "seq": "7",
+      "seq": "5",
       "description": "LRU 航空插头：检查 EPCU 各个 LRU 上的航空插头卡扣是否已经拧到位。用手轻轻逆时针方向转动插头，看是否有明显的阻力，如果发现有松动，则需要打开检查，此时可能 O 型圈已丢失，需要及时装上新的 O 型圈（PN：779390）。如果发现插头里已经有 O 型圈，但仍然松动，则需要在管家式服务中做记录，并联系客户对松动的插头进行处理。如部分客户已经对插头进行了绝缘胶带捆绑，则做记录并需要确认已经拧紧即可。需要将 J103 状态拍照存入系统附件。备注：照片中航空插头的定位销需清晰可见",
       "scopeTags": [
         "all"
@@ -242,11 +286,15 @@
           "slot": "r5-J103",
           "label": "J103"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "7",
+        "c1c3": "6"
+      }
     },
     {
       "id": "r5-1",
-      "seq": "7.1",
+      "seq": "5.1",
       "description": "对 C4/C5/C6 后回段首次的管家式服务，要求对 PSJB 所有插头内部插针进行检查（C6 回段机车有发生了多起插针歪斜导致故障，EBVA/B 插头未紧到卡扣位置，有脱落风险）拍照存入系统附件。完成检查后需将所有插头、插座紧固到位。",
       "scopeTags": [
         "c4c6"
@@ -268,11 +316,14 @@
           "slot": "r5-1-J102",
           "label": "J102"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "7.1"
+      }
     },
     {
       "id": "r12",
-      "seq": "8",
+      "seq": "12",
       "description": "EPCU 总风滤芯：需要检查是否能正常排水。（之前有发现客户长期不排水导致模块油污严重）拍照并存入系统附件",
       "scopeTags": [
         "all"
@@ -282,11 +333,15 @@
           "slot": "r12-subtask",
           "label": "Subtask 12"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "8",
+        "c1c3": "7"
+      }
     },
     {
       "id": "r7",
-      "seq": "9",
+      "seq": "7",
       "description": "HDLC：需要检查接线盒的插座与线缆头的航空插头卡扣是否到位，拍照并存入系统附件。备注：照片中航空插头的定位销需清晰可见",
       "scopeTags": [
         "all"
@@ -300,11 +355,15 @@
           "slot": "r7-HDLC2",
           "label": "HDLC2"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "9",
+        "c1c3": "8"
+      }
     },
     {
       "id": "r6",
-      "seq": "10",
+      "seq": "6",
       "description": "RIM / E-BOX：RIM / E-Box 箱子的检查，需拍摄铭牌信息存入系统附件。",
       "scopeTags": [
         "c4c6"
@@ -318,11 +377,14 @@
           "slot": "r6-EBOX-SN",
           "label": "EBOX SN"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "10"
+      }
     },
     {
       "id": "r6-1",
-      "seq": "10.1",
+      "seq": "6.1",
       "description": "E-Box 继电器：仔细检查继电器的底座是否紧固，继电器与底座是否连接正常，继电器的各线是否卡在了端子槽内。J4/跳线是否老化，个别车型继电器座跳线可能需要联系项目进行更换。同时也需要留意 RIM 端子排内的各线束是有接磨风险。需要将所有继电器状态及端子排拍照并存入系统附件",
       "scopeTags": [
         "all"
@@ -344,11 +406,15 @@
           "slot": "r6-1-RIM4",
           "label": "RIM4"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "10.1",
+        "c1c3": "9"
+      }
     },
     {
       "id": "r15",
-      "seq": "11",
+      "seq": "15",
       "description": "辅助模块：检查所有辅助模块开关的插头状态，拍照并存入系统附件",
       "scopeTags": [
         "all"
@@ -358,11 +424,15 @@
           "slot": "r15-AUX2",
           "label": "AUX"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "11",
+        "c1c3": "10"
+      }
     },
     {
       "id": "r14",
-      "seq": "12",
+      "seq": "14",
       "description": "U99：对 C4/C5/C6 后回段首次进行的管家式服务要求检查 U99 插头是否拧紧。拍照并存入系统附件",
       "scopeTags": [
         "c4c6"
@@ -372,7 +442,10 @@
           "slot": "r14-subtask",
           "label": "Subtask 14"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "12"
+      }
     },
     {
       "id": "r13",
@@ -386,11 +459,15 @@
           "slot": "r13-A71",
           "label": "A71"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "13",
+        "c1c3": "11"
+      }
     },
     {
       "id": "r11",
-      "seq": "14",
+      "seq": "11",
       "description": "WSP：WSP 防滑器需要确认 MB04B LED 状态显示「9999」拍照并存入系统附件",
       "scopeTags": [
         "c4c6"
@@ -400,11 +477,14 @@
           "slot": "r11-MB04B",
           "label": "MB04B MMI"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "14"
+      }
     },
     {
       "id": "r11-1",
-      "seq": "14.1",
+      "seq": "11.1",
       "description": "对 C4/C5/C6 后回段首次的管家式服务，需运行自检；对 WSP 机箱序列号拍照并存入系统附件",
       "scopeTags": [
         "c4c6"
@@ -414,20 +494,27 @@
           "slot": "r11-1-WSP-SN",
           "label": "WSP SN"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "14.1"
+      }
     },
     {
       "id": "r16",
-      "seq": "15",
+      "seq": "16",
       "description": "制动机启机后检查：检查 IPM，EPCU 各指示灯状态正常；换端及各操作模式切换功能正常。备注：正常情况下，系统将在 2 分钟内完成启动",
       "scopeTags": [
         "all"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c4c6": "15",
+        "c1c3": "12"
+      }
     },
     {
       "id": "r10",
-      "seq": "16",
+      "seq": "10",
       "description": "EPCU 节点：需要通过 PTU 扫描节点，截图并存入系统附件",
       "scopeTags": [
         "all"
@@ -437,7 +524,11 @@
           "slot": "r10-EPCU-SW",
           "label": "EPCU SW"
         }
-      ]
+      ],
+      "seqByTemplate": {
+        "c4c6": "16",
+        "c1c3": "13"
+      }
     },
     {
       "id": "r17",
@@ -446,7 +537,11 @@
       "scopeTags": [
         "all"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c4c6": "17",
+        "c1c3": "14"
+      }
     },
     {
       "id": "r17-1",
@@ -456,7 +551,11 @@
         "all"
       ],
       "buttons": [],
-      "uploadHint": "机车号_EVENTLOGS_日期"
+      "uploadHint": "机车号_EVENTLOGS_日期",
+      "seqByTemplate": {
+        "c4c6": "17.1",
+        "c1c3": "14.1"
+      }
     },
     {
       "id": "r17-2",
@@ -465,7 +564,11 @@
       "scopeTags": [
         "all"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c4c6": "17.2",
+        "c1c3": "14.2"
+      }
     },
     {
       "id": "r17-3",
@@ -474,7 +577,11 @@
       "scopeTags": [
         "all"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c4c6": "17.3",
+        "c1c3": "14.3"
+      }
     },
     {
       "id": "r17-4",
@@ -483,7 +590,11 @@
       "scopeTags": [
         "all"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c4c6": "17.4",
+        "c1c3": "14.4"
+      }
     },
     {
       "id": "r17-5",
@@ -492,7 +603,11 @@
       "scopeTags": [
         "all"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c4c6": "17.5",
+        "c1c3": "14.5"
+      }
     },
     {
       "id": "r17-6",
@@ -501,7 +616,11 @@
       "scopeTags": [
         "all"
       ],
-      "buttons": []
+      "buttons": [],
+      "seqByTemplate": {
+        "c4c6": "17.6",
+        "c1c3": "14.6"
+      }
     }
   ]
 }

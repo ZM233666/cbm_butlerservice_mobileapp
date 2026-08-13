@@ -148,89 +148,11 @@ function isGuidanceDataSyncRow(row: GuidanceRow) {
   return seq === '17' || seq.startsWith('17.')
 }
 
-/**
- * 过滤或重排后，No. 列按行出现顺序从 1 起连续编号。
- * 重排规则：
- * 1) 主序号按出现顺序压成 1..N，子序号先保留后缀（3.4 → 2.4）
- * 2) 若该主项仍在：子项后缀按出现顺序重排为 .1/.2/...（2.4 → 2.1）
- * 3) 若该主项已被滤掉：仅剩的子项提升为主序号（5.1 → 5；多个则首个升主项，其余 .1/.2/...）
- * 示意图 / 数据同步判断仍使用真实 row.seq。
- */
-function buildDisplaySeqMap(rows: GuidanceRow[]): Record<string, string> {
-  const majorOrder: number[] = []
-  const seen = new Set<number>()
-  rows.forEach((row) => {
-    const major = Number.parseInt(String(row.seq || '').split('.')[0] || '', 10)
-    if (!Number.isFinite(major) || seen.has(major)) return
-    seen.add(major)
-    majorOrder.push(major)
-  })
-
-  const majorMap = new Map<number, number>()
-  majorOrder.forEach((oldMajor, index) => {
-    majorMap.set(oldMajor, index + 1)
-  })
-
-  type Intermediate = { id: string; newMajor: number; isChild: boolean; childSuffix: string }
-  const intermediates: Intermediate[] = []
-  rows.forEach((row) => {
-    const parts = String(row.seq || '').split('.')
-    const oldMajor = Number.parseInt(parts[0] || '', 10)
-    const newMajor = majorMap.get(oldMajor)
-    if (newMajor == null) {
-      intermediates.push({ id: row.id, newMajor: -1, isChild: false, childSuffix: '' })
-      return
-    }
-    intermediates.push({
-      id: row.id,
-      newMajor,
-      isChild: parts.length > 1,
-      childSuffix: parts.length > 1 ? parts.slice(1).join('.') : '',
-    })
-  })
-
-  const byMajor = new Map<number, Intermediate[]>()
-  intermediates.forEach((item) => {
-    if (item.newMajor < 0) return
-    const list = byMajor.get(item.newMajor) || []
-    list.push(item)
-    byMajor.set(item.newMajor, list)
-  })
-
-  const out: Record<string, string> = {}
-  intermediates.forEach((item) => {
-    if (item.newMajor < 0) {
-      const raw = rows.find((r) => r.id === item.id)
-      out[item.id] = raw?.seq || ''
-    }
-  })
-
-  byMajor.forEach((group, newMajor) => {
-    const parents = group.filter((x) => !x.isChild)
-    const children = group.filter((x) => x.isChild)
-
-    parents.forEach((p) => {
-      out[p.id] = String(newMajor)
-    })
-
-    if (parents.length > 0) {
-      children.forEach((child, index) => {
-        out[child.id] = `${newMajor}.${index + 1}`
-      })
-      return
-    }
-
-    // 父项不存在：子项提升
-    if (children.length === 1) {
-      out[children[0].id] = String(newMajor)
-      return
-    }
-    children.forEach((child, index) => {
-      out[child.id] = index === 0 ? String(newMajor) : `${newMajor}.${index}`
-    })
-  })
-
-  return out
+function seqForTemplate(row: GuidanceRow, template: string) {
+  const by = row.seqByTemplate
+  if (template === 'c1c3' && by?.c1c3) return by.c1c3
+  if (template === 'c4c6' && by?.c4c6) return by.c4c6
+  return row.seq
 }
 
 const visibleRows = computed(() => {
@@ -241,10 +163,9 @@ const visibleRows = computed(() => {
     return true
   })
 
-  const displaySeqMap = buildDisplaySeqMap(filtered)
   return filtered.map((row) => ({
     ...row,
-    displaySeq: displaySeqMap[row.id] || row.seq,
+    displaySeq: seqForTemplate(row, template) || row.seq,
   }))
 })
 

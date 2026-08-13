@@ -87,6 +87,10 @@ export interface InspectionRecord {
 export interface GuidanceRow {
   id: string
   seq: string
+  seqByTemplate?: {
+    c1c3?: string
+    c4c6?: string
+  }
   description: string
   scopeTags: string[]
   uploadHint?: string

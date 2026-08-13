@@ -9,7 +9,7 @@ function remoteApiBase() {
   return String(process.env.REMOTE_API_BASE || "http://117.62.232.51:8004").replace(/\/$/, "");
 }
 
-let _slotSeqCache = null;
+let _slotSeqCache = {};
 
 function authHeaders(token) {
   const headers = { accept: "application/json" };
@@ -62,16 +62,28 @@ async function fetchDjangoJson(pathUrl, { token, method = "GET", body } = {}) {
   return payload.data;
 }
 
-function buildSlotSeqMap(projectRoot) {
-  if (_slotSeqCache) return _slotSeqCache;
+function maintToTemplate(raw) {
+  const value = String(raw || "").trim().toLowerCase().replace(/[/\s_-]/g, "");
+  if (["c1", "c2", "c3", "c1c3"].includes(value)) return "c1c3";
+  if (["c4", "c5", "c6", "c4c6"].includes(value)) return "c4c6";
+  return "";
+}
+
+function buildSlotSeqMap(projectRoot, maint) {
+  const template = maintToTemplate(maint) || "default";
+  if (_slotSeqCache[template]) return _slotSeqCache[template];
   const guidancePath = path.join(projectRoot, "public", "data", "brake-guidance-tasks.json");
   const map = {};
   try {
     const raw = JSON.parse(fs.readFileSync(guidancePath, "utf8"));
     const rows = Array.isArray(raw && raw.rows) ? raw.rows : [];
     rows.forEach((row) => {
-      const seq = String((row && row.seq) || "").trim();
+      const by = row && row.seqByTemplate ? row.seqByTemplate : {};
+      const seq = String((template !== "default" && by[template]) || (row && row.seq) || "").trim();
       if (!seq) return;
+      const tags = Array.isArray(row.scopeTags) ? row.scopeTags.map((x) => String(x || "").toLowerCase()) : [];
+      if (template === "c1c3" && tags.length === 1 && tags[0] === "c4c6") return;
+      if (template === "c4c6" && tags.length === 1 && tags[0] === "c1c3") return;
       const buttons = Array.isArray(row.buttons) ? row.buttons : [];
       buttons.forEach((btn) => {
         const slot = String((btn && btn.slot) || "").trim();
@@ -81,7 +93,7 @@ function buildSlotSeqMap(projectRoot) {
   } catch (_e) {
     /* ignore */
   }
-  _slotSeqCache = map;
+  _slotSeqCache[template] = map;
   return map;
 }
 
@@ -164,7 +176,8 @@ async function fetchSubmitLatestFromDb(taskId, token) {
 
 async function postTaskSubmitToDb(body, token, projectRoot) {
   const payload = body && typeof body === "object" ? { ...body } : {};
-  payload.slotSeqMap = buildSlotSeqMap(projectRoot);
+  const maint = payload.basicInfo && payload.basicInfo.maintenanceType;
+  payload.slotSeqMap = buildSlotSeqMap(projectRoot, maint);
   return fetchDjangoJson("/api/business/task/h5/submit/", {
     token,
     method: "POST",
@@ -197,7 +210,8 @@ async function postReportGenerateToDb(taskPk, token, options = {}) {
 
 async function postTaskDraftToDb(body, token, projectRoot) {
   const payload = body && typeof body === "object" ? { ...body } : {};
-  payload.slotSeqMap = buildSlotSeqMap(projectRoot);
+  const maint = payload.basicInfo && payload.basicInfo.maintenanceType;
+  payload.slotSeqMap = buildSlotSeqMap(projectRoot, maint);
   return fetchDjangoJson("/api/business/task/h5/draft/", {
     token,
     method: "POST",

@@ -20,27 +20,6 @@
       }
     },
     {
-      "id": "r8",
-      "seq": "8",
-      "description": "EBV：对 C4/C5/C6 后回段首次的管家式服务要求：接地线状态进行确认，检查 EBVA/B 插座内部插针状态，拍照并存入系统附件",
-      "scopeTags": [
-        "c4c6"
-      ],
-      "buttons": [
-        {
-          "slot": "r8-EBVA-SK",
-          "label": "EBVA SOCKET"
-        },
-        {
-          "slot": "r8-EBVB-SK",
-          "label": "EBVB SOCKET"
-        }
-      ],
-      "seqByTemplate": {
-        "c4c6": "2"
-      }
-    },
-    {
       "id": "r8-1",
       "seq": "8.1",
       "description": "检查 EBV 大小闸手柄各位置定位准确，推动过程中无过大阻力；EBV 航空插头卡扣是否到位，需要拍照并存入系统附件。备注：照片中航空插头的定位销需清晰可见",
@@ -58,8 +37,29 @@
         }
       ],
       "seqByTemplate": {
-        "c4c6": "2.1",
+        "c4c6": "2",
         "c1c3": "2"
+      }
+    },
+    {
+      "id": "r8",
+      "seq": "8",
+      "description": "EBV：对 C4/C5/C6 后回段首次的管家式服务要求：接地线状态进行确认，检查 EBVA/B 插座内部插针状态，拍照并存入系统附件",
+      "scopeTags": [
+        "c4c6"
+      ],
+      "buttons": [
+        {
+          "slot": "r8-EBVA-SK",
+          "label": "EBVA SOCKET"
+        },
+        {
+          "slot": "r8-EBVB-SK",
+          "label": "EBVB SOCKET"
+        }
+      ],
+      "seqByTemplate": {
+        "c4c6": "2.1"
       }
     },
     {

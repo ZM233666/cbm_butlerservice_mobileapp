@@ -66,9 +66,11 @@ export function isValidRole(v: string): v is UserRole {
   return ALL_ROLES.includes(v as UserRole)
 }
 
-/** 角色 name 含 manager / director（不区分大小写）→ manager 金色页 */
+/** 角色 name 含 manager / director，或特例 Support Engineer → manager 金色页 */
 export function roleNameImpliesManager(roleName: string | null | undefined): boolean {
   const name = String(roleName || '').trim().toLowerCase()
   if (!name) return false
+  const compact = name.replace(/[\s_-]/g, '')
+  if (compact.includes('supportengineer')) return true
   return name.includes('manager') || name.includes('director')
 }

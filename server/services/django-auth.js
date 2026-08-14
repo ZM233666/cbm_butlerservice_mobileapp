@@ -12,15 +12,21 @@ function positiveInt(value, fallback) {
 function roleNameImpliesManager(roleName) {
   const name = normalizeText(roleName).toLowerCase();
   if (!name) return false;
+  const compact = name.replace(/[\s_-]/g, "");
+  if (compact.includes("supportengineer")) return true;
   return name.includes("manager") || name.includes("director");
 }
 
 function mapDjangoRoleToNode(roleKey, roleName, isSuperuser) {
   const key = normalizeText(roleKey).toLowerCase();
   const name = normalizeText(roleName).toLowerCase();
+  const compactName = name.replace(/[\s_-]/g, "");
 
-  // 与 H5 一致：角色 name 含 manager / director → manager；其余为 engineer
+  // 与 H5 一致：manager/director/Support Engineer → manager；Technician 等其余 → engineer
   if (key === "ext" || name === "externalcontractor" || key === "contractor" || key === "third_party") {
+    return "fse";
+  }
+  if (key === "technician" || compactName === "technician") {
     return "fse";
   }
   if (roleNameImpliesManager(roleName)) return "manager";

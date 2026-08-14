@@ -15,6 +15,11 @@ test("mapDjangoRoleToNode should map by role name containing manager/director", 
   assert.equal(mapDjangoRoleToNode("RSM", "RegionalServiceManager", false), "manager");
   assert.equal(mapDjangoRoleToNode("FSD", "FieldServiceDirector", false), "manager");
   assert.equal(mapDjangoRoleToNode("FSM", "Field Service Manager", false), "manager");
+  // Support Engineer 特例 → manager；Technician → engineer
+  assert.equal(mapDjangoRoleToNode("SE", "Support Engineer", false), "manager");
+  assert.equal(mapDjangoRoleToNode("supportengineer", "SupportEngineer", false), "manager");
+  assert.equal(mapDjangoRoleToNode("technician", "Technician", false), "fse");
+  assert.equal(mapDjangoRoleToNode("", "Technician", false), "fse");
   // name 不含 manager/director 时不再因 key/admin/superuser 进入 manager
   assert.equal(mapDjangoRoleToNode("admin", "管理员", false), "fse");
   assert.equal(mapDjangoRoleToNode("", "", true), "fse");

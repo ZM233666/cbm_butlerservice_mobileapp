@@ -55,7 +55,7 @@ function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
     return 'externalcontractor'
   }
 
-  // 金色 manager 页：角色 name 含 manager / director（不区分大小写）
+  // 金色 manager 页：角色 name 含 manager / director，或特例 Support Engineer
   if (roleNameImpliesManager(roleNameRaw)) {
     if (roleName.includes('director') || roleKey === 'fsd' || roleKey === 'fieldservicedirector') {
       return ROLE_FS_DIRECTOR
@@ -70,7 +70,7 @@ function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
     return ROLE_RS_MANAGER
   }
 
-  // 其余一律按 engineer 白页
+  // Technician / 其余一律按 engineer 白页
   return 'fse'
 }
 
@@ -134,7 +134,7 @@ export async function fetchUserInfo(username: string) {
   const displayName = String(data.name || '').trim()
   const email = data.email == null ? '' : String(data.email).trim()
   const deptName = String(data.dept_info?.dept_name || '').trim()
-  // 角色仅由 role_info[0].name 是否含 manager/director 决定（见 mapRoleFromUserInfo）
+  // 角色：name 含 manager/director，或特例 Support Engineer → manager；Technician → engineer
   const role = mapRoleFromUserInfo(data)
 
   const roleDisplayName = String(data.role_info?.[0]?.name || '').trim()

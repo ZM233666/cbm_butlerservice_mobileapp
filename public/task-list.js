@@ -1025,9 +1025,9 @@
     }
     const nameValue = data?.displayName || data?.originalname || "未获取";
     return [
+      `<span class="tl-thumb__meta-line">${escapeHtml(nameValue)}</span>`,
       `<span class="tl-thumb__meta-line">拍摄时间：${escapeHtml(timeValue)}</span>`,
       `<span class="tl-thumb__meta-line">拍摄地点：${escapeHtml(locValue)}</span>`,
-      `<span class="tl-thumb__meta-line">文件名：${escapeHtml(nameValue)}</span>`,
     ].join("");
   }
 

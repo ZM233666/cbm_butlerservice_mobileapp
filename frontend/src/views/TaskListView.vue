@@ -34,7 +34,7 @@ type ClientCaptureMeta = { capturedAt: string; latitude?: number; longitude?: nu
 const maintType = ref<string>('c4')
 const taskDetail = ref<TaskDetail | null>(null)
 const guidanceRows = ref<GuidanceRow[]>([])
-const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture'] }>>({})
+const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture']; displayName?: string }>>({})
 const localPreviewRecords = ref<Record<string, string>>({})
 const slotUploadStatus = ref<Record<string, SlotUploadStatus>>({})
 const issueRecords = ref<Record<string, InspectionRecord>>({})
@@ -629,9 +629,11 @@ function formatCapturedAt(iso?: string) {
   return `${y}-${m}-${dd} ${hh}:${mm}:${ss}`
 }
 
-function captureLines(capture?: UploadResult['capture']) {
-  if (!capture) return []
+function captureLines(capture?: UploadResult['capture'], displayName?: string) {
   const lines: string[] = []
+  const name = String(displayName || '').trim()
+  if (name) lines.push(name)
+  if (!capture) return lines
   const at = formatCapturedAt(capture.capturedAt)
   const loc = capture.location || {}
   const locText =
@@ -642,8 +644,10 @@ function captureLines(capture?: UploadResult['capture']) {
   return lines
 }
 
-function uploadMetaLines(slotId: string) {
-  return captureLines(uploadRecords.value[slotId]?.capture)
+function uploadMetaLines(slotId: string, slotLabel?: string) {
+  const rec = uploadRecords.value[slotId]
+  const displayName = String(rec?.displayName || slotLabel || '').trim()
+  return captureLines(rec?.capture, displayName)
 }
 
 function resolveTaskStatus(entry: unknown): 'todo' | 'doing' | 'done' | 'rejected' | null {
@@ -664,7 +668,7 @@ function readTaskListCache() {
     const raw = sessionStorage.getItem(taskListCacheKey())
     if (!raw) return null
     return JSON.parse(raw) as {
-      uploadRecords?: Record<string, { url: string; capture?: UploadResult['capture'] }>
+      uploadRecords?: Record<string, { url: string; capture?: UploadResult['capture']; displayName?: string }>
       issueRecords?: Record<string, InspectionRecord>
       currentTaskStatus?: 'todo' | 'doing' | 'done' | 'rejected'
       taskRejected?: boolean
@@ -794,9 +798,11 @@ async function hydrateTaskPage() {
         Object.entries(uploads).forEach(([slot, item]) => {
           const url = String((item as any)?.url || '').trim()
           if (!url) return
+          const displayName = String((item as any)?.displayName || '').trim()
           uploadRecords.value[slot] = {
             url,
             capture: (item as any)?.capture,
+            ...(displayName ? { displayName } : {}),
           }
         })
         const issues = latest.issues && typeof latest.issues === 'object' ? latest.issues : {}
@@ -1100,7 +1106,12 @@ async function pumpUploadQueue() {
           removeQueueItemExact(item)
           continue
         }
-        uploadRecords.value[slotId] = { url: data.url, capture: data.capture }
+        const displayName = String(data.displayName || job.slotLabel || '').trim()
+        uploadRecords.value[slotId] = {
+          url: data.url,
+          capture: data.capture,
+          ...(displayName ? { displayName } : {}),
+        }
         cleanupLocalPreviewAfterSuccess(slotId, data.url)
         const nextPrepared = { ...preparedUploads.value }
         delete nextPrepared[slotId]
@@ -1348,13 +1359,14 @@ async function onReject() {
 }
 
 function buildTaskSubmitPayload(allowEmptyUploads = false) {
-  const uploads: Record<string, { url: string; capture?: UploadResult['capture'] }> = {}
+  const uploads: Record<string, { url: string; capture?: UploadResult['capture']; displayName?: string }> = {}
   Object.entries(uploadRecords.value).forEach(([slot, meta]) => {
     const url = String(meta?.url || '').trim()
     if (!url) return
     uploads[slot] = {
       url,
       ...(meta?.capture ? { capture: meta.capture } : {}),
+      ...(meta?.displayName ? { displayName: meta.displayName } : {}),
     }
   })
   return {
@@ -1607,7 +1619,7 @@ onUnmounted(() => {
                           :input-id="`f-${btn.slot}-${bi}`"
                           :image-url="displayedUploadUrl(btn.slot)"
                           :status="slotStatusOf(btn.slot)"
-                          :meta-lines="uploadMetaLines(btn.slot)"
+                          :meta-lines="uploadMetaLines(btn.slot, btn.label)"
                           :disabled="!isTaskDoing"
                           @change="handleUpload(btn.slot, btn.label, $event)"
                           @retry="retryUpload(btn.slot)"

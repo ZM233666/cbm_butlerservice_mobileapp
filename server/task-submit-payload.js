@@ -15,6 +15,8 @@ function normalizeUploadEntry(meta) {
   if (meta.capture && typeof meta.capture === "object") {
     row.capture = meta.capture;
   }
+  const displayName = String(meta.displayName || "").trim();
+  if (displayName) row.displayName = displayName;
   return row;
 }
 

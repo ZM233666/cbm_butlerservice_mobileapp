@@ -175,9 +175,11 @@ async function fetchSubmitLatestFromDb(taskId, token) {
 }
 
 async function postTaskSubmitToDb(body, token, projectRoot) {
+  const { expandSlotSeqMapForExtraUploads } = require("../upload-extra-slots");
   const payload = body && typeof body === "object" ? { ...body } : {};
   const maint = payload.basicInfo && payload.basicInfo.maintenanceType;
-  payload.slotSeqMap = buildSlotSeqMap(projectRoot, maint);
+  const baseMap = buildSlotSeqMap(projectRoot, maint);
+  payload.slotSeqMap = expandSlotSeqMapForExtraUploads(baseMap, payload.uploads);
   return fetchDjangoJson("/api/business/task/h5/submit/", {
     token,
     method: "POST",
@@ -209,9 +211,11 @@ async function postReportGenerateToDb(taskPk, token, options = {}) {
 }
 
 async function postTaskDraftToDb(body, token, projectRoot) {
+  const { expandSlotSeqMapForExtraUploads } = require("../upload-extra-slots");
   const payload = body && typeof body === "object" ? { ...body } : {};
   const maint = payload.basicInfo && payload.basicInfo.maintenanceType;
-  payload.slotSeqMap = buildSlotSeqMap(projectRoot, maint);
+  const baseMap = buildSlotSeqMap(projectRoot, maint);
+  payload.slotSeqMap = expandSlotSeqMapForExtraUploads(baseMap, payload.uploads);
   return fetchDjangoJson("/api/business/task/h5/draft/", {
     token,
     method: "POST",

@@ -11,17 +11,28 @@ const props = withDefaults(defineProps<{
   imageUrl: string
   status: SlotUploadStatus
   metaLines: string[]
+  /** 槽位名称（与上传按钮文案一致），显示在拍摄时间之上 */
+  metaTitle?: string
   /** 非 DOING 状态时禁止上传/更换图片 */
   disabled?: boolean
+  /** 主图已上传时显示「添加照片」 */
+  showAddPhoto?: boolean
+  /** 附加照片槽位显示「删除」 */
+  showRemove?: boolean
 }>(), {
   disabled: false,
   status: 'idle',
+  metaTitle: '',
+  showAddPhoto: false,
+  showRemove: false,
 })
 
 const emit = defineEmits<{
   (e: 'change', event: Event): void
   (e: 'retry'): void
   (e: 'preview'): void
+  (e: 'add-photo'): void
+  (e: 'remove'): void
 }>()
 
 const { lang } = useI18n()
@@ -40,7 +51,7 @@ const showStatusOverlay = computed(() =>
   || props.status === 'queued'
   || props.status === 'uploading'
   || props.status === 'failed'
-  || (props.status === 'success' && !props.metaLines.length),
+  || (props.status === 'success' && !props.metaLines.length && !props.metaTitle),
 )
 </script>
 
@@ -86,14 +97,32 @@ const showStatusOverlay = computed(() =>
           @click.stop="emit('retry')"
         >{{ lang === 'zh' ? '重试' : 'Retry' }}</button>
       </div>
-      <div v-else-if="metaLines.length" class="tl-thumb__meta">
+      <div v-else-if="metaTitle || metaLines.length" class="tl-thumb__meta">
+        <span v-if="metaTitle" class="tl-thumb__meta-title">{{ metaTitle }}</span>
         <span v-for="(line, li) in metaLines" :key="li" class="tl-thumb__meta-line">{{ line }}</span>
       </div>
-      <label
-        v-if="hasImage && canReplace"
-        class="tl-thumb__replace"
-        :for="inputId"
-      >{{ lang === 'zh' ? '更换' : 'Replace' }}</label>
+      <div
+        v-if="hasImage && (canReplace || showAddPhoto || showRemove)"
+        class="tl-thumb__actions"
+      >
+        <label
+          v-if="canReplace"
+          class="tl-thumb__action tl-thumb__replace"
+          :for="inputId"
+        >{{ lang === 'zh' ? '更换' : 'Replace' }}</label>
+        <button
+          v-if="showAddPhoto"
+          type="button"
+          class="tl-thumb__action tl-thumb__add"
+          @click.stop="emit('add-photo')"
+        >{{ lang === 'zh' ? '添加照片' : 'Add photo' }}</button>
+        <button
+          v-if="showRemove"
+          type="button"
+          class="tl-thumb__action tl-thumb__remove"
+          @click.stop="emit('remove')"
+        >{{ lang === 'zh' ? '删除' : 'Remove' }}</button>
+      </div>
     </div>
   </div>
 </template>

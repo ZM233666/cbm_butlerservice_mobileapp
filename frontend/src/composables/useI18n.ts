@@ -268,6 +268,7 @@ const i18nMap = {
 
     photoCapturedAt: '拍摄时间',
     photoCapturedLoc: '拍摄地点',
+    extraPhotoMax: '每个拍摄项最多添加 9 张附加照片',
   },
   en: {
     back: '← Back', title: 'Job List', basicInfo: 'Basic Info', subtask: 'Subtask',
@@ -534,6 +535,7 @@ const i18nMap = {
 
     photoCapturedAt: 'Captured at',
     photoCapturedLoc: 'Location',
+    extraPhotoMax: 'Up to 9 additional photos per capture item',
   },
 } as const
 

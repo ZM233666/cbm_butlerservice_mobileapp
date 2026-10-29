@@ -13,6 +13,14 @@ import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
 import type { GuidanceRow, InspectionRecord, InspectionStatus, TaskDetail } from '@/types/task'
 import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
+import {
+  MAX_EXTRA_PHOTOS_PER_SLOT,
+  buildExtraUploadSlotId,
+  isExtraUploadSlot,
+  listExtraUploadSlotIds,
+  nextExtraUploadIndex,
+  resolveUploadDisplayName,
+} from '@/utils/uploadSlots'
 import * as exifr from 'exifr'
 
 defineOptions({ name: 'TaskListView' })
@@ -66,6 +74,8 @@ type UploadQueueItem = {
 
 const preparedUploads = ref<Record<string, PreparedUpload>>({})
 const pendingRetrySources = ref<Record<string, PendingRetrySource>>({})
+/** 已点「添加照片」、尚未选文件或尚未上传完成的附加槽位 */
+const pendingExtraSlotIds = ref<Record<string, { baseLabel: string }>>({})
 const uploadQueue = ref<UploadQueueItem[]>([])
 const slotTokens: Record<string, number> = {}
 let uploadPumpRunning = false
@@ -629,11 +639,9 @@ function formatCapturedAt(iso?: string) {
   return `${y}-${m}-${dd} ${hh}:${mm}:${ss}`
 }
 
-function captureLines(capture?: UploadResult['capture'], displayName?: string) {
+function captureLines(capture?: UploadResult['capture']) {
+  if (!capture) return []
   const lines: string[] = []
-  const name = String(displayName || '').trim()
-  if (name) lines.push(name)
-  if (!capture) return lines
   const at = formatCapturedAt(capture.capturedAt)
   const loc = capture.location || {}
   const locText =
@@ -644,10 +652,94 @@ function captureLines(capture?: UploadResult['capture'], displayName?: string) {
   return lines
 }
 
-function uploadMetaLines(slotId: string, slotLabel?: string) {
+function uploadLabelForSlot(slotId: string, baseLabel: string) {
   const rec = uploadRecords.value[slotId]
-  const displayName = String(rec?.displayName || slotLabel || '').trim()
-  return captureLines(rec?.capture, displayName)
+  return resolveUploadDisplayName(slotId, baseLabel, rec?.displayName)
+}
+
+function uploadMetaTitle(slotId: string, slotLabel?: string) {
+  return uploadLabelForSlot(slotId, slotLabel || '')
+}
+
+function allUploadSlotKeys(): string[] {
+  const keys = new Set<string>([
+    ...Object.keys(uploadRecords.value),
+    ...Object.keys(localPreviewRecords.value),
+    ...Object.keys(pendingExtraSlotIds.value),
+    ...Object.keys(slotUploadStatus.value),
+  ])
+  return Array.from(keys)
+}
+
+function extraSlotIsVisible(extraId: string): boolean {
+  if (pendingExtraSlotIds.value[extraId]) return true
+  if (displayedUploadUrl(extraId)) return true
+  return slotStatusOf(extraId) !== 'idle'
+}
+
+function extraSlotsForBase(baseSlot: string): string[] {
+  return listExtraUploadSlotIds(baseSlot, allUploadSlotKeys()).filter((id) => extraSlotIsVisible(id))
+}
+
+function countExtraPhotos(baseSlot: string): number {
+  return listExtraUploadSlotIds(baseSlot, allUploadSlotKeys()).filter((id) => {
+    if (pendingExtraSlotIds.value[id]) return true
+    if (uploadRecords.value[id]?.url || localPreviewRecords.value[id]) return true
+    const st = slotStatusOf(id)
+    return st === 'processing' || st === 'queued' || st === 'uploading' || st === 'failed'
+  }).length
+}
+
+function canAddExtraPhoto(baseSlot: string): boolean {
+  if (!isTaskDoing.value) return false
+  if (!displayedUploadUrl(baseSlot)) return false
+  return countExtraPhotos(baseSlot) < MAX_EXTRA_PHOTOS_PER_SLOT
+}
+
+function clearPendingExtraSlot(slotId: string) {
+  if (!pendingExtraSlotIds.value[slotId]) return
+  const next = { ...pendingExtraSlotIds.value }
+  delete next[slotId]
+  pendingExtraSlotIds.value = next
+}
+
+function onAddExtraPhoto(baseSlot: string, baseLabel: string) {
+  if (!canAddExtraPhoto(baseSlot)) {
+    toast(t.value.extraPhotoMax, 'warn', 3200)
+    return
+  }
+  const index = nextExtraUploadIndex(baseSlot, allUploadSlotKeys())
+  const extraId = buildExtraUploadSlotId(baseSlot, index)
+  pendingExtraSlotIds.value = {
+    ...pendingExtraSlotIds.value,
+    [extraId]: { baseLabel },
+  }
+  void nextTick(() => {
+    const input = document.getElementById(`f-extra-${extraId}`) as HTMLInputElement | null
+    input?.click()
+  })
+}
+
+function removeSlotPhoto(slotId: string) {
+  if (!isTaskDoing.value) return
+  const taskId = mainTaskId.value
+  removeSlotFromUploadQueue(slotId, taskId)
+  const nextPrepared = { ...preparedUploads.value }
+  delete nextPrepared[slotId]
+  preparedUploads.value = nextPrepared
+  clearPendingRetrySource(slotId)
+  cleanupLocalPreview(slotId)
+  const nextRecords = { ...uploadRecords.value }
+  delete nextRecords[slotId]
+  uploadRecords.value = nextRecords
+  clearPendingExtraSlot(slotId)
+  setSlotUploadStatus(slotId, 'idle')
+  if (previewOpen.value && previewSlotId.value === slotId) closeUploadPreview()
+  persistTaskListCache()
+}
+
+function uploadMetaLines(slotId: string) {
+  return captureLines(uploadRecords.value[slotId]?.capture)
 }
 
 function resolveTaskStatus(entry: unknown): 'todo' | 'doing' | 'done' | 'rejected' | null {
@@ -715,6 +807,7 @@ async function hydrateTaskPage() {
   issueRecords.value = {}
   preparedUploads.value = {}
   pendingRetrySources.value = {}
+  pendingExtraSlotIds.value = {}
   uploadQueue.value = []
   slotUploadStatus.value = {}
   revokeAllLocalPreviews()
@@ -1112,6 +1205,7 @@ async function pumpUploadQueue() {
           capture: data.capture,
           ...(displayName ? { displayName } : {}),
         }
+        clearPendingExtraSlot(slotId)
         cleanupLocalPreviewAfterSuccess(slotId, data.url)
         const nextPrepared = { ...preparedUploads.value }
         delete nextPrepared[slotId]
@@ -1244,10 +1338,17 @@ function retryUpload(slotId: string) {
   void prepareAndEnqueueUpload(slotId, source.slotLabel, source.sourceFile, token, source.taskId)
 }
 
-async function handleUpload(slotId: string, slotLabel: string, event: Event) {
+async function handleUpload(slotId: string, baseLabel: string, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file) return
+  if (!file) {
+    if (isExtraUploadSlot(slotId) && !uploadRecords.value[slotId]?.url && !localPreviewRecords.value[slotId]) {
+      clearPendingExtraSlot(slotId)
+      setSlotUploadStatus(slotId, 'idle')
+    }
+    return
+  }
+  const slotLabel = uploadLabelForSlot(slotId, baseLabel)
   if (!isTaskDoing.value) {
     input.value = ''
     return
@@ -1611,20 +1712,46 @@ onUnmounted(() => {
                   <div class="tl-upload-stack">
                     <template v-if="row.buttons && row.buttons.length">
                       <div :class="row.buttons.length > 1 ? 'tl-upload-row' : ''">
-                        <TaskUploadSlot
+                        <div
                           v-for="(btn, bi) in row.buttons"
                           :key="btn.slot"
-                          :slot-id="btn.slot"
-                          :label="btn.label"
-                          :input-id="`f-${btn.slot}-${bi}`"
-                          :image-url="displayedUploadUrl(btn.slot)"
-                          :status="slotStatusOf(btn.slot)"
-                          :meta-lines="uploadMetaLines(btn.slot, btn.label)"
-                          :disabled="!isTaskDoing"
-                          @change="handleUpload(btn.slot, btn.label, $event)"
-                          @retry="retryUpload(btn.slot)"
-                          @preview="openUploadPreview(btn.slot)"
-                        />
+                          class="tl-upload-slot-group"
+                        >
+                          <TaskUploadSlot
+                            :slot-id="btn.slot"
+                            :label="btn.label"
+                            :input-id="`f-${btn.slot}-${bi}`"
+                            :image-url="displayedUploadUrl(btn.slot)"
+                            :status="slotStatusOf(btn.slot)"
+                            :meta-title="uploadMetaTitle(btn.slot, btn.label)"
+                            :meta-lines="uploadMetaLines(btn.slot)"
+                            :disabled="!isTaskDoing"
+                            :show-add-photo="canAddExtraPhoto(btn.slot)"
+                            :show-remove="isTaskDoing"
+                            @change="handleUpload(btn.slot, btn.label, $event)"
+                            @retry="retryUpload(btn.slot)"
+                            @preview="openUploadPreview(btn.slot)"
+                            @add-photo="onAddExtraPhoto(btn.slot, btn.label)"
+                            @remove="removeSlotPhoto(btn.slot)"
+                          />
+                          <TaskUploadSlot
+                            v-for="extraId in extraSlotsForBase(btn.slot)"
+                            :key="extraId"
+                            :slot-id="extraId"
+                            :label="uploadMetaTitle(extraId, btn.label)"
+                            :input-id="`f-extra-${extraId}`"
+                            :image-url="displayedUploadUrl(extraId)"
+                            :status="slotStatusOf(extraId)"
+                            :meta-title="uploadMetaTitle(extraId, btn.label)"
+                            :meta-lines="uploadMetaLines(extraId)"
+                            :disabled="!isTaskDoing"
+                            :show-remove="isTaskDoing"
+                            @change="handleUpload(extraId, btn.label, $event)"
+                            @retry="retryUpload(extraId)"
+                            @preview="openUploadPreview(extraId)"
+                            @remove="removeSlotPhoto(extraId)"
+                          />
+                        </div>
                       </div>
                     </template>
                     <span v-else class="tl-upload-na">{{ row.uploadHint || t.noUpload }}</span>

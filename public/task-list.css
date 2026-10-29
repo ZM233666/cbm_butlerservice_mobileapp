@@ -514,6 +514,15 @@ body.tl-page {
   display: block;
 }
 
+.tl-thumb__meta-title {
+  display: block;
+  margin-bottom: 0.12rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #27272a;
+  letter-spacing: 0.01em;
+}
+
 .tl-issue-wrap {
   position: absolute;
   left: 0.45rem;
@@ -1058,6 +1067,10 @@ body.tl-page {
 
 .tl-thumb__meta {
   font-size: 0.61rem;
+}
+
+.tl-thumb__meta-title {
+  font-size: 0.68rem;
 }
 
 .tl-modal__inner h3 {

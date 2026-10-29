@@ -135,7 +135,7 @@ export function fetchLatestTaskSubmit(taskId: string) {
     ok: boolean
     found?: boolean
     submittedAt?: string
-    uploads?: Record<string, { url: string; capture?: { capturedAt?: string; location?: Record<string, unknown> } }>
+    uploads?: Record<string, { url: string; displayName?: string; capture?: { capturedAt?: string; location?: Record<string, unknown> } }>
     issues?: Record<string, { status?: string; text?: string; result?: string; updatedAt?: string }>
   }>('/api/task-submit-latest', { taskId })
 }

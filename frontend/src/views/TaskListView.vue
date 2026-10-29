@@ -16,7 +16,6 @@ import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint
 import {
   MAX_EXTRA_PHOTOS_PER_SLOT,
   buildExtraUploadSlotId,
-  isExtraUploadSlot,
   listExtraUploadSlotIds,
   nextExtraUploadIndex,
   resolveUploadDisplayName,
@@ -74,8 +73,8 @@ type UploadQueueItem = {
 
 const preparedUploads = ref<Record<string, PreparedUpload>>({})
 const pendingRetrySources = ref<Record<string, PendingRetrySource>>({})
-/** 已点「添加照片」、尚未选文件或尚未上传完成的附加槽位 */
-const pendingExtraSlotIds = ref<Record<string, { baseLabel: string }>>({})
+const addPhotoInputRef = ref<HTMLInputElement | null>(null)
+const addPhotoPickerTarget = ref<{ baseSlot: string; baseLabel: string } | null>(null)
 const uploadQueue = ref<UploadQueueItem[]>([])
 const slotTokens: Record<string, number> = {}
 let uploadPumpRunning = false
@@ -665,14 +664,12 @@ function allUploadSlotKeys(): string[] {
   const keys = new Set<string>([
     ...Object.keys(uploadRecords.value),
     ...Object.keys(localPreviewRecords.value),
-    ...Object.keys(pendingExtraSlotIds.value),
     ...Object.keys(slotUploadStatus.value),
   ])
   return Array.from(keys)
 }
 
 function extraSlotIsVisible(extraId: string): boolean {
-  if (pendingExtraSlotIds.value[extraId]) return true
   if (displayedUploadUrl(extraId)) return true
   return slotStatusOf(extraId) !== 'idle'
 }
@@ -683,7 +680,6 @@ function extraSlotsForBase(baseSlot: string): string[] {
 
 function countExtraPhotos(baseSlot: string): number {
   return listExtraUploadSlotIds(baseSlot, allUploadSlotKeys()).filter((id) => {
-    if (pendingExtraSlotIds.value[id]) return true
     if (uploadRecords.value[id]?.url || localPreviewRecords.value[id]) return true
     const st = slotStatusOf(id)
     return st === 'processing' || st === 'queued' || st === 'uploading' || st === 'failed'
@@ -696,28 +692,34 @@ function canAddExtraPhoto(baseSlot: string): boolean {
   return countExtraPhotos(baseSlot) < MAX_EXTRA_PHOTOS_PER_SLOT
 }
 
-function clearPendingExtraSlot(slotId: string) {
-  if (!pendingExtraSlotIds.value[slotId]) return
-  const next = { ...pendingExtraSlotIds.value }
-  delete next[slotId]
-  pendingExtraSlotIds.value = next
-}
-
 function onAddExtraPhoto(baseSlot: string, baseLabel: string) {
   if (!canAddExtraPhoto(baseSlot)) {
     toast(t.value.extraPhotoMax, 'warn', 3200)
     return
   }
-  const index = nextExtraUploadIndex(baseSlot, allUploadSlotKeys())
-  const extraId = buildExtraUploadSlotId(baseSlot, index)
-  pendingExtraSlotIds.value = {
-    ...pendingExtraSlotIds.value,
-    [extraId]: { baseLabel },
+  addPhotoPickerTarget.value = { baseSlot, baseLabel }
+  addPhotoInputRef.value?.click()
+}
+
+async function onAddPhotoPickerChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  const target = addPhotoPickerTarget.value
+  addPhotoPickerTarget.value = null
+  try {
+    if (!file || !target) return
+    if (!canAddExtraPhoto(target.baseSlot)) {
+      toast(t.value.extraPhotoMax, 'warn', 3200)
+      return
+    }
+    const extraId = buildExtraUploadSlotId(
+      target.baseSlot,
+      nextExtraUploadIndex(target.baseSlot, allUploadSlotKeys()),
+    )
+    await processSelectedUploadFile(extraId, target.baseLabel, file)
+  } finally {
+    input.value = ''
   }
-  void nextTick(() => {
-    const input = document.getElementById(`f-extra-${extraId}`) as HTMLInputElement | null
-    input?.click()
-  })
 }
 
 function removeSlotPhoto(slotId: string) {
@@ -732,7 +734,6 @@ function removeSlotPhoto(slotId: string) {
   const nextRecords = { ...uploadRecords.value }
   delete nextRecords[slotId]
   uploadRecords.value = nextRecords
-  clearPendingExtraSlot(slotId)
   setSlotUploadStatus(slotId, 'idle')
   if (previewOpen.value && previewSlotId.value === slotId) closeUploadPreview()
   persistTaskListCache()
@@ -807,7 +808,7 @@ async function hydrateTaskPage() {
   issueRecords.value = {}
   preparedUploads.value = {}
   pendingRetrySources.value = {}
-  pendingExtraSlotIds.value = {}
+  addPhotoPickerTarget.value = null
   uploadQueue.value = []
   slotUploadStatus.value = {}
   revokeAllLocalPreviews()
@@ -1205,7 +1206,6 @@ async function pumpUploadQueue() {
           capture: data.capture,
           ...(displayName ? { displayName } : {}),
         }
-        clearPendingExtraSlot(slotId)
         cleanupLocalPreviewAfterSuccess(slotId, data.url)
         const nextPrepared = { ...preparedUploads.value }
         delete nextPrepared[slotId]
@@ -1338,24 +1338,11 @@ function retryUpload(slotId: string) {
   void prepareAndEnqueueUpload(slotId, source.slotLabel, source.sourceFile, token, source.taskId)
 }
 
-async function handleUpload(slotId: string, baseLabel: string, event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) {
-    if (isExtraUploadSlot(slotId) && !uploadRecords.value[slotId]?.url && !localPreviewRecords.value[slotId]) {
-      clearPendingExtraSlot(slotId)
-      setSlotUploadStatus(slotId, 'idle')
-    }
-    return
-  }
+async function processSelectedUploadFile(slotId: string, baseLabel: string, file: File) {
   const slotLabel = uploadLabelForSlot(slotId, baseLabel)
-  if (!isTaskDoing.value) {
-    input.value = ''
-    return
-  }
+  if (!isTaskDoing.value) return
   if (!isAllowedUploadType(file)) {
     toast(invalidUploadTypeMessage(), 'error')
-    input.value = ''
     return
   }
 
@@ -1379,8 +1366,15 @@ async function handleUpload(slotId: string, baseLabel: string, event: Event) {
   await nextTick()
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
+  await prepareAndEnqueueUpload(slotId, slotLabel || slotId, file, token, taskId)
+}
+
+async function handleUpload(slotId: string, baseLabel: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
   try {
-    await prepareAndEnqueueUpload(slotId, slotLabel || slotId, file, token, taskId)
+    if (!file) return
+    await processSelectedUploadFile(slotId, baseLabel, file)
   } finally {
     input.value = ''
   }
@@ -1668,6 +1662,15 @@ onUnmounted(() => {
 
 <template>
   <div class="task-list-page">
+    <input
+      ref="addPhotoInputRef"
+      type="file"
+      accept="image/*"
+      class="tl-file"
+      tabindex="-1"
+      aria-hidden="true"
+      @change="onAddPhotoPickerChange"
+    />
     <PageShell>
       <TopBrandBar :title="t.title" :back-to="backToHome" :back-label="t.back" />
       <main class="tl-main">

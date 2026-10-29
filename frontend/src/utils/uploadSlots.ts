@@ -1,4 +1,4 @@
-/** 附加照片槽位：`{baseSlot}__extra_{1..n}`，展示名 `{baseLabel}_{n}` */
+/** 附加照片槽位：`{baseSlot}__extra_{1..n}`，展示名 `{baseLabel}01`、`02`… */
 
 export const EXTRA_UPLOAD_SLOT_MARKER = '__extra_'
 
@@ -25,7 +25,8 @@ export function buildExtraUploadSlotId(baseSlotId: string, index: number): strin
 
 export function buildExtraDisplayName(baseLabel: string, index: number): string {
   const base = String(baseLabel || '').trim()
-  return base ? `${base}_${index}` : `_${index}`
+  const suffix = String(Math.max(1, index)).padStart(2, '0')
+  return base ? `${base}${suffix}` : suffix
 }
 
 export function listExtraUploadSlotIds(baseSlotId: string, slotKeys: Iterable<string>): string[] {

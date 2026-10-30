@@ -27,7 +27,11 @@ import { buildIssueSubmitEntry, buildIssuesSubmitMap } from '@/utils/issueSubmit
 import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
 import {
   MAX_EXTRA_PHOTOS_PER_SLOT,
+  buildCompactUploadSlotMoves,
+  buildExtraDisplayName,
   buildExtraUploadSlotId,
+  getBaseUploadSlotId,
+  groupUploadSlotIds,
   listExtraUploadSlotIds,
   nextExtraUploadIndex,
   resolveUploadDisplayName,
@@ -829,9 +833,131 @@ async function onAddPhotoPickerChange(event: Event) {
   }
 }
 
+function labelForUploadSlot(slotId: string): string {
+  const baseSlot = getBaseUploadSlotId(slotId)
+  for (const row of guidanceRows.value) {
+    const buttons = Array.isArray(row.buttons) ? row.buttons : []
+    for (const btn of buttons) {
+      if (String(btn?.slot || '').trim() === baseSlot) {
+        return String(btn?.label || '').trim()
+      }
+    }
+  }
+  return ''
+}
+
+function uploadSlotHasContent(slotId: string): boolean {
+  if (String(uploadRecords.value[slotId]?.url || '').trim()) return true
+  if (localPreviewRecords.value[slotId]) return true
+  const st = slotStatusOf(slotId)
+  return st === 'processing' || st === 'queued' || st === 'uploading' || st === 'failed'
+}
+
+/** 删除后把剩余照片顶到 base / extra_1 / extra_2…，并修正展示名 */
+function compactUploadSlotsForBase(baseSlot: string, baseLabel: string) {
+  const base = String(baseSlot || '').trim()
+  if (!base) return
+  const keys = allUploadSlotKeys()
+  const moves = buildCompactUploadSlotMoves(base, keys, uploadSlotHasContent)
+  const needsRemap = moves.some((m) => m.from !== m.to)
+    || moves.some((m) => {
+      if (m.extraIndex == null) {
+        return !!String(uploadRecords.value[m.to]?.displayName || '').trim()
+      }
+      const expected = buildExtraDisplayName(baseLabel, m.extraIndex)
+      return uploadRecords.value[m.to]?.displayName !== expected
+    })
+  if (!moves.length && !needsRemap) return
+
+  type Snap = {
+    record?: { url: string; capture?: UploadResult['capture']; displayName?: string }
+    preview?: string
+    status?: SlotUploadStatus
+    prepared?: PreparedUpload
+    pending?: PendingRetrySource
+    queue: UploadQueueItem[]
+  }
+
+  const snaps: Snap[] = moves.map(({ from }) => ({
+    record: uploadRecords.value[from]
+      ? { ...uploadRecords.value[from] }
+      : undefined,
+    preview: localPreviewRecords.value[from],
+    status: slotUploadStatus.value[from],
+    prepared: preparedUploads.value[from],
+    pending: pendingRetrySources.value[from],
+    queue: uploadQueue.value.filter(
+      (q) => q.slotId === from && q.taskId === mainTaskId.value,
+    ),
+  }))
+
+  const taskId = mainTaskId.value
+  for (const id of groupUploadSlotIds(base, keys)) {
+    removeSlotFromUploadQueue(id, taskId)
+    clearPendingRetrySource(id)
+    cleanupLocalPreview(id)
+    const nextPrepared = { ...preparedUploads.value }
+    delete nextPrepared[id]
+    preparedUploads.value = nextPrepared
+    const nextRecords = { ...uploadRecords.value }
+    delete nextRecords[id]
+    uploadRecords.value = nextRecords
+    const nextStatus = { ...slotUploadStatus.value }
+    delete nextStatus[id]
+    slotUploadStatus.value = nextStatus
+  }
+
+  moves.forEach(({ to, extraIndex }, i) => {
+    const snap = snaps[i]
+    if (!snap) return
+    if (snap.record?.url) {
+      const record = { ...snap.record }
+      if (extraIndex == null) {
+        delete record.displayName
+      } else {
+        record.displayName = buildExtraDisplayName(baseLabel, extraIndex)
+      }
+      uploadRecords.value = { ...uploadRecords.value, [to]: record }
+    }
+    if (snap.preview) {
+      localPreviewRecords.value = { ...localPreviewRecords.value, [to]: snap.preview }
+    }
+    if (snap.status && snap.status !== 'idle') {
+      setSlotUploadStatus(to, snap.status)
+    } else if (uploadRecords.value[to]?.url) {
+      setSlotUploadStatus(to, 'success')
+    }
+    if (snap.prepared) {
+      preparedUploads.value = {
+        ...preparedUploads.value,
+        [to]: { ...snap.prepared, slotId: to, slotLabel: extraIndex == null ? baseLabel : buildExtraDisplayName(baseLabel, extraIndex) },
+      }
+    }
+    if (snap.pending) {
+      pendingRetrySources.value = {
+        ...pendingRetrySources.value,
+        [to]: { ...snap.pending, slotId: to, slotLabel: extraIndex == null ? baseLabel : buildExtraDisplayName(baseLabel, extraIndex) },
+      }
+    }
+    if (snap.queue.length) {
+      uploadQueue.value = [
+        ...uploadQueue.value,
+        ...snap.queue.map((q) => ({ ...q, slotId: to })),
+      ]
+    }
+  })
+
+  if (previewOpen.value && previewSlotId.value) {
+    const hit = moves.find((m) => m.from === previewSlotId.value)
+    if (hit) previewSlotId.value = hit.to
+  }
+}
+
 function removeSlotPhoto(slotId: string) {
   if (!isTaskDoing.value) return
   const taskId = mainTaskId.value
+  const baseSlot = getBaseUploadSlotId(slotId)
+  const baseLabel = labelForUploadSlot(slotId)
   removeSlotFromUploadQueue(slotId, taskId)
   const nextPrepared = { ...preparedUploads.value }
   delete nextPrepared[slotId]
@@ -843,7 +969,9 @@ function removeSlotPhoto(slotId: string) {
   uploadRecords.value = nextRecords
   setSlotUploadStatus(slotId, 'idle')
   if (previewOpen.value && previewSlotId.value === slotId) closeUploadPreview()
+  compactUploadSlotsForBase(baseSlot, baseLabel)
   persistTaskListCache()
+  void syncIssueDraftToServer()
 }
 
 function uploadMetaLines(slotId: string) {

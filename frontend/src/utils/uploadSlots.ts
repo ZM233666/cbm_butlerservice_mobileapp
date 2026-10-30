@@ -61,3 +61,39 @@ export function resolveUploadDisplayName(
   if (idx != null) return buildExtraDisplayName(baseLabel, idx)
   return String(baseLabel || '').trim()
 }
+
+export type CompactUploadSlotMove = {
+  from: string
+  to: string
+  /** null = 主槽位（无 01 后缀） */
+  extraIndex: number | null
+}
+
+/**
+ * 删除某张图后，将同 base 下仍有内容的槽位依次映射到 base、extra_1、extra_2…
+ */
+export function buildCompactUploadSlotMoves(
+  baseSlotId: string,
+  slotKeys: Iterable<string>,
+  slotHasContent: (slotId: string) => boolean,
+): CompactUploadSlotMove[] {
+  const base = String(baseSlotId || '').trim()
+  if (!base) return []
+  const ordered: string[] = []
+  if (slotHasContent(base)) ordered.push(base)
+  for (const id of listExtraUploadSlotIds(base, slotKeys)) {
+    if (slotHasContent(id)) ordered.push(id)
+  }
+  return ordered.map((from, index) => {
+    if (index === 0) {
+      return { from, to: base, extraIndex: null }
+    }
+    return { from, to: buildExtraUploadSlotId(base, index), extraIndex: index }
+  })
+}
+
+export function groupUploadSlotIds(baseSlotId: string, slotKeys: Iterable<string>): string[] {
+  const base = String(baseSlotId || '').trim()
+  if (!base) return []
+  return [base, ...listExtraUploadSlotIds(base, slotKeys)]
+}

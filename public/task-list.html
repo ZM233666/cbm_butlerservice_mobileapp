@@ -121,6 +121,16 @@
             <option value="ok">检查正常</option>
             <option value="abnormal">发现异常</option>
             <option value="undetectable">无法检测</option>
+            <option value="no_equipment">无此设备</option>
+          </select>
+        </label>
+        <label class="tl-issue-field" id="issue-severity-wrap" hidden>
+          <span class="tl-issue-field__label" id="issue-severity-label">请选择异常等级</span>
+          <select id="issue-severity" class="tl-issue-select">
+            <option value="">请选择异常等级</option>
+            <option value="severe">严重</option>
+            <option value="moderate">中等</option>
+            <option value="minor">一般</option>
           </select>
         </label>
         <textarea id="issue-text" class="tl-issue-text" hidden placeholder="请描述异常现象或无法检测的原因"></textarea>

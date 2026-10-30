@@ -76,12 +76,16 @@ export interface TaskStatusEntry {
 
 export type TaskStatusStore = Record<string, TaskStatusEntry>
 
-export type InspectionStatus = 'ok' | 'abnormal' | 'undetectable'
+export type InspectionStatus = 'ok' | 'abnormal' | 'undetectable' | 'no_equipment'
+
+export type AbnormalSeverity = 'severe' | 'moderate' | 'minor'
 
 export interface InspectionRecord {
   status: InspectionStatus
   text: string
   updatedAt: string
+  /** 仅 abnormal：severe=严重, moderate=中等, minor=一般 */
+  severity?: AbnormalSeverity
 }
 
 export interface GuidanceRow {

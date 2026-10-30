@@ -11,7 +11,17 @@ import type { SlotUploadStatus } from '@/components/task/TaskUploadSlot.vue'
 import { fetchGuidanceTasks, fetchHomeConfig, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit, type TaskSubmitResponse } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
-import type { GuidanceRow, InspectionRecord, InspectionStatus, TaskDetail } from '@/types/task'
+import type {
+  AbnormalSeverity,
+  GuidanceRow,
+  InspectionRecord,
+  InspectionStatus,
+  TaskDetail,
+} from '@/types/task'
+import {
+  ABNORMAL_SEVERITY_OPTIONS,
+  normalizeAbnormalSeverity,
+} from '@/utils/inspectionSeverity'
 import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
 import {
   MAX_EXTRA_PHOTOS_PER_SLOT,
@@ -108,6 +118,7 @@ let pinchStartZoom = 1
 const issueOpen = ref(false)
 const issueRowId = ref('')
 const issueStatus = ref<InspectionStatus | ''>('')
+const issueSeverity = ref<AbnormalSeverity | ''>('')
 const issueText = ref('')
 const flashingRowId = ref('')
 let flashTimer: ReturnType<typeof setTimeout> | null = null
@@ -253,23 +264,30 @@ const incompleteRows = computed(() => {
   })
 })
 
-const INSPECTION_STATUSES: InspectionStatus[] = ['ok', 'abnormal', 'undetectable']
+const INSPECTION_STATUSES: InspectionStatus[] = ['ok', 'abnormal', 'undetectable', 'no_equipment']
 
 function normalizeIssueRecord(raw: unknown): InspectionRecord | null {
   if (!raw || typeof raw !== 'object') return null
-  const item = raw as { status?: string; text?: string; updatedAt?: string }
+  const item = raw as { status?: string; text?: string; updatedAt?: string; severity?: string }
   const text = String(item.text || '').trim()
   const statusRaw = String(item.status || '').trim().toLowerCase()
   const status = (statusRaw === 'normal' ? 'ok' : statusRaw) as InspectionStatus | ''
+  const severity = normalizeAbnormalSeverity(item.severity)
   if (INSPECTION_STATUSES.includes(status as InspectionStatus)) {
     return {
       status: status as InspectionStatus,
       text,
       updatedAt: String(item.updatedAt || ''),
+      ...(status === 'abnormal' && severity ? { severity } : {}),
     }
   }
   if (text) {
-    return { status: 'abnormal', text, updatedAt: String(item.updatedAt || '') }
+    return {
+      status: 'abnormal',
+      text,
+      updatedAt: String(item.updatedAt || ''),
+      ...(severity ? { severity } : {}),
+    }
   }
   return null
 }
@@ -277,8 +295,18 @@ function normalizeIssueRecord(raw: unknown): InspectionRecord | null {
 function isIssueComplete(raw: unknown): boolean {
   const rec = normalizeIssueRecord(raw)
   if (!rec) return false
-  if (rec.status === 'ok') return true
+  if (rec.status === 'ok' || rec.status === 'no_equipment') return true
+  if (rec.status === 'abnormal') {
+    return !!rec.severity && rec.text.trim().length > 0
+  }
   return rec.text.trim().length > 0
+}
+
+function abnormalSeverityLabel(severity: AbnormalSeverity | '' | undefined) {
+  if (severity === 'severe') return t.value.issueSeveritySevere
+  if (severity === 'moderate') return t.value.issueSeverityModerate
+  if (severity === 'minor') return t.value.issueSeverityMinor
+  return ''
 }
 
 function issueBtnClass(rowId: string) {
@@ -289,6 +317,7 @@ function issueBtnClass(rowId: string) {
     'is-ok': rec?.status === 'ok',
     'is-abnormal': rec?.status === 'abnormal',
     'is-undetectable': rec?.status === 'undetectable',
+    'is-no-equipment': rec?.status === 'no_equipment',
   }
 }
 
@@ -296,6 +325,7 @@ function inspectionStatusLabel(status: InspectionStatus | '' | undefined) {
   if (status === 'ok') return t.value.issueStatusOk
   if (status === 'abnormal') return t.value.issueStatusAbnormal
   if (status === 'undetectable') return t.value.issueStatusUndetectable
+  if (status === 'no_equipment') return t.value.issueStatusNoEquipment
   return ''
 }
 
@@ -303,7 +333,14 @@ function issueNoteDisplay(rowId: string) {
   const rec = normalizeIssueRecord(issueRecords.value[rowId])
   if (!rec) return ''
   const label = inspectionStatusLabel(rec.status)
-  if (rec.status === 'ok' || !rec.text) return label
+  if (rec.status === 'ok' || rec.status === 'no_equipment') return label
+  if (rec.status === 'abnormal') {
+    const sev = abnormalSeverityLabel(rec.severity)
+    const head = sev ? `${label}（${sev}）` : label
+    if (!rec.text) return head
+    return `${head}：${rec.text}`
+  }
+  if (!rec.text) return label
   return `${label}：${rec.text}`
 }
 
@@ -313,7 +350,8 @@ function issueNotePreview(rowId: string) {
   return text.length > 44 ? `${text.slice(0, 44)}...` : text
 }
 
-const issueDetailRequired = computed(() => issueStatus.value === 'abnormal' || issueStatus.value === 'undetectable')
+const issueAbnormalFields = computed(() => issueStatus.value === 'abnormal')
+const issueDetailRequired = computed(() => issueAbnormalFields.value || issueStatus.value === 'undetectable')
 const issuePlaceholderText = computed(() => {
   if (issueStatus.value === 'undetectable') return t.value.issuePlaceholderUndetectable
   if (issueStatus.value === 'abnormal') return t.value.issuePlaceholderAbnormal
@@ -532,12 +570,20 @@ function openIssue(rowId: string) {
   issueRowId.value = rowId
   const rec = normalizeIssueRecord(issueRecords.value[rowId])
   issueStatus.value = rec?.status || ''
+  issueSeverity.value = rec?.status === 'abnormal' ? (rec.severity || '') : ''
   issueText.value = rec?.text || ''
   issueOpen.value = true
 }
 
 function onIssueStatusChange() {
+  if (issueStatus.value !== 'abnormal') issueSeverity.value = ''
   if (!issueDetailRequired.value) issueText.value = ''
+}
+
+function severityOptionLabel(level: AbnormalSeverity) {
+  if (level === 'severe') return t.value.issueSeveritySevere
+  if (level === 'moderate') return t.value.issueSeverityModerate
+  return t.value.issueSeverityMinor
 }
 
 function saveIssue() {
@@ -548,17 +594,25 @@ function saveIssue() {
     return
   }
   const text = issueText.value.trim()
+  if (issueStatus.value === 'abnormal' && !issueSeverity.value) {
+    toast(t.value.issueNeedSeverity, 'warn')
+    return
+  }
   if (issueDetailRequired.value && !text) {
     toast(t.value.issueNeedDetail, 'warn')
     return
   }
+  const row: InspectionRecord = {
+    status: issueStatus.value,
+    text: issueStatus.value === 'ok' || issueStatus.value === 'no_equipment' ? '' : text,
+    updatedAt: new Date().toISOString(),
+  }
+  if (issueStatus.value === 'abnormal' && issueSeverity.value) {
+    row.severity = issueSeverity.value
+  }
   issueRecords.value = {
     ...issueRecords.value,
-    [issueRowId.value]: {
-      status: issueStatus.value,
-      text: issueStatus.value === 'ok' ? '' : text,
-      updatedAt: new Date().toISOString(),
-    },
+    [issueRowId.value]: row,
   }
   toast(t.value.issueSaved)
   issueOpen.value = false
@@ -1854,6 +1908,18 @@ onUnmounted(() => {
               <option value="ok">{{ t.issueStatusOk }}</option>
               <option value="abnormal">{{ t.issueStatusAbnormal }}</option>
               <option value="undetectable">{{ t.issueStatusUndetectable }}</option>
+              <option value="no_equipment">{{ t.issueStatusNoEquipment }}</option>
+            </select>
+          </label>
+          <label v-if="issueAbnormalFields" class="tl-issue-field">
+            <span class="tl-issue-field__label">{{ t.issueSeverityPlaceholder }}</span>
+            <select v-model="issueSeverity" class="tl-issue-select">
+              <option value="">{{ t.issueSeverityPlaceholder }}</option>
+              <option
+                v-for="level in ABNORMAL_SEVERITY_OPTIONS"
+                :key="level"
+                :value="level"
+              >{{ severityOptionLabel(level) }}</option>
             </select>
           </label>
           <textarea

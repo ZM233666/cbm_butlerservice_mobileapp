@@ -80,7 +80,7 @@
       locationFailed: "定位获取失败，已继续上传",
       reportIssue: "检查结果",
       issueDialogTitle: "检查结果",
-      issueDialogHelp: "请选择本项检查结果。发现异常或无法检测时需填写说明。",
+      issueDialogHelp: "请选择本项检查结果。发现异常需选择等级并填写说明；无法检测需填写说明；无此设备无需说明。",
       issuePlaceholder: "请描述异常现象或无法检测的原因",
       issuePlaceholderAbnormal: "请描述异常现象",
       issuePlaceholderUndetectable: "请说明无法检测的原因",
@@ -88,8 +88,14 @@
       issueStatusOk: "检查正常",
       issueStatusAbnormal: "发现异常",
       issueStatusUndetectable: "无法检测",
+      issueStatusNoEquipment: "无此设备",
       issueNeedStatus: "请先选择检查结果",
       issueNeedDetail: "请填写异常现象或无法检测的原因",
+      issueSeverityPlaceholder: "请选择异常等级",
+      issueSeveritySevere: "严重",
+      issueSeverityModerate: "中等",
+      issueSeverityMinor: "一般",
+      issueNeedSeverity: "请选择异常等级",
       submitNeedAllResults: "请先完成本任务全部检查结果后再提交",
       issueSave: "保存",
       issueCancel: "取消",
@@ -137,7 +143,7 @@
       locationFailed: "Location failed, upload continued",
       reportIssue: "Inspection Result",
       issueDialogTitle: "Inspection Result",
-      issueDialogHelp: "Select the inspection result. Details are required for Abnormal or Unable to inspect.",
+      issueDialogHelp: "Select the inspection result. Abnormal requires severity and details; Unable to inspect requires details; No such equipment needs no details.",
       issuePlaceholder: "Describe the abnormality or why it cannot be inspected",
       issuePlaceholderAbnormal: "Describe the abnormality",
       issuePlaceholderUndetectable: "Explain why it cannot be inspected",
@@ -145,8 +151,14 @@
       issueStatusOk: "Normal",
       issueStatusAbnormal: "Abnormal",
       issueStatusUndetectable: "Unable to inspect",
+      issueStatusNoEquipment: "No such equipment",
       issueNeedStatus: "Please select an inspection result",
       issueNeedDetail: "Please describe the abnormality or why it cannot be inspected",
+      issueSeverityPlaceholder: "Select severity",
+      issueSeveritySevere: "Severe",
+      issueSeverityModerate: "Moderate",
+      issueSeverityMinor: "Minor",
+      issueNeedSeverity: "Please select severity",
       submitNeedAllResults: "Complete all inspection results before submitting",
       issueSave: "Save",
       issueCancel: "Cancel",
@@ -313,22 +325,41 @@
     </div>`;
   }
 
+  function normalizeAbnormalSeverity(raw) {
+    const s = String(raw || "").trim().toLowerCase();
+    if (s === "severe" || s === "moderate" || s === "minor") return s;
+    return "";
+  }
+
   function normalizeIssueRecord(raw) {
     if (!raw || typeof raw !== "object") return null;
     const text = String(raw.text || "").trim();
     let status = String(raw.status || "").trim().toLowerCase();
     if (status === "normal") status = "ok";
-    if (status === "ok" || status === "abnormal" || status === "undetectable") {
-      return { status, text, updatedAt: String(raw.updatedAt || "") };
+    const severity = normalizeAbnormalSeverity(raw.severity);
+    if (
+      status === "ok"
+      || status === "abnormal"
+      || status === "undetectable"
+      || status === "no_equipment"
+    ) {
+      const row = { status, text, updatedAt: String(raw.updatedAt || "") };
+      if (status === "abnormal" && severity) row.severity = severity;
+      return row;
     }
-    if (text) return { status: "abnormal", text, updatedAt: String(raw.updatedAt || "") };
+    if (text) {
+      const row = { status: "abnormal", text, updatedAt: String(raw.updatedAt || "") };
+      if (severity) row.severity = severity;
+      return row;
+    }
     return null;
   }
 
   function isIssueComplete(raw) {
     const rec = normalizeIssueRecord(raw);
     if (!rec) return false;
-    if (rec.status === "ok") return true;
+    if (rec.status === "ok" || rec.status === "no_equipment") return true;
+    if (rec.status === "abnormal") return !!rec.severity && rec.text.length > 0;
     return rec.text.length > 0;
   }
 
@@ -337,6 +368,15 @@
     if (status === "ok") return t.issueStatusOk;
     if (status === "abnormal") return t.issueStatusAbnormal;
     if (status === "undetectable") return t.issueStatusUndetectable;
+    if (status === "no_equipment") return t.issueStatusNoEquipment;
+    return "";
+  }
+
+  function abnormalSeverityLabel(severity) {
+    const t = i18n[lang];
+    if (severity === "severe") return t.issueSeveritySevere;
+    if (severity === "moderate") return t.issueSeverityModerate;
+    if (severity === "minor") return t.issueSeverityMinor;
     return "";
   }
 
@@ -344,7 +384,14 @@
     const item = normalizeIssueRecord(rec);
     if (!item) return "";
     const label = inspectionStatusLabel(item.status);
-    if (item.status === "ok" || !item.text) return label;
+    if (item.status === "ok" || item.status === "no_equipment") return label;
+    if (item.status === "abnormal") {
+      const sev = abnormalSeverityLabel(item.severity);
+      const head = sev ? `${label}（${sev}）` : label;
+      if (!item.text) return head;
+      return `${head}：${item.text}`;
+    }
+    if (!item.text) return label;
     return `${label}：${item.text}`;
   }
 
@@ -363,6 +410,7 @@
       el.classList.toggle("is-ok", complete && rec?.status === "ok");
       el.classList.toggle("is-abnormal", complete && rec?.status === "abnormal");
       el.classList.toggle("is-undetectable", complete && rec?.status === "undetectable");
+      el.classList.toggle("is-no-equipment", complete && rec?.status === "no_equipment");
     });
   }
 
@@ -420,6 +468,8 @@
     const issueTitle = document.getElementById("issue-title");
     const issueHelp = document.getElementById("issue-help");
     const issueStatus = document.getElementById("issue-status");
+    const issueSeverity = document.getElementById("issue-severity");
+    const issueSeverityLabel = document.getElementById("issue-severity-label");
     const issueText = document.getElementById("issue-text");
     const issueSave = document.getElementById("issue-save");
     const issueCancel = document.getElementById("issue-cancel");
@@ -434,10 +484,25 @@
         ["ok", t.issueStatusOk],
         ["abnormal", t.issueStatusAbnormal],
         ["undetectable", t.issueStatusUndetectable],
+        ["no_equipment", t.issueStatusNoEquipment],
       ];
       issueStatus.innerHTML = options
         .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`)
         .join("");
+    }
+    if (issueSeverityLabel) issueSeverityLabel.textContent = t.issueSeverityPlaceholder;
+    if (issueSeverity) {
+      const sevOpts = [
+        ["", t.issueSeverityPlaceholder],
+        ["severe", t.issueSeveritySevere],
+        ["moderate", t.issueSeverityModerate],
+        ["minor", t.issueSeverityMinor],
+      ];
+      const prev = issueSeverity.value;
+      issueSeverity.innerHTML = sevOpts
+        .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`)
+        .join("");
+      issueSeverity.value = prev;
     }
     if (issueText) issueText.setAttribute("placeholder", t.issuePlaceholder);
     if (issueSave) issueSave.textContent = t.issueSave;
@@ -684,15 +749,20 @@
   function syncIssueDetailVisibility() {
     const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
+    const severityWrap = document.getElementById("issue-severity-wrap");
+    const severityEl = document.getElementById("issue-severity");
     if (!statusEl || !textEl) return;
     const status = String(statusEl.value || "").trim();
     const needDetail = status === "abnormal" || status === "undetectable";
+    const isAbnormal = status === "abnormal";
     textEl.hidden = !needDetail;
+    if (severityWrap) severityWrap.hidden = !isAbnormal;
     const t = i18n[lang];
     if (status === "undetectable") textEl.setAttribute("placeholder", t.issuePlaceholderUndetectable);
     else if (status === "abnormal") textEl.setAttribute("placeholder", t.issuePlaceholderAbnormal);
     else textEl.setAttribute("placeholder", t.issuePlaceholder);
     if (!needDetail) textEl.value = "";
+    if (!isAbnormal && severityEl) severityEl.value = "";
   }
 
   function readTaskStatusStore() {
@@ -790,11 +860,17 @@
   document.getElementById("issue-save")?.addEventListener("click", () => {
     const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
+    const severityEl = document.getElementById("issue-severity");
     if (!statusEl || !textEl || !activeIssueRowId) return;
     const status = String(statusEl.value || "").trim();
     const content = textEl.value.trim();
+    const severity = normalizeAbnormalSeverity(severityEl && severityEl.value);
     if (!status) {
       toast(i18n[lang].issueNeedStatus);
+      return;
+    }
+    if (status === "abnormal" && !severity) {
+      toast(i18n[lang].issueNeedSeverity);
       return;
     }
     if ((status === "abnormal" || status === "undetectable") && !content) {
@@ -802,11 +878,13 @@
       return;
     }
     window.__issueRecords = window.__issueRecords || {};
-    window.__issueRecords[activeIssueRowId] = {
+    const row = {
       status,
-      text: status === "ok" ? "" : content,
+      text: status === "ok" || status === "no_equipment" ? "" : content,
       updatedAt: new Date().toISOString(),
     };
+    if (status === "abnormal" && severity) row.severity = severity;
+    window.__issueRecords[activeIssueRowId] = row;
     toast(i18n[lang].issueSaved);
     refreshIssueNotes();
     document.getElementById("dlg-issue")?.close();
@@ -853,9 +931,11 @@
     const dlg = document.getElementById("dlg-issue");
     const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
+    const severityEl = document.getElementById("issue-severity");
     if (!dlg || !statusEl || !textEl) return;
     const rec = normalizeIssueRecord(window.__issueRecords?.[rowId]);
     statusEl.value = rec?.status || "";
+    if (severityEl) severityEl.value = rec?.status === "abnormal" ? rec.severity || "" : "";
     textEl.value = rec?.text || "";
     syncIssueDetailVisibility();
     dlg.showModal();

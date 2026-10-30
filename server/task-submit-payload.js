@@ -32,19 +32,39 @@ function normalizeUploadsMap(uploads) {
   return out;
 }
 
+const ABNORMAL_SEVERITIES = new Set(["severe", "moderate", "minor"]);
+
+function normalizeAbnormalSeverity(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  return ABNORMAL_SEVERITIES.has(s) ? s : "";
+}
+
 function normalizeIssueEntry(meta) {
   if (!meta || typeof meta !== "object") return null;
   let status = String(meta.status || "").trim().toLowerCase();
   if (status === "normal") status = "ok";
   const text = String(meta.text || "").trim();
-  if (status !== "ok" && status !== "abnormal" && status !== "undetectable" && !text) {
+  const severity = normalizeAbnormalSeverity(meta.severity);
+  if (
+    status !== "ok"
+    && status !== "abnormal"
+    && status !== "undetectable"
+    && status !== "no_equipment"
+    && !text
+  ) {
     return null;
   }
   const row = {};
-  if (status === "ok" || status === "abnormal" || status === "undetectable") {
+  if (
+    status === "ok"
+    || status === "abnormal"
+    || status === "undetectable"
+    || status === "no_equipment"
+  ) {
     row.status = status;
   }
   if (text) row.text = text;
+  if (severity) row.severity = severity;
   if (meta.updatedAt) row.updatedAt = String(meta.updatedAt);
   return Object.keys(row).length ? row : null;
 }
@@ -114,6 +134,7 @@ module.exports = {
   pickTaskId,
   normalizeUploadEntry,
   normalizeUploadsMap,
+  normalizeAbnormalSeverity,
   normalizeIssueEntry,
   normalizeIssuesMap,
   countValidUploads,

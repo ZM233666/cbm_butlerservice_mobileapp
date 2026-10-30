@@ -1,6 +1,8 @@
 /**
  * task-submit / task-draft 请求体校验与规范化。
  */
+const { enrichIssueSubmitEntry } = require("./issue-submit-format");
+
 function pickTaskId(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
   const basic = body.basicInfo && typeof body.basicInfo === "object" ? body.basicInfo : {};
@@ -41,10 +43,11 @@ function normalizeAbnormalSeverity(raw) {
 
 function normalizeIssueEntry(meta) {
   if (!meta || typeof meta !== "object") return null;
-  let status = String(meta.status || "").trim().toLowerCase();
+  const enriched = enrichIssueSubmitEntry(meta);
+  let status = String(enriched.status || "").trim().toLowerCase();
   if (status === "normal") status = "ok";
-  const text = String(meta.text || "").trim();
-  const severity = normalizeAbnormalSeverity(meta.severity);
+  const text = String(enriched.text || "").trim();
+  const severity = normalizeAbnormalSeverity(enriched.severity);
   if (
     status !== "ok"
     && status !== "abnormal"
@@ -65,9 +68,9 @@ function normalizeIssueEntry(meta) {
   }
   if (text) row.text = text;
   if (severity) row.severity = severity;
-  const result = String(meta.result || "").trim();
+  const result = String(enriched.result || "").trim();
   if (result) row.result = result;
-  if (meta.updatedAt) row.updatedAt = String(meta.updatedAt);
+  if (enriched.updatedAt) row.updatedAt = String(enriched.updatedAt);
   return Object.keys(row).length ? row : null;
 }
 

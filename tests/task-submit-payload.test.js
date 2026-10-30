@@ -46,7 +46,7 @@ test("normalizeIssuesMap keeps status-only and text issues", () => {
   assert.deepEqual(out, {
     r1: { text: "看不清车号", updatedAt: "2026-07-09T08:00:00.000Z" },
     r3: { status: "ok" },
-    r4: { status: "abnormal", text: "插头松动" },
+    r4: { status: "abnormal", text: "插头松动", result: "发现异常：插头松动" },
     r5: { status: "no_equipment" },
     r6: {
       status: "abnormal",
@@ -54,7 +54,7 @@ test("normalizeIssuesMap keeps status-only and text issues", () => {
       severity: "severe",
       result: "发现异常（严重）：漏油",
     },
-    r7: { status: "abnormal", text: "x" },
+    r7: { status: "abnormal", text: "x", result: "发现异常：x" },
   });
 });
 

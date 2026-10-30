@@ -709,6 +709,44 @@
     return text && text !== label ? `${label}：${text}` : label;
   }
 
+  async function syncIssueDraftToServer() {
+    const basic = collectBasicInfo();
+    const taskId = String(basic.taskId || basic.mainTaskId || "").trim();
+    if (!taskId) return;
+    const body = {
+      basicInfo: { ...basic, taskId },
+      uploads: collectUploadState(),
+      issues: collectIssueState(),
+      allowEmptyUploads: true,
+    };
+    try {
+      const res = await fetch("/api/task-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) return;
+      const serverIssues = data.issues && typeof data.issues === "object" ? data.issues : null;
+      if (serverIssues) {
+        window.__issueRecords = window.__issueRecords || {};
+        Object.entries(serverIssues).forEach(([rowId, item]) => {
+          const rec = normalizeIssueRecord(item);
+          if (!rec) return;
+          const local = normalizeIssueRecord(window.__issueRecords[rowId]);
+          if (local && rec.status === "abnormal" && !rec.severity && local.severity) {
+            window.__issueRecords[rowId] = { ...rec, severity: local.severity };
+          } else {
+            window.__issueRecords[rowId] = rec;
+          }
+        });
+        refreshIssueNotes();
+      }
+    } catch {
+      /* ignore: local state already saved */
+    }
+  }
+
   function collectIssueState() {
     const src = window.__issueRecords || {};
     const out = {};
@@ -920,6 +958,7 @@
     refreshIssueNotes();
     document.getElementById("dlg-issue")?.close();
     updateSubmitButtonState();
+    void syncIssueDraftToServer();
   });
   document.getElementById("dlg-zoom-in")?.addEventListener("click", () => {
     setSchematicZoom(schematicZoom + SCHEMATIC_ZOOM_STEP);

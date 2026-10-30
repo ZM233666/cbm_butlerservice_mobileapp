@@ -21,8 +21,9 @@ import type {
 import {
   ABNORMAL_SEVERITY_OPTIONS,
   normalizeAbnormalSeverity,
+  parseSeverityFromResultText,
 } from '@/utils/inspectionSeverity'
-import { buildIssuesSubmitMap } from '@/utils/issueSubmitFormat'
+import { buildIssueSubmitEntry, buildIssuesSubmitMap } from '@/utils/issueSubmitFormat'
 import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
 import {
   MAX_EXTRA_PHOTOS_PER_SLOT,
@@ -129,6 +130,7 @@ const editRequestOpen = ref(false)
 const editRequestReason = ref('')
 const editRequestSubmitting = ref(false)
 const savingDraft = ref(false)
+const syncingIssueDraft = ref(false)
 // taskKey：统一以 Main Task ID 作为唯一 key（来自 query.k / query.taskId）
 const taskKey = computed(() => String(route.query.k || route.query.taskId || '').trim())
 const fallbackTaskKey = computed(() => {
@@ -269,11 +271,14 @@ const INSPECTION_STATUSES: InspectionStatus[] = ['ok', 'abnormal', 'undetectable
 
 function normalizeIssueRecord(raw: unknown): InspectionRecord | null {
   if (!raw || typeof raw !== 'object') return null
-  const item = raw as { status?: string; text?: string; updatedAt?: string; severity?: string }
+  const item = raw as { status?: string; text?: string; updatedAt?: string; severity?: string; result?: string }
   const text = String(item.text || '').trim()
   const statusRaw = String(item.status || '').trim().toLowerCase()
   const status = (statusRaw === 'normal' ? 'ok' : statusRaw) as InspectionStatus | ''
-  const severity = normalizeAbnormalSeverity(item.severity)
+  let severity = normalizeAbnormalSeverity(item.severity)
+  if (!severity && status === 'abnormal') {
+    severity = parseSeverityFromResultText(item.result)
+  }
   if (INSPECTION_STATUSES.includes(status as InspectionStatus)) {
     return {
       status: status as InspectionStatus,
@@ -587,6 +592,51 @@ function severityOptionLabel(level: AbnormalSeverity) {
   return t.value.issueSeverityMinor
 }
 
+function mergeIssueRecordPreferringSeverity(
+  local: InspectionRecord | undefined,
+  server: InspectionRecord,
+): InspectionRecord {
+  if (!local) return server
+  const localSeverity = normalizeAbnormalSeverity(local.severity)
+  const serverSeverity = normalizeAbnormalSeverity(server.severity)
+  if (serverSeverity) return server
+  if (!localSeverity) return server
+  if (local.text === server.text || local.status === server.status) {
+    return { ...server, severity: localSeverity }
+  }
+  const localTs = Date.parse(local.updatedAt || '') || 0
+  const serverTs = Date.parse(server.updatedAt || '') || 0
+  if (localTs >= serverTs) {
+    return { ...server, severity: localSeverity }
+  }
+  return server
+}
+
+async function syncIssueDraftToServer() {
+  if (!mainTaskId.value || !isTaskDoing.value || syncingIssueDraft.value) return
+  syncingIssueDraft.value = true
+  try {
+    const res = await postTaskDraft(buildTaskSubmitPayload(true)) as {
+      issues?: Record<string, unknown>
+    }
+    const serverIssues = res?.issues && typeof res.issues === 'object' ? res.issues : null
+    if (serverIssues) {
+      const next = { ...issueRecords.value }
+      Object.entries(serverIssues).forEach(([rowId, item]) => {
+        const rec = normalizeIssueRecord(item)
+        if (!rec) return
+        next[rowId] = mergeIssueRecordPreferringSeverity(next[rowId], rec)
+      })
+      issueRecords.value = next
+    }
+    persistTaskListCache()
+  } catch {
+    toast(t.value.saveFail, 'error')
+  } finally {
+    syncingIssueDraft.value = false
+  }
+}
+
 function saveIssue() {
   if (!isTaskDoing.value) return
   if (!issueRowId.value) return
@@ -615,8 +665,10 @@ function saveIssue() {
     ...issueRecords.value,
     [issueRowId.value]: row,
   }
+  persistTaskListCache()
   toast(t.value.issueSaved)
   issueOpen.value = false
+  void syncIssueDraftToServer()
 }
 
 let lastGeo: { latitude: number; longitude: number; accuracy?: number; fetchedAt: number } | null = null
@@ -955,11 +1007,13 @@ async function hydrateTaskPage() {
           }
         })
         const issues = latest.issues && typeof latest.issues === 'object' ? latest.issues : {}
+        const mergedIssues = { ...issueRecords.value }
         Object.entries(issues).forEach(([rowId, item]) => {
           const rec = normalizeIssueRecord(item)
           if (!rec) return
-          issueRecords.value[rowId] = rec
+          mergedIssues[rowId] = mergeIssueRecordPreferringSeverity(mergedIssues[rowId], rec)
         })
+        issueRecords.value = mergedIssues
         persistTaskListCache()
       }
     } catch {

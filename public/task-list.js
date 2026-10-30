@@ -693,8 +693,39 @@
     return window.__uploadRecords || {};
   }
 
+  function formatIssueResultForSubmit(rec) {
+    const item = normalizeIssueRecord(rec);
+    if (!item) return null;
+    const text = String(item.text || "").trim();
+    let label = inspectionStatusLabel(item.status);
+    if (item.status === "abnormal" && item.severity) {
+      const sev = abnormalSeverityLabel(item.severity);
+      if (sev) label = `${label}（${sev}）`;
+    }
+    if (!label) return text;
+    if (item.status === "ok" || item.status === "no_equipment") {
+      return text && text !== label ? `${label}：${text}` : label;
+    }
+    return text && text !== label ? `${label}：${text}` : label;
+  }
+
   function collectIssueState() {
-    return window.__issueRecords || {};
+    const src = window.__issueRecords || {};
+    const out = {};
+    Object.entries(src).forEach(([rowId, raw]) => {
+      const rec = normalizeIssueRecord(raw);
+      if (!rec) return;
+      const row = {
+        status: rec.status,
+        text: rec.text,
+        updatedAt: rec.updatedAt,
+      };
+      if (rec.status === "abnormal" && rec.severity) row.severity = rec.severity;
+      const result = formatIssueResultForSubmit(rec);
+      if (result) row.result = result;
+      out[rowId] = row;
+    });
+    return out;
   }
 
   function getRequiredSlots() {

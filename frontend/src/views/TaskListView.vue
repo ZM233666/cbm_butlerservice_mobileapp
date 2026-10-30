@@ -22,6 +22,7 @@ import {
   ABNORMAL_SEVERITY_OPTIONS,
   normalizeAbnormalSeverity,
 } from '@/utils/inspectionSeverity'
+import { buildIssuesSubmitMap } from '@/utils/issueSubmitFormat'
 import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
 import {
   MAX_EXTRA_PHOTOS_PER_SLOT,
@@ -1525,7 +1526,7 @@ function buildTaskSubmitPayload(allowEmptyUploads = false) {
       taskId: mainTaskId.value,
     },
     uploads,
-    issues: issueRecords.value,
+    issues: buildIssuesSubmitMap(issueRecords.value),
     ...(allowEmptyUploads ? { allowEmptyUploads: true } : {}),
   }
 }

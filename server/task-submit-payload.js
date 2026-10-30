@@ -65,6 +65,8 @@ function normalizeIssueEntry(meta) {
   }
   if (text) row.text = text;
   if (severity) row.severity = severity;
+  const result = String(meta.result || "").trim();
+  if (result) row.result = result;
   if (meta.updatedAt) row.updatedAt = String(meta.updatedAt);
   return Object.keys(row).length ? row : null;
 }

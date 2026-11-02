@@ -2,6 +2,7 @@
  * task-submit / task-draft 请求体校验与规范化。
  */
 const { enrichIssueSubmitEntry } = require("./issue-submit-format");
+const { validateBasicInfoMileage } = require("./task-basic-fields");
 
 function pickTaskId(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
@@ -94,17 +95,28 @@ function countValidIssues(issues) {
   return Object.keys(normalizeIssuesMap(issues)).length;
 }
 
-function validateTaskWorkPayload(payload, { requireContent = false } = {}) {
+function validateTaskWorkPayload(payload, { requireContent = false, requireMileage = true } = {}) {
   const body = payload && typeof payload === "object" ? payload : {};
   const taskId = pickTaskId(body);
   if (!taskId) {
     return { ok: false, error: "task_id_required" };
+  }
+  const mileageCheck = validateBasicInfoMileage(body.basicInfo, { required: requireMileage });
+  if (!mileageCheck.ok) {
+    return { ok: false, error: mileageCheck.error };
   }
   const uploads = normalizeUploadsMap(body.uploads);
   const issues = normalizeIssuesMap(body.issues);
   const hasContent = Object.keys(uploads).length > 0 || Object.keys(issues).length > 0;
   if (requireContent && !hasContent && !body.allowEmptyUploads) {
     return { ok: false, error: "submit_payload_required" };
+  }
+  const basicInfo = {
+    ...(body.basicInfo && typeof body.basicInfo === "object" ? body.basicInfo : {}),
+    taskId,
+  };
+  if (mileageCheck.mileageKm != null) {
+    basicInfo.mileageKm = mileageCheck.mileageKm;
   }
   return {
     ok: true,
@@ -115,10 +127,7 @@ function validateTaskWorkPayload(payload, { requireContent = false } = {}) {
       ...body,
       uploads,
       issues,
-      basicInfo: {
-        ...(body.basicInfo && typeof body.basicInfo === "object" ? body.basicInfo : {}),
-        taskId,
-      },
+      basicInfo,
     },
   };
 }
@@ -132,7 +141,7 @@ function validateTaskSubmitPayload(payload, options = {}) {
 }
 
 function validateTaskDraftPayload(payload) {
-  return validateTaskWorkPayload(payload, { requireContent: false });
+  return validateTaskWorkPayload(payload, { requireContent: false, requireMileage: true });
 }
 
 module.exports = {

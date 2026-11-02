@@ -48,6 +48,12 @@
               </dd>
             </div>
             <div class="tl-basic__row">
+              <dt data-i18n="mileage">公里数</dt>
+              <dd>
+                <input type="text" name="mileageKm" id="f-mileage" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="" />
+              </dd>
+            </div>
+            <div class="tl-basic__row">
               <dt data-i18n="taskid">Main Task ID</dt>
               <dd>
                 <input type="text" name="taskId" id="f-task-id" class="tl-readonly" value="MT-CCBII-88421" readonly tabindex="-1" />
@@ -128,9 +134,9 @@
           <span class="tl-issue-field__label" id="issue-severity-label">请选择异常等级</span>
           <select id="issue-severity" class="tl-issue-select">
             <option value="">请选择异常等级</option>
-            <option value="severe">严重</option>
-            <option value="moderate">中等</option>
-            <option value="minor">一般</option>
+            <option value="minor">低风险</option>
+            <option value="moderate">中风险</option>
+            <option value="severe">高风险</option>
           </select>
         </label>
         <textarea id="issue-text" class="tl-issue-text" hidden placeholder="请描述异常现象或无法检测的原因"></textarea>

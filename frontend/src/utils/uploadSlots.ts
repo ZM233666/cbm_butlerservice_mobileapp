@@ -1,8 +1,11 @@
-/** 附加照片槽位：`{baseSlot}__extra_{1..n}`，展示名 `{baseLabel}01`、`02`… */
+/** 附加照片槽位：`{baseSlot}__extra_{1..n}`，展示名 `{baseLabel}01`…`04`（主图 1 + 附加 4，共 5 张） */
 
 export const EXTRA_UPLOAD_SLOT_MARKER = '__extra_'
 
-export const MAX_EXTRA_PHOTOS_PER_SLOT = 9
+/** 每个拍摄项除主图外最多附加张数（主图 + 4 附加 = 5 张，名称至 04） */
+export const MAX_EXTRA_PHOTOS_PER_SLOT = 4
+
+export const MAX_UPLOAD_PHOTOS_PER_SLOT = 1 + MAX_EXTRA_PHOTOS_PER_SLOT
 
 export function isExtraUploadSlot(slotId: string): boolean {
   return String(slotId).includes(EXTRA_UPLOAD_SLOT_MARKER)

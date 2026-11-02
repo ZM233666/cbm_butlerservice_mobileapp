@@ -9,16 +9,22 @@ function normalizeAbnormalSeverity(raw) {
 }
 
 const SEVERITY_LABEL_ZH = {
-  severe: "严重",
-  moderate: "中等",
-  minor: "一般",
+  severe: "高风险",
+  moderate: "中风险",
+  minor: "低风险",
 };
 
 function parseSeverityFromResultText(result) {
   const text = String(result || "");
-  if (text.includes("（严重）") || /\(\s*severe\s*\)/i.test(text)) return "severe";
-  if (text.includes("（中等）") || /\(\s*moderate\s*\)/i.test(text)) return "moderate";
-  if (text.includes("（一般）") || /\(\s*minor\s*\)/i.test(text)) return "minor";
+  if (text.includes("（高风险）") || text.includes("（严重）") || /\(\s*severe\s*\)/i.test(text)) {
+    return "severe";
+  }
+  if (text.includes("（中风险）") || text.includes("（中等）") || /\(\s*moderate\s*\)/i.test(text)) {
+    return "moderate";
+  }
+  if (text.includes("（低风险）") || text.includes("（一般）") || /\(\s*minor\s*\)/i.test(text)) {
+    return "minor";
+  }
   return "";
 }
 

@@ -25,6 +25,7 @@ import {
 } from '@/utils/inspectionSeverity'
 import { buildIssueSubmitEntry, buildIssuesSubmitMap } from '@/utils/issueSubmitFormat'
 import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
+import { normalizeMileageKmInput, sanitizeMileageKmDigits } from '@/utils/mileageKm'
 import {
   MAX_EXTRA_PHOTOS_PER_SLOT,
   buildCompactUploadSlotMoves,
@@ -56,6 +57,7 @@ type ClientCaptureMeta = { capturedAt: string; latitude?: number; longitude?: nu
 
 const maintType = ref<string>('c4')
 const taskDetail = ref<TaskDetail | null>(null)
+const mileageKmInput = ref('')
 const guidanceRows = ref<GuidanceRow[]>([])
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture']; displayName?: string }>>({})
 const localPreviewRecords = ref<Record<string, string>>({})
@@ -164,6 +166,13 @@ const basicMaintLabel = computed(() =>
 const maintTemplate = computed(() => maintToTemplate(maintType.value) || 'c4c6')
 const basicTaskId = computed(() => displayField(taskDetail.value?.taskId || mainTaskId.value))
 const basicDeadline = computed(() => displayField(taskDetail.value?.deadline || String(route.query.deadline || '')))
+
+function applyMileageFromDetail(task: TaskDetail | null | undefined) {
+  if (task?.mileageKm != null && Number.isFinite(Number(task.mileageKm))) {
+    mileageKmInput.value = String(Math.trunc(Number(task.mileageKm)))
+  }
+}
+
 const homeRefreshStamp = ref(0)
 const backToHome = computed(() => {
   if (!homeRefreshStamp.value) return '/'
@@ -389,6 +398,25 @@ function focusFirstIncompleteInspection() {
 const isTaskDone = computed(() => currentTaskStatus.value === 'done')
 const isTaskTodo = computed(() => currentTaskStatus.value === 'todo')
 const isTaskDoing = computed(() => currentTaskStatus.value === 'doing')
+
+function validateMileageForWork(): boolean {
+  if (!isTaskDoing.value) return true
+  const n = normalizeMileageKmInput(mileageKmInput.value)
+  if (n != null) return true
+  if (!String(mileageKmInput.value || '').trim()) {
+    toast(t.value.mileageRequired, 'warn')
+  } else {
+    toast(t.value.mileageInvalid, 'warn')
+  }
+  return false
+}
+
+function onMileageKmInput(event: Event) {
+  const el = event.target as HTMLInputElement
+  const next = sanitizeMileageKmDigits(el.value)
+  if (el.value !== next) el.value = next
+  mileageKmInput.value = next
+}
 const isTaskRejected = computed(() => currentTaskStatus.value === 'rejected')
 const editRequestBtnText = computed(() => {
   const dict = t.value as Record<string, string>
@@ -618,6 +646,7 @@ function mergeIssueRecordPreferringSeverity(
 
 async function syncIssueDraftToServer() {
   if (!mainTaskId.value || !isTaskDoing.value || syncingIssueDraft.value) return
+  if (!validateMileageForWork()) return
   syncingIssueDraft.value = true
   try {
     const res = await postTaskDraft(buildTaskSubmitPayload(true)) as {
@@ -1001,6 +1030,7 @@ function readTaskListCache() {
       currentTaskStatus?: 'todo' | 'doing' | 'done' | 'rejected'
       taskRejected?: boolean
       maintType?: string
+      mileageKm?: string
     }
   } catch {
     return null
@@ -1014,6 +1044,7 @@ function persistTaskListCache() {
       issueRecords: issueRecords.value,
       currentTaskStatus: currentTaskStatus.value,
       maintType: maintType.value,
+      mileageKm: mileageKmInput.value,
     }))
   } catch { /* ignore quota / private mode */ }
 }
@@ -1039,6 +1070,7 @@ async function hydrateTaskPage() {
   applyMaintFromQueryOrDetail(route.query.maint)
 
   taskDetail.value = null
+  mileageKmInput.value = ''
   uploadRecords.value = {}
   issueRecords.value = {}
   preparedUploads.value = {}
@@ -1070,6 +1102,9 @@ async function hydrateTaskPage() {
       currentTaskStatus.value = 'rejected'
     }
     if (cached.maintType) applyMaintFromQueryOrDetail(cached.maintType)
+    if (cached.mileageKm != null && String(cached.mileageKm).trim()) {
+      mileageKmInput.value = String(cached.mileageKm).trim()
+    }
   }
 
   if (hydrateToken !== hydrateGeneration) return
@@ -1094,6 +1129,7 @@ async function hydrateTaskPage() {
         if (hydrateToken !== hydrateGeneration) return
         if (detailData?.task) {
           taskDetail.value = detailData.task
+          applyMileageFromDetail(detailData.task)
           if (detailData.task.maint) applyMaintFromQueryOrDetail(detailData.task.maint)
           if (
             detailData.task.status === 'todo'
@@ -1656,6 +1692,7 @@ async function setTaskStatus(status: 'todo' | 'doing' | 'done' | 'rejected'): Pr
 
 async function onSave() {
   if (savingDraft.value) return
+  if (!validateMileageForWork()) return
   savingDraft.value = true
   try {
     await postTaskDraft(buildTaskSubmitPayload(true))
@@ -1701,11 +1738,13 @@ function buildTaskSubmitPayload(allowEmptyUploads = false) {
       ...(meta?.displayName ? { displayName: meta.displayName } : {}),
     }
   })
+  const mileageKm = normalizeMileageKmInput(mileageKmInput.value)
   return {
     basicInfo: {
       maintenanceType: maintType.value,
       employeeId: auth.user?.employeeId,
       taskId: mainTaskId.value,
+      ...(mileageKm != null ? { mileageKm } : {}),
     },
     uploads,
     issues: buildIssuesSubmitMap(issueRecords.value),
@@ -1740,6 +1779,7 @@ async function finalizeSubmit(submitResp: TaskSubmitResponse) {
 }
 
 async function onSubmit() {
+  if (!validateMileageForWork()) return
   if (hasBusyUploads()) {
     toast(
       lang.value === 'zh'
@@ -1859,7 +1899,7 @@ watch(mainTaskId, (next, prev) => {
   if (next && next !== prev) hydrateTaskPage()
 })
 
-watch([uploadRecords, issueRecords, currentTaskStatus, maintType], () => {
+watch([uploadRecords, issueRecords, currentTaskStatus, maintType, mileageKmInput], () => {
   persistTaskListCache()
 }, { deep: true })
 
@@ -1918,6 +1958,24 @@ onUnmounted(() => {
           <div class="tl-basic__row"><dt>{{ t.train }}</dt><dd><input class="tl-readonly" :value="basicTrainNo" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="basicEmployeeId" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.maint }}</dt><dd><input class="tl-readonly" :value="basicMaintLabel" readonly /></dd></div>
+          <div class="tl-basic__row">
+            <dt>{{ t.mileage }}<span v-if="isTaskDoing" aria-hidden="true"> *</span></dt>
+            <dd>
+              <input
+                v-model="mileageKmInput"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                autocomplete="off"
+                class="tl-readonly"
+                :class="{ 'tl-mileage-input': isTaskDoing }"
+                :readonly="!isTaskDoing"
+                :placeholder="isTaskDoing ? t.mileagePlaceholder : ''"
+                :aria-required="isTaskDoing"
+                @input="onMileageKmInput"
+              />
+            </dd>
+          </div>
           <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" :value="basicTaskId" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.deadline }}</dt><dd><input class="tl-readonly" :value="basicDeadline" readonly /></dd></div>
         </dl>

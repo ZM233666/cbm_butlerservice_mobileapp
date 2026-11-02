@@ -21,6 +21,8 @@ export interface TaskDetail {
   maint: string
   depot: string
   trainNo: string
+  /** 走行公里数（km） */
+  mileageKm?: number
   deadline: string
   status: 'todo' | 'doing' | 'done' | 'rejected'
   meta?: string
@@ -84,7 +86,7 @@ export interface InspectionRecord {
   status: InspectionStatus
   text: string
   updatedAt: string
-  /** 仅 abnormal：severe=严重, moderate=中等, minor=一般 */
+  /** 仅 abnormal：severe=高风险, moderate=中风险, minor=低风险 */
   severity?: AbnormalSeverity
 }
 

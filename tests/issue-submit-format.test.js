@@ -8,7 +8,7 @@ test("normalizeIssuesMap preserves abnormal severity and result for draft/submit
       status: "abnormal",
       text: "测试异常",
       severity: "severe",
-      result: "发现异常（严重）：测试异常",
+      result: "发现异常（高风险）：测试异常",
       updatedAt: "2026-10-30T03:09:25.395Z",
     },
   });
@@ -16,7 +16,7 @@ test("normalizeIssuesMap preserves abnormal severity and result for draft/submit
     status: "abnormal",
     text: "测试异常",
     severity: "severe",
-    result: "发现异常（严重）：测试异常",
+    result: "发现异常（高风险）：测试异常",
     updatedAt: "2026-10-30T03:09:25.395Z",
   });
 });

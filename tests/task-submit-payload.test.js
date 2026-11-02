@@ -39,7 +39,7 @@ test("normalizeIssuesMap keeps status-only and text issues", () => {
       status: "abnormal",
       text: "漏油",
       severity: "severe",
-      result: "发现异常（严重）：漏油",
+      result: "发现异常（高风险）：漏油",
     },
     r7: { status: "abnormal", text: "x", severity: "invalid" },
   });
@@ -52,7 +52,7 @@ test("normalizeIssuesMap keeps status-only and text issues", () => {
       status: "abnormal",
       text: "漏油",
       severity: "severe",
-      result: "发现异常（严重）：漏油",
+      result: "发现异常（高风险）：漏油",
     },
     r7: { status: "abnormal", text: "x", result: "发现异常：x" },
   });
@@ -64,14 +64,14 @@ test("validateTaskSubmitPayload requires taskId and content by default", () => {
     error: "task_id_required",
   });
   assert.deepEqual(
-    validateTaskSubmitPayload({ basicInfo: { taskId: "T1" }, uploads: {}, issues: {} }),
+    validateTaskSubmitPayload({ basicInfo: { taskId: "T1", mileageKm: 1 }, uploads: {}, issues: {} }),
     { ok: false, error: "submit_payload_required" },
   );
 });
 
 test("validateTaskSubmitPayload allows issues-only submit", () => {
   const result = validateTaskSubmitPayload({
-    basicInfo: { taskId: "T1" },
+    basicInfo: { taskId: "T1", mileageKm: 5000 },
     uploads: {},
     issues: { r1: { status: "ok" } },
   });
@@ -81,14 +81,20 @@ test("validateTaskSubmitPayload allows issues-only submit", () => {
 
 test("validateTaskSubmitPayload allows empty payload when not required", () => {
   const result = validateTaskSubmitPayload(
-    { basicInfo: { taskId: "T1" }, uploads: {}, issues: {} },
+    { basicInfo: { taskId: "T1", mileageKm: 100 }, uploads: {}, issues: {} },
     { requireContent: false },
   );
   assert.equal(result.ok, true);
 });
 
-test("validateTaskDraftPayload allows empty draft save", () => {
-  const result = validateTaskDraftPayload({ basicInfo: { taskId: "T1" } });
+test("validateTaskDraftPayload requires mileage on draft save", () => {
+  assert.deepEqual(validateTaskDraftPayload({ basicInfo: { taskId: "T1" } }), {
+    ok: false,
+    error: "mileage_required",
+  });
+  const result = validateTaskDraftPayload({
+    basicInfo: { taskId: "T1", mileageKm: "120000" },
+  });
   assert.equal(result.ok, true);
-  assert.equal(result.taskId, "T1");
+  assert.equal(result.body.basicInfo.mileageKm, 120000);
 });

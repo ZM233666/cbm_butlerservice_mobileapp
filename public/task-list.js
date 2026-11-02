@@ -61,6 +61,10 @@
       maint: "修程",
       deadline: "截止日期",
       taskid: "主任务 ID",
+      mileage: "公里数",
+      mileagePlaceholder: "请输入公里数",
+      mileageRequired: "请填写公里数",
+      mileageInvalid: "公里数格式无效",
       colSeq: "序号",
       colDesc: "操作说明",
       colUpload: "上传图片",
@@ -92,9 +96,9 @@
       issueNeedStatus: "请先选择检查结果",
       issueNeedDetail: "请填写异常现象或无法检测的原因",
       issueSeverityPlaceholder: "请选择异常等级",
-      issueSeveritySevere: "严重",
-      issueSeverityModerate: "中等",
-      issueSeverityMinor: "一般",
+      issueSeveritySevere: "高风险",
+      issueSeverityModerate: "中风险",
+      issueSeverityMinor: "低风险",
       issueNeedSeverity: "请选择异常等级",
       submitNeedAllResults: "请先完成本任务全部检查结果后再提交",
       issueSave: "保存",
@@ -124,6 +128,10 @@
       maint: "Maintenance Type",
       deadline: "Deadline",
       taskid: "Main Task ID",
+      mileage: "Mileage (km)",
+      mileagePlaceholder: "Enter mileage",
+      mileageRequired: "Mileage is required",
+      mileageInvalid: "Invalid mileage",
       colSeq: "No.",
       colDesc: "Instructions",
       colUpload: "Upload",
@@ -155,9 +163,9 @@
       issueNeedStatus: "Please select an inspection result",
       issueNeedDetail: "Please describe the abnormality or why it cannot be inspected",
       issueSeverityPlaceholder: "Select severity",
-      issueSeveritySevere: "Severe",
-      issueSeverityModerate: "Moderate",
-      issueSeverityMinor: "Minor",
+      issueSeveritySevere: "High risk",
+      issueSeverityModerate: "Medium risk",
+      issueSeverityMinor: "Low risk",
       issueNeedSeverity: "Please select severity",
       submitNeedAllResults: "Complete all inspection results before submitting",
       issueSave: "Save",
@@ -445,6 +453,7 @@
         maint: t.maint,
         deadline: t.deadline,
         taskid: t.taskid,
+        mileage: t.mileage,
         "col-seq": t.colSeq,
         "col-desc": t.colDesc,
         "col-upload": t.colUpload,
@@ -461,6 +470,9 @@
     const btnSubmit = document.getElementById("btn-submit");
     if (btnSave) btnSave.textContent = t.save;
     if (btnSubmit) btnSubmit.textContent = t.submit;
+
+    const mileageEl = document.getElementById("f-mileage");
+    if (mileageEl) mileageEl.placeholder = t.mileagePlaceholder || "";
 
     const st = document.getElementById("schematic-title");
     const cl = document.getElementById("dlg-close");
@@ -494,9 +506,9 @@
     if (issueSeverity) {
       const sevOpts = [
         ["", t.issueSeverityPlaceholder],
-        ["severe", t.issueSeveritySevere],
-        ["moderate", t.issueSeverityModerate],
         ["minor", t.issueSeverityMinor],
+        ["moderate", t.issueSeverityModerate],
+        ["severe", t.issueSeveritySevere],
       ];
       const prev = issueSeverity.value;
       issueSeverity.innerHTML = sevOpts
@@ -677,7 +689,47 @@
     toast._t = setTimeout(() => el.classList.remove("is-show"), 2200);
   }
 
+  function sanitizeMileageKmDigits(raw) {
+    const digits = String(raw ?? "").replace(/\D/g, "");
+    if (!digits) return "";
+    const trimmed = digits.replace(/^0+(?=\d)/, "");
+    const normalized = trimmed || "0";
+    return normalized.length > 7 ? normalized.slice(0, 7) : normalized;
+  }
+
+  function normalizeMileageKm(raw) {
+    const text = sanitizeMileageKmDigits(raw);
+    if (!text) return null;
+    const num = Number(text);
+    if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0 || num > 9999999) return null;
+    return num;
+  }
+
+  function bindMileageInput() {
+    const mileageEl = document.getElementById("f-mileage");
+    if (!mileageEl || mileageEl.dataset.mileageBound) return;
+    mileageEl.dataset.mileageBound = "1";
+    mileageEl.addEventListener("input", () => {
+      const next = sanitizeMileageKmDigits(mileageEl.value);
+      if (mileageEl.value !== next) mileageEl.value = next;
+    });
+  }
+
+  function validateMileageForWork() {
+    const el = document.getElementById("f-mileage");
+    const raw = el ? el.value : "";
+    const n = normalizeMileageKm(raw);
+    if (n != null) return n;
+    if (!String(raw || "").trim()) {
+      toast(i18n[lang].mileageRequired);
+    } else {
+      toast(i18n[lang].mileageInvalid);
+    }
+    return null;
+  }
+
   function collectBasicInfo() {
+    const mileageKm = normalizeMileageKm(document.getElementById("f-mileage")?.value);
     return {
       employeeId: document.getElementById("f-employee-id")?.value ?? "",
       depot: document.getElementById("f-depot")?.value ?? "",
@@ -686,6 +738,7 @@
       maintenanceType: getMaintType(),
       deadline: document.getElementById("f-deadline")?.value ?? "",
       mainTaskId: document.getElementById("f-task-id")?.value ?? "",
+      ...(mileageKm != null ? { mileageKm } : {}),
     };
   }
 
@@ -710,6 +763,7 @@
   }
 
   async function syncIssueDraftToServer() {
+    if (validateMileageForWork() == null) return;
     const basic = collectBasicInfo();
     const taskId = String(basic.taskId || basic.mainTaskId || "").trim();
     if (!taskId) return;
@@ -1242,6 +1296,7 @@
   });
 
   document.getElementById("btn-submit")?.addEventListener("click", async () => {
+    if (validateMileageForWork() == null) return;
     if (getIncompleteInspectionRows().length) {
       toast(i18n[lang].submitNeedAllResults);
       focusFirstIncompleteInspection();
@@ -1315,6 +1370,7 @@
     updateSchematicZoomUI();
     bindSchematicPinch();
     applyLang();
+    bindMileageInput();
     updateSubmitButtonState();
   }
 

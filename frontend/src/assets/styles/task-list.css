@@ -121,6 +121,12 @@ body.tl-page {
   cursor: default;
 }
 
+.tl-basic__row input.tl-mileage-input {
+  background: #fff !important;
+  color: #18181b !important;
+  cursor: text;
+}
+
 .tl-select {
   width: 100%;
   min-height: var(--ui-btn-h);

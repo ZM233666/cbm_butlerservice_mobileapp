@@ -6,7 +6,7 @@
 const { validateTaskDraftPayload } = require("../server/task-submit-payload");
 
 const sample = {
-  basicInfo: { taskId: "TASK-DEMO-001", employeeId: "1", maintenanceType: "c4" },
+  basicInfo: { taskId: "TASK-DEMO-001", employeeId: "1", maintenanceType: "c4", mileageKm: 120000 },
   issues: {
     r1: {
       status: "abnormal",
@@ -27,7 +27,7 @@ const row = validated.issues.r1;
 const ok =
   row &&
   row.severity === "severe" &&
-  row.result === "发现异常（严重）：测试异常" &&
+  row.result === "发现异常（高风险）：测试异常" &&
   row.text === "测试异常";
 if (!ok) {
   console.error("FAIL issues.r1:", row);

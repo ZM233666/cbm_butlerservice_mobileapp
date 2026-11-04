@@ -87,11 +87,10 @@ test("validateTaskSubmitPayload allows empty payload when not required", () => {
   assert.equal(result.ok, true);
 });
 
-test("validateTaskDraftPayload requires mileage on draft save", () => {
-  assert.deepEqual(validateTaskDraftPayload({ basicInfo: { taskId: "T1" } }), {
-    ok: false,
-    error: "mileage_required",
-  });
+test("validateTaskDraftPayload allows empty mileage on draft save", () => {
+  const empty = validateTaskDraftPayload({ basicInfo: { taskId: "T1" } });
+  assert.equal(empty.ok, true);
+  assert.equal(empty.body.basicInfo.mileageKm, undefined);
   const result = validateTaskDraftPayload({
     basicInfo: { taskId: "T1", mileageKm: "120000" },
   });

@@ -492,15 +492,18 @@
     if (issueHelp) issueHelp.textContent = t.issueDialogHelp;
     if (issueStatus) {
       const options = [
-        ["", t.issueStatusPlaceholder],
         ["ok", t.issueStatusOk],
         ["abnormal", t.issueStatusAbnormal],
         ["undetectable", t.issueStatusUndetectable],
         ["no_equipment", t.issueStatusNoEquipment],
       ];
+      const prevStatus = String(issueStatus.value || "").trim();
       issueStatus.innerHTML = options
         .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`)
         .join("");
+      issueStatus.value = ["ok", "abnormal", "undetectable", "no_equipment"].includes(prevStatus)
+        ? prevStatus
+        : "ok";
     }
     if (issueSeverityLabel) issueSeverityLabel.textContent = t.issueSeverityPlaceholder;
     if (issueSeverity) {
@@ -715,17 +718,26 @@
     });
   }
 
-  function validateMileageForWork() {
+  function validateMileageFormat() {
+    const el = document.getElementById("f-mileage");
+    const raw = el ? el.value : "";
+    if (!String(raw || "").trim()) return true;
+    if (normalizeMileageKm(raw) != null) return true;
+    toast(i18n[lang].mileageInvalid);
+    return false;
+  }
+
+  function validateMileageForSubmit() {
     const el = document.getElementById("f-mileage");
     const raw = el ? el.value : "";
     const n = normalizeMileageKm(raw);
-    if (n != null) return n;
+    if (n != null) return true;
     if (!String(raw || "").trim()) {
       toast(i18n[lang].mileageRequired);
-    } else {
-      toast(i18n[lang].mileageInvalid);
+      return false;
     }
-    return null;
+    toast(i18n[lang].mileageInvalid);
+    return false;
   }
 
   function collectBasicInfo() {
@@ -763,7 +775,7 @@
   }
 
   async function syncIssueDraftToServer() {
-    if (validateMileageForWork() == null) return;
+    if (!validateMileageFormat()) return;
     const basic = collectBasicInfo();
     const taskId = String(basic.taskId || basic.mainTaskId || "").trim();
     if (!taskId) return;
@@ -1058,9 +1070,10 @@
     const severityEl = document.getElementById("issue-severity");
     if (!dlg || !statusEl || !textEl) return;
     const rec = normalizeIssueRecord(window.__issueRecords?.[rowId]);
-    statusEl.value = rec?.status || "";
+    // 首次未选择时默认「检查正常」；已保存则保留原选项
+    statusEl.value = rec?.status || "ok";
     if (severityEl) severityEl.value = rec?.status === "abnormal" ? rec.severity || "" : "";
-    textEl.value = rec?.text || "";
+    textEl.value = rec?.status === "ok" || rec?.status === "no_equipment" ? "" : (rec?.text || "");
     syncIssueDetailVisibility();
     dlg.showModal();
     statusEl.focus();
@@ -1296,7 +1309,7 @@
   });
 
   document.getElementById("btn-submit")?.addEventListener("click", async () => {
-    if (validateMileageForWork() == null) return;
+    if (!validateMileageForSubmit()) return;
     if (getIncompleteInspectionRows().length) {
       toast(i18n[lang].submitNeedAllResults);
       focusFirstIncompleteInspection();

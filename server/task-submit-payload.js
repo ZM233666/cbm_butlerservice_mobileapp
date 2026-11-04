@@ -141,7 +141,7 @@ function validateTaskSubmitPayload(payload, options = {}) {
 }
 
 function validateTaskDraftPayload(payload) {
-  return validateTaskWorkPayload(payload, { requireContent: false, requireMileage: true });
+  return validateTaskWorkPayload(payload, { requireContent: false, requireMileage: false });
 }
 
 module.exports = {

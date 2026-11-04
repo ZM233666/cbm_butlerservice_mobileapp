@@ -399,15 +399,15 @@ const isTaskDone = computed(() => currentTaskStatus.value === 'done')
 const isTaskTodo = computed(() => currentTaskStatus.value === 'todo')
 const isTaskDoing = computed(() => currentTaskStatus.value === 'doing')
 
-function validateMileageForWork(): boolean {
+function validateMileageForWork({ required = false }: { required?: boolean } = {}): boolean {
   if (!isTaskDoing.value) return true
   const n = normalizeMileageKmInput(mileageKmInput.value)
   if (n != null) return true
   if (!String(mileageKmInput.value || '').trim()) {
-    toast(t.value.mileageRequired, 'warn')
-  } else {
-    toast(t.value.mileageInvalid, 'warn')
+    if (required) toast(t.value.mileageRequired, 'warn')
+    return !required
   }
+  toast(t.value.mileageInvalid, 'warn')
   return false
 }
 
@@ -607,9 +607,10 @@ function openIssue(rowId: string) {
   if (!isTaskDoing.value) return
   issueRowId.value = rowId
   const rec = normalizeIssueRecord(issueRecords.value[rowId])
-  issueStatus.value = rec?.status || ''
+  // 首次未选择时默认「检查正常」；已保存则保留原选项
+  issueStatus.value = rec?.status || 'ok'
   issueSeverity.value = rec?.status === 'abnormal' ? (rec.severity || '') : ''
-  issueText.value = rec?.text || ''
+  issueText.value = rec?.status === 'ok' || rec?.status === 'no_equipment' ? '' : (rec?.text || '')
   issueOpen.value = true
 }
 
@@ -646,7 +647,7 @@ function mergeIssueRecordPreferringSeverity(
 
 async function syncIssueDraftToServer() {
   if (!mainTaskId.value || !isTaskDoing.value || syncingIssueDraft.value) return
-  if (!validateMileageForWork()) return
+  if (!validateMileageForWork({ required: false })) return
   syncingIssueDraft.value = true
   try {
     const res = await postTaskDraft(buildTaskSubmitPayload(true)) as {
@@ -1692,7 +1693,7 @@ async function setTaskStatus(status: 'todo' | 'doing' | 'done' | 'rejected'): Pr
 
 async function onSave() {
   if (savingDraft.value) return
-  if (!validateMileageForWork()) return
+  if (!validateMileageForWork({ required: false })) return
   savingDraft.value = true
   try {
     await postTaskDraft(buildTaskSubmitPayload(true))
@@ -1779,7 +1780,7 @@ async function finalizeSubmit(submitResp: TaskSubmitResponse) {
 }
 
 async function onSubmit() {
-  if (!validateMileageForWork()) return
+  if (!validateMileageForWork({ required: true })) return
   if (hasBusyUploads()) {
     toast(
       lang.value === 'zh'
@@ -2145,7 +2146,6 @@ onUnmounted(() => {
           <label class="tl-issue-field">
             <span class="tl-issue-field__label">{{ t.issueStatusPlaceholder }}</span>
             <select v-model="issueStatus" class="tl-issue-select" @change="onIssueStatusChange">
-              <option value="">{{ t.issueStatusPlaceholder }}</option>
               <option value="ok">{{ t.issueStatusOk }}</option>
               <option value="abnormal">{{ t.issueStatusAbnormal }}</option>
               <option value="undetectable">{{ t.issueStatusUndetectable }}</option>

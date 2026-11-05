@@ -1862,8 +1862,10 @@ app.post("/api/manager/assignments", async (req, res) => {
   }
 });
 
-app.get("/RVSChinaDT_Logo.png", (_req, res) => {
+function sendBrandLogo(res) {
   const logoCandidates = [
+    path.join(projectRoot, "frontend", "dist", "Rail-China-Digital-Team-Logo.png"),
+    path.join(projectRoot, "frontend", "public", "Rail-China-Digital-Team-Logo.png"),
     path.join(projectRoot, "RVSChinaDT_Logo.png"),
     path.join(projectRoot, "frontend", "dist", "RVSChinaDT_Logo.png"),
     path.join(projectRoot, "frontend", "public", "RVSChinaDT_Logo.png"),
@@ -1872,8 +1874,11 @@ app.get("/RVSChinaDT_Logo.png", (_req, res) => {
   if (!logoPath) {
     return res.status(404).json({ ok: false, error: "logo_not_found" });
   }
-  res.sendFile(logoPath);
-});
+  return res.sendFile(logoPath);
+}
+
+app.get("/Rail-China-Digital-Team-Logo.png", (_req, res) => sendBrandLogo(res));
+app.get("/RVSChinaDT_Logo.png", (_req, res) => sendBrandLogo(res));
 
 app.use("/PicSamples", express.static(cfg.picSamplesDir));
 app.use("/uploads/task", express.static(cfg.uploadsDir));

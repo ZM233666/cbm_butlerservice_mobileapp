@@ -1,0 +1,2597 @@
+{
+  "source": "Digital管家式服务V1.0模板.xlsx",
+  "version": "1.0",
+  "templateSelection": {
+    "sourceSheet": "MANU",
+    "axleGroups": {
+      "8Axle": [
+        "HXD1",
+        "SS4G",
+        "FXD1B"
+      ],
+      "6Axle": [
+        "*"
+      ]
+    },
+    "maintenanceGroups": {
+      "C1C2C3": [
+        "C1",
+        "C2",
+        "C3"
+      ],
+      "C4C5C6": [
+        "C4",
+        "C5",
+        "C6"
+      ]
+    },
+    "rules": [
+      {
+        "priority": 1,
+        "models": [
+          "HXD1",
+          "SS4G",
+          "FXD1B"
+        ],
+        "maintenance": [
+          "C1",
+          "C2",
+          "C3"
+        ],
+        "template": "8Axle+C1C2C3"
+      },
+      {
+        "priority": 2,
+        "models": [
+          "HXD1",
+          "SS4G",
+          "FXD1B"
+        ],
+        "maintenance": [
+          "C4",
+          "C5",
+          "C6"
+        ],
+        "template": "8Axle+C4C5C6"
+      },
+      {
+        "priority": 3,
+        "models": [
+          "*"
+        ],
+        "maintenance": [
+          "C1",
+          "C2",
+          "C3"
+        ],
+        "template": "6Axle+C1C2C3",
+        "fallback": true
+      },
+      {
+        "priority": 4,
+        "models": [
+          "*"
+        ],
+        "maintenance": [
+          "C4",
+          "C5",
+          "C6"
+        ],
+        "template": "6Axle+C4C5C6",
+        "fallback": true
+      }
+    ]
+  },
+  "templates": {
+    "8Axle+C1C2C3": {
+      "name": "8Axle+C1C2C3",
+      "rows": [
+        {
+          "id": "8axle-c1c2c3-1",
+          "seq": "1",
+          "description": "机车号照片:\n1.上车服务前，请确认：车辆无电，铁鞋已放置，禁动牌已放置；\n2.对机车号拍照（必须清晰完整，便于识别）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LOCO Number",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-1-1",
+              "label": "LOCO Number"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-2-1",
+          "seq": "2.1",
+          "description": "EBV基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBV铭牌",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-2-1-1",
+              "label": "EBV铭牌"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-2-2",
+          "seq": "2.2",
+          "description": "EBV外观检查:\n1.检查EBV大小闸手柄各位置定位准确;\n2.推动过程中无过大阻力；\n3.检查EBV航空插头卡扣是否到位;\n4.插头照片需拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBV PLUG",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-2-2-1",
+              "label": "EBV PLUG"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-2-3",
+          "seq": "2.3",
+          "description": "EBV外观检查: \n1.检查21号阀相关管路的连接；\n2.检查NB11相关管路的连接；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBV PIPE\nNB11 CAB",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-2-3-1",
+              "label": "EBV PIPE"
+            },
+            {
+              "slot": "8axle-c1c2c3-2-3-2",
+              "label": "NB11 CAB"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-3-1",
+          "seq": "3.1",
+          "description": "IPM基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM PN\nIPM SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-3-1-1",
+              "label": "IPM PN"
+            },
+            {
+              "slot": "8axle-c1c2c3-3-1-2",
+              "label": "IPM SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-3-2",
+          "seq": "3.2",
+          "description": "IPM外观检查：\n对所有插头进行目视检查，确认紧固到位。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-4",
+          "seq": "4",
+          "description": "EBOX外观检查：\n1.仔细检查继电器的底座是否紧固，继电器与底座是否安装正常，继电器线缆连接是否固定到位，布线是否规范（如与端子排干涉、各线束是否存在接磨）；\n2.J4跳线是否老化（个别车型继电器座跳线老化可能需要联系项目进行更换）；\n3.需要将所有继电器状态及端子排拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "继电器1\n继电器2\n继电器3\n继电器4\n",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-4-1",
+              "label": "继电器1"
+            },
+            {
+              "slot": "8axle-c1c2c3-4-2",
+              "label": "继电器2"
+            },
+            {
+              "slot": "8axle-c1c2c3-4-3",
+              "label": "继电器3"
+            },
+            {
+              "slot": "8axle-c1c2c3-4-4",
+              "label": "继电器4"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-5-1",
+          "seq": "5.1",
+          "description": "BCM外观检查：\n1.检查BCM的HARTING SOCKET螺栓有无拧紧(备注：包括底部的螺栓同样需要用手探知是否有松动)；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCM Plug1\nBCM Plug2",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-5-1-1",
+              "label": "BCM Plug1"
+            },
+            {
+              "slot": "8axle-c1c2c3-5-1-2",
+              "label": "BCM Plug2"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-5-2",
+          "seq": "5.2",
+          "description": "BCM内辅助模块检查：\n1.检查所有辅助模块开关的插头状态；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "辅助模块",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-5-2-1",
+              "label": "辅助模块"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-1",
+          "seq": "6.1",
+          "description": "BPCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BPCP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-1-1",
+              "label": "BPCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-2",
+          "seq": "6.2",
+          "description": "ERCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "ERCP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-2-1",
+              "label": "ERCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-3",
+          "seq": "6.3",
+          "description": "DBTV基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "DBTV SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-3-1",
+              "label": "DBTV SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-4",
+          "seq": "6.4",
+          "description": "16CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "16CP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-4-1",
+              "label": "16CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-5",
+          "seq": "6.5",
+          "description": "20CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "20CP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-5-1",
+              "label": "20CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-6",
+          "seq": "6.6",
+          "description": "BCCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCCP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-6-1",
+              "label": "BCCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-7",
+          "seq": "6.7",
+          "description": "13CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "13CP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-7-1",
+              "label": "13CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-8",
+          "seq": "6.8",
+          "description": "PSJB基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "PSJB SN",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-8-1",
+              "label": "PSJB SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-9",
+          "seq": "6.9",
+          "description": "LRU航空检查：\n1.检查EPCU各个LRU上的航空插头卡扣是否已经拧到位（用手轻轻逆时针方向转动插头，看是否有明显的阻力），如果发现有松动，则需要打开检查，如果发现O型圈已丢失，需要及时安装新的O型圈 （PN： 779390），如果发现插头里已经有O型圈，但仍然松动，则需要在检查结果中做好记录，并联系客户对松动的插头进行处理。如部分客户已经对插头进行了绝缘胶带捆绑，则在检查结果中记录并确认已经拧紧即可；\n2.需要将J103 状态拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "J103",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-9-1",
+              "label": "J103"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-6-10",
+          "seq": "6.10",
+          "description": "EPCU总风滤芯检查：\n1.检查是否能正常排水（存在长期不排水导致模块油污严重的情况）；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "总风滤芯",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-6-10-1",
+              "label": "总风滤芯"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-7",
+          "seq": "7",
+          "description": "断钩保护开关检查：\n1.检查断钩保护开关的插头是否正常拧紧;\n2.确认安装面是否有泄露;\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "A71",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-7-1",
+              "label": "A71"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-8",
+          "seq": "8",
+          "description": "IPM和EPCU指示灯检查（送电前请确认满足送电条件，如：车下无人作业，其他设备允许上电，提醒车内作业人员即将送电等）：\n1.检查IPM，EPCU各指示灯状态；\n2.换端及各操作模式切换功能正常；\n备注：制动系统启动时间在2分钟之内；请在微机、制动机完全启动后进行换端等操作。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无需该项",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-9",
+          "seq": "9",
+          "description": "LCDM功能检查：\n1.检查LCDMA外观无损坏。屏幕显示正常，无花、白、黑屏或亮线，各按钮功能正常；\n2.确认LCDM软件版本（以最新版本为准），当前版本参考：4.19；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDM SW",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-9-1",
+              "label": "LCDM SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-10-1",
+          "seq": "10.1",
+          "description": "节点扫描：\n1.通过PTU扫描节点；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EPCU SW",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-10-1-1",
+              "label": "EPCU SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c1c2c3-10-2",
+          "seq": "10.2",
+          "description": "各类日志下载：\n1.下载EAB, EPCU, EBV日志；\n2.检查日志是否存在异常。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "Abnormal Log",
+          "buttons": [
+            {
+              "slot": "8axle-c1c2c3-10-2-1",
+              "label": "Abnormal Log"
+            }
+          ],
+          "applicability": "All",
+          "remarks": "电脑端：下载日志（Bin & Txt），解析，打包上传。\n手机端：检查正常无需上传图片；发现异常时再上传异常照片。",
+          "uploadHint": "仅检查异常时需上传，可多张按序号自动编号",
+          "uploadRequiredWhen": "abnormal"
+        }
+      ]
+    },
+    "8Axle+C4C5C6": {
+      "name": "8Axle+C4C5C6",
+      "rows": [
+        {
+          "id": "8axle-c4c5c6-1",
+          "seq": "1",
+          "description": "机车号照片:\n1.上车服务前，请确认：车辆无电，铁鞋已放置，禁动牌已放置；\n2.对机车号拍照（必须清晰完整，便于识别）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LOCO Number",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-1-1",
+              "label": "LOCO Number"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-2-1",
+          "seq": "2.1",
+          "description": "EBV基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBV铭牌",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-2-1-1",
+              "label": "EBV铭牌"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-2-2",
+          "seq": "2.2",
+          "description": "EBV外观检查:\n1.检查EBV大小闸手柄各位置定位准确;\n2.推动过程中无过大阻力；\n3.检查EBV航空插头卡扣是否到位;\n4.插头照片需拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBV PLUG",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-2-2-1",
+              "label": "EBV PLUG"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-2-3",
+          "seq": "2.3",
+          "description": "EBV外观检查: \n1.检查21号阀相关管路的连接；\n2.检查NB11相关管路的连接；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBV PIPE\nNB11 CAB",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-2-3-1",
+              "label": "EBV PIPE"
+            },
+            {
+              "slot": "8axle-c4c5c6-2-3-2",
+              "label": "NB11 CAB"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-2-4",
+          "seq": "2.4",
+          "description": "EBV外观检查: \n1.检查EBV接地线状态；\n2.检查EBV插座内部插针状态;\n3.恢复所有插座；\n4.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBV SOCKET",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-2-4-1",
+              "label": "EBV SOCKET"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-3-1",
+          "seq": "3.1",
+          "description": "LCDM基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDM铭牌",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-3-1-1",
+              "label": "LCDM铭牌"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-3-2",
+          "seq": "3.2",
+          "description": "LCDM外观检查:\n1.检查LCDM通讯线缆和电源线是否卡扣到位；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDM Plug",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-3-2-1",
+              "label": "LCDM Plug"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-4",
+          "seq": "4",
+          "description": "U99检查：\n1.检查U99插头是否拧紧；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "U99",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-4-1",
+              "label": "U99"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-5-1",
+          "seq": "5.1",
+          "description": "IPM基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM PN\nIPM SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-5-1-1",
+              "label": "IPM PN"
+            },
+            {
+              "slot": "8axle-c4c5c6-5-1-2",
+              "label": "IPM SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-5-2",
+          "seq": "5.2",
+          "description": "IPM外观检查：\n对所有插头进行目视检查，确认紧固到位。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-5-3",
+          "seq": "5.3",
+          "description": "IPM外观检查：\n1.对IPM所有插座内部插针进行一次目测检查，同时确认客户是否将J7/J8拧紧；\n2.J6插头需拆下并目测检查（J6C)；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM Socket\nIPM J6C",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-5-3-1",
+              "label": "IPM Socket"
+            },
+            {
+              "slot": "8axle-c4c5c6-5-3-2",
+              "label": "IPM J6C"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-5-4",
+          "seq": "5.4",
+          "description": "IPM外观检查：\n1.检查完毕后将J1/J4/J5/J6 插头恢复正常；\n2.拍照（备注：照片中航空插头的定位销需清晰可见）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM J1\nIPM J4\nIPM J5\nIPM J6",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-5-4-1",
+              "label": "IPM J1"
+            },
+            {
+              "slot": "8axle-c4c5c6-5-4-2",
+              "label": "IPM J4"
+            },
+            {
+              "slot": "8axle-c4c5c6-5-4-3",
+              "label": "IPM J5"
+            },
+            {
+              "slot": "8axle-c4c5c6-5-4-4",
+              "label": "IPM J6"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-6-1",
+          "seq": "6.1",
+          "description": "RIM/E-BOX基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "继电器箱",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-6-1-1",
+              "label": "继电器箱"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-6-2",
+          "seq": "6.2",
+          "description": "EBOX外观检查：\n1.仔细检查继电器的底座是否紧固，继电器与底座是否安装正常，继电器线缆连接是否固定到位，布线是否规范（如与端子排干涉、各线束是否存在接磨）；\n2.J4跳线是否老化（个别车型继电器座跳线老化可能需要联系项目进行更换）；\n3.需要将所有继电器状态及端子排拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "继电器1\n继电器2\n继电器3\n继电器4\n…",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-6-2-1",
+              "label": "继电器1"
+            },
+            {
+              "slot": "8axle-c4c5c6-6-2-2",
+              "label": "继电器2"
+            },
+            {
+              "slot": "8axle-c4c5c6-6-2-3",
+              "label": "继电器3"
+            },
+            {
+              "slot": "8axle-c4c5c6-6-2-4",
+              "label": "继电器4"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-7-1",
+          "seq": "7.1",
+          "description": "BCM基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCM SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-7-1-1",
+              "label": "BCM SN"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-7-2",
+          "seq": "7.2",
+          "description": "BCM外观检查：\n1.检查BCM的HARTING SOCKET螺栓有无拧紧(备注：包括底部的螺栓同样需要用手探知是否有松动)；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCM Plug1\nBCM Plug2",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-7-2-1",
+              "label": "BCM Plug1"
+            },
+            {
+              "slot": "8axle-c4c5c6-7-2-2",
+              "label": "BCM Plug2"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-7-3",
+          "seq": "7.3",
+          "description": "BCM内辅助模块检查：\n1.检查所有辅助模块开关的插头状态；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "辅助模块",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-7-3-1",
+              "label": "辅助模块"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-1",
+          "seq": "8.1",
+          "description": "BPCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BPCP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-1-1",
+              "label": "BPCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-2",
+          "seq": "8.2",
+          "description": "ERCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "ERCP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-2-1",
+              "label": "ERCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-3",
+          "seq": "8.3",
+          "description": "DBTV基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "DBTV SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-3-1",
+              "label": "DBTV SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-4",
+          "seq": "8.4",
+          "description": "16CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "16CP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-4-1",
+              "label": "16CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-5",
+          "seq": "8.5",
+          "description": "20CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "20CP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-5-1",
+              "label": "20CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-6",
+          "seq": "8.6",
+          "description": "BCCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCCP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-6-1",
+              "label": "BCCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-7",
+          "seq": "8.7",
+          "description": "13CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "13CP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-7-1",
+              "label": "13CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-8",
+          "seq": "8.8",
+          "description": "PSJB基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "PSJB SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-8-1",
+              "label": "PSJB SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-9",
+          "seq": "8.9",
+          "description": "LRU航空检查：\n1.检查EPCU各个LRU上的航空插头卡扣是否已经拧到位（用手轻轻逆时针方向转动插头，看是否有明显的阻力），如果发现有松动，则需要打开检查，如果发现O型圈已丢失，需要及时安装新的O型圈 （PN： 779390），如果发现插头里已经有O型圈，但仍然松动，则需要在检查结果中做好记录，并联系客户对松动的插头进行处理。如部分客户已经对插头进行了绝缘胶带捆绑，则在检查结果中记录并确认已经拧紧即可；\n2.需要将J103 状态拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "J103",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-9-1",
+              "label": "J103"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-10",
+          "seq": "8.10",
+          "description": "LRU航空检查：\n1.检查PSJB 所有插头内部插针（ C6回段机车发生了多起插针歪斜导致故障，如EBVA/B插头未紧固到位，存在脱落风险）；\n2.完成检查后需将所有插头、插座紧固到位；\n3.需将J100A/J101/J102状态拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "J100A\nJ101\nJ102",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-10-1",
+              "label": "J100A"
+            },
+            {
+              "slot": "8axle-c4c5c6-8-10-2",
+              "label": "J101"
+            },
+            {
+              "slot": "8axle-c4c5c6-8-10-3",
+              "label": "J102"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-8-11",
+          "seq": "8.11",
+          "description": "EPCU总风滤芯检查：\n1.检查是否能正常排水（存在长期不排水导致模块油污严重的情况）；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "总风滤芯",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-8-11-1",
+              "label": "总风滤芯"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-9",
+          "seq": "9",
+          "description": "断钩保护开关检查：\n1.检查断钩保护开关的插头是否正常拧紧;\n2.确认安装面是否有泄露;\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "A71",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-9-1",
+              "label": "A71"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-10",
+          "seq": "10",
+          "description": "IPM和EPCU指示灯检查（送电前请确认满足送电条件，如：车下无人作业，其他设备允许上电，提醒车内作业人员即将送电等）：\n1.检查IPM，EPCU各指示灯状态；\n2.换端及各操作模式切换功能正常；\n备注：制动系统启动时间在2分钟之内；请在微机、制动机完全启动后进行换端等操作。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无需该项",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-11",
+          "seq": "11",
+          "description": "LCDM功能检查：\n1.检查LCDMA外观无损坏。屏幕显示正常，无花、白、黑屏或亮线，各按钮功能正常；\n2.确认LCDM软件版本（以最新版本为准），当前版本参考：4.19；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDM SW",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-11-1",
+              "label": "LCDM SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-12-1",
+          "seq": "12.1",
+          "description": "WSP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "WSP SN",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-12-1-1",
+              "label": "WSP SN"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-12-2",
+          "seq": "12.2",
+          "description": "WSP面板检查：\n1.确认WSP防滑器MB04B板卡上的LED状态显示 为“9999”； \n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "MB04B MMI",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-12-2-1",
+              "label": "MB04B MMI"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-13-1",
+          "seq": "13.1",
+          "description": "节点扫描：\n1.通过PTU扫描节点；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EPCU SW",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-13-1-1",
+              "label": "EPCU SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "8axle-c4c5c6-13-2",
+          "seq": "13.2",
+          "description": "各类日志下载：\n1.下载EAB, EPCU, EBV日志；\n2.检查日志是否存在异常。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "Abnormal Log",
+          "buttons": [
+            {
+              "slot": "8axle-c4c5c6-13-2-1",
+              "label": "Abnormal Log"
+            }
+          ],
+          "applicability": "All",
+          "remarks": "电脑端：下载日志（Bin & Txt），解析，打包上传。\n手机端：检查正常无需上传图片；发现异常时再上传异常照片。",
+          "uploadHint": "仅检查异常时需上传，可多张按序号自动编号",
+          "uploadRequiredWhen": "abnormal"
+        }
+      ]
+    },
+    "6Axle+C1C2C3": {
+      "name": "6Axle+C1C2C3",
+      "rows": [
+        {
+          "id": "6axle-c1c2c3-1",
+          "seq": "1",
+          "description": "机车号照片:\n1.上车服务前，请确认：车辆无电，铁鞋已放置，禁动牌已放置；\n2.对机车号拍照（必须清晰完整，便于识别）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LOCO Number",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-1-1",
+              "label": "LOCO Number"
+            }
+          ],
+          "applicability": "All",
+          "remarks": "（目前V0.1可点击获取帮助，弹出标准的照片模板作为参考，建议保留！！）"
+        },
+        {
+          "id": "6axle-c1c2c3-2-1",
+          "seq": "2.1",
+          "description": "EBVA基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVA铭牌",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-2-1-1",
+              "label": "EBVA铭牌"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-2-2",
+          "seq": "2.2",
+          "description": "EBVA外观检查:\n1.检查EBV大小闸手柄各位置定位准确;\n2.推动过程中无过大阻力；\n3.检查EBV航空插头卡扣是否到位;\n4.插头照片需拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVA PLUG",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-2-2-1",
+              "label": "EBVA PLUG"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-2-3",
+          "seq": "2.3",
+          "description": "EBVA外观检查: \n1.检查21号阀相关管路的连接；\n2.检查NB11相关管路的连接；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVA PIPE\nNB11 CABA",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-2-3-1",
+              "label": "EBVA PIPE"
+            },
+            {
+              "slot": "6axle-c1c2c3-2-3-2",
+              "label": "NB11 CABA"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-3-1",
+          "seq": "3.1",
+          "description": "IPM基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM PN\nIPM SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-3-1-1",
+              "label": "IPM PN"
+            },
+            {
+              "slot": "6axle-c1c2c3-3-1-2",
+              "label": "IPM SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-3-2",
+          "seq": "3.2",
+          "description": "IPM外观检查：\n对所有插头进行目视检查，确认紧固到位。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-4-1",
+          "seq": "4.1",
+          "description": "EBOX外观检查：\n1.仔细检查继电器的底座是否紧固，继电器与底座是否安装正常，继电器线缆连接是否固定到位，布线是否规范（如与端子排干涉、各线束是否存在接磨）；\n2.J4跳线是否老化（个别车型继电器座跳线老化可能需要联系项目进行更换）；\n3.需要将所有继电器状态及端子排拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "继电器1\n继电器2\n继电器3\n继电器4\n…",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-4-1-1",
+              "label": "继电器1"
+            },
+            {
+              "slot": "6axle-c1c2c3-4-1-2",
+              "label": "继电器2"
+            },
+            {
+              "slot": "6axle-c1c2c3-4-1-3",
+              "label": "继电器3"
+            },
+            {
+              "slot": "6axle-c1c2c3-4-1-4",
+              "label": "继电器4"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-4-2",
+          "seq": "4.2",
+          "description": "HDLC外观检查:\n1.检查接线盒的插座与线缆头的航空插头卡扣是否到位；\n2.拍照（备注：照片中航空插头的定位销需清晰可见）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "HDLC1\nHDLC2",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-4-2-1",
+              "label": "HDLC1"
+            },
+            {
+              "slot": "6axle-c1c2c3-4-2-2",
+              "label": "HDLC2"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-5-1",
+          "seq": "5.1",
+          "description": "BCM外观检查：\n1.检查BCM的HARTING SOCKET螺栓有无拧紧(备注：包括底部的螺栓同样需要用手探知是否有松动)；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCM Plug1\nBCM Plug2",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-5-1-1",
+              "label": "BCM Plug1"
+            },
+            {
+              "slot": "6axle-c1c2c3-5-1-2",
+              "label": "BCM Plug2"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-5-2",
+          "seq": "5.2",
+          "description": "BCM内辅助模块检查：\n1.检查所有辅助模块开关的插头状态；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "辅助模块",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-5-2-1",
+              "label": "辅助模块"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-1",
+          "seq": "6.1",
+          "description": "BPCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BPCP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-1-1",
+              "label": "BPCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-2",
+          "seq": "6.2",
+          "description": "ERCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "ERCP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-2-1",
+              "label": "ERCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-3",
+          "seq": "6.3",
+          "description": "DBTV基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "DBTV SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-3-1",
+              "label": "DBTV SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-4",
+          "seq": "6.4",
+          "description": "16CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "16CP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-4-1",
+              "label": "16CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-5",
+          "seq": "6.5",
+          "description": "20CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "20CP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-5-1",
+              "label": "20CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-6",
+          "seq": "6.6",
+          "description": "BCCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCCP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-6-1",
+              "label": "BCCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-7",
+          "seq": "6.7",
+          "description": "13CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "13CP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-7-1",
+              "label": "13CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-8",
+          "seq": "6.8",
+          "description": "PSJB基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "PSJB SN",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-8-1",
+              "label": "PSJB SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-9",
+          "seq": "6.9",
+          "description": "LRU航空检查：\n1.检查EPCU各个LRU上的航空插头卡扣是否已经拧到位（用手轻轻逆时针方向转动插头，看是否有明显的阻力），如果发现有松动，则需要打开检查，如果发现O型圈已丢失，需要及时安装新的O型圈 （PN： 779390），如果发现插头里已经有O型圈，但仍然松动，则需要在检查结果中做好记录，并联系客户对松动的插头进行处理。如部分客户已经对插头进行了绝缘胶带捆绑，则在检查结果中记录并确认已经拧紧即可；\n2.需要将J103 状态拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "J103",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-9-1",
+              "label": "J103"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-6-10",
+          "seq": "6.10",
+          "description": "EPCU总风滤芯检查：\n1.检查是否能正常排水（存在长期不排水导致模块油污严重的情况）；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "总风滤芯",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-6-10-1",
+              "label": "总风滤芯"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-7",
+          "seq": "7",
+          "description": "断钩保护开关检查：\n1.检查断钩保护开关的插头是否正常拧紧;\n2.确认安装面是否有泄露;\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "A71",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-7-1",
+              "label": "A71"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-8-1",
+          "seq": "8.1",
+          "description": "EBVB基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVB铭牌",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-8-1-1",
+              "label": "EBVB铭牌"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-8-2",
+          "seq": "8.2",
+          "description": "EBVB外观检查:\n1.检查EBV大小闸手柄各位置定位准确;\n2.推动过程中无过大阻力；\n3.EBV航空插头卡扣是否到位;\n4.插头照片需拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVB PLUG",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-8-2-1",
+              "label": "EBVB PLUG"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-8-3",
+          "seq": "8.3",
+          "description": "EBVB外观检查: \n1.检查21号阀相关管路的连接；\n2.检查NB11相关管路的连接；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVB PIPE\nNB11 CABB",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-8-3-1",
+              "label": "EBVB PIPE"
+            },
+            {
+              "slot": "6axle-c1c2c3-8-3-2",
+              "label": "NB11 CABB"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-9",
+          "seq": "9",
+          "description": "IPM和EPCU指示灯检查（送电前请确认满足送电条件，如：车下无人作业，其他设备允许上电，提醒车内作业人员即将送电等）：\n1.检查IPM，EPCU各指示灯状态；\n2.换端及各操作模式切换功能正常；\n备注：制动系统启动时间在2分钟之内；请在微机、制动机完全启动后进行换端等操作。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无需该项",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-10",
+          "seq": "10",
+          "description": "LCDMA功能检查：\n1.检查LCDMA外观无损坏。屏幕显示正常，无花、白、黑屏或亮线，各按钮功能正常；\n2.确认LCDM软件版本（以最新版本为准），当前版本参考：HXD1D&HXD3D为1.4，其余车型为4.19；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMA SW",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-10-1",
+              "label": "LCDMA SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-11",
+          "seq": "11",
+          "description": "LCDMB功能检查：\n1.检查LCDMB外观无损坏。屏幕显示正常，无花、白、黑屏或亮线，各按钮功能正常；\n2.确认LCDM软件版本（以最新版本为准），当前版本参考：HXD1D&HXD3D为1.4，其余车型为4.19；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMB SW",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-11-1",
+              "label": "LCDMB SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-12-1",
+          "seq": "12.1",
+          "description": "节点扫描：\n1.通过PTU扫描节点；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EPCU SW",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-12-1-1",
+              "label": "EPCU SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c1c2c3-12-2",
+          "seq": "12.2",
+          "description": "各类日志下载：\n1.下载EAB, EPCU, EBV日志；\n2.检查日志是否存在异常。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "Abnormal Log",
+          "buttons": [
+            {
+              "slot": "6axle-c1c2c3-12-2-1",
+              "label": "Abnormal Log"
+            }
+          ],
+          "applicability": "All",
+          "remarks": "电脑端：下载日志（Bin & Txt），解析，打包上传。\n手机端：检查正常无需上传图片；发现异常时再上传异常照片。",
+          "uploadHint": "仅检查异常时需上传，可多张按序号自动编号",
+          "uploadRequiredWhen": "abnormal"
+        }
+      ]
+    },
+    "6Axle+C4C5C6": {
+      "name": "6Axle+C4C5C6",
+      "rows": [
+        {
+          "id": "6axle-c4c5c6-1",
+          "seq": "1",
+          "description": "机车号照片:\n1.上车服务前，请确认：车辆无电，铁鞋已放置，禁动牌已放置；\n2.对机车号拍照（必须清晰完整，便于识别）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LOCO Number",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-1-1",
+              "label": "LOCO Number"
+            }
+          ],
+          "applicability": "All",
+          "remarks": "（目前V0.1可点击获取帮助，弹出标准的照片模板作为参考，建议保留！！）"
+        },
+        {
+          "id": "6axle-c4c5c6-2-1",
+          "seq": "2.1",
+          "description": "EBVA基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVA铭牌",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-2-1-1",
+              "label": "EBVA铭牌"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-2-2",
+          "seq": "2.2",
+          "description": "EBVA外观检查:\n1.检查EBV大小闸手柄各位置定位准确;\n2.推动过程中无过大阻力；\n3.检查EBV航空插头卡扣是否到位;\n4.插头照片需拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVA PLUG",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-2-2-1",
+              "label": "EBVA PLUG"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-2-3",
+          "seq": "2.3",
+          "description": "EBVA外观检查: \n1.检查21号阀相关管路的连接；\n2.检查NB11相关管路的连接；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVA PIPE\nNB11 CABA",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-2-3-1",
+              "label": "EBVA PIPE"
+            },
+            {
+              "slot": "6axle-c4c5c6-2-3-2",
+              "label": "NB11 CABA"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-2-4",
+          "seq": "2.4",
+          "description": "EBVA外观检查: \n1.检查EBV接地线状态；\n2.检查EBV插座内部插针状态;\n3.恢复所有插座；\n4.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVA SOCKET",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-2-4-1",
+              "label": "EBVA SOCKET"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-3-1",
+          "seq": "3.1",
+          "description": "LCDMA基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMA铭牌",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-3-1-1",
+              "label": "LCDMA铭牌"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-3-2",
+          "seq": "3.2",
+          "description": "LCDMA外观检查:\n1.检查LCDM通讯线缆和电源线是否卡扣到位；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMA Plug",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-3-2-1",
+              "label": "LCDMA Plug"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-4",
+          "seq": "4",
+          "description": "U99检查：\n1.检查U99插头是否拧紧；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "U99",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-4-1",
+              "label": "U99"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-5-1",
+          "seq": "5.1",
+          "description": "IPM基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM PN\nIPM SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-5-1-1",
+              "label": "IPM PN"
+            },
+            {
+              "slot": "6axle-c4c5c6-5-1-2",
+              "label": "IPM SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-5-2",
+          "seq": "5.2",
+          "description": "IPM外观检查：\n对所有插头进行目视检查，确认紧固到位。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-5-3",
+          "seq": "5.3",
+          "description": "IPM外观检查：\n1.对IPM所有插座内部插针进行一次目测检查，同时确认客户是否将J7/J8拧紧；\n2.J6插头需拆下并目测检查（J6C)；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM Socket\nIPM J6C",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-5-3-1",
+              "label": "IPM Socket"
+            },
+            {
+              "slot": "6axle-c4c5c6-5-3-2",
+              "label": "IPM J6C"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-5-4",
+          "seq": "5.4",
+          "description": "IPM外观检查：\n1.检查完毕后将J1/J4/J5/J6 插头恢复正常；\n2.拍照（备注：照片中航空插头的定位销需清晰可见）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "IPM J1\nIPM J4\nIPM J5\nIPM J6",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-5-4-1",
+              "label": "IPM J1"
+            },
+            {
+              "slot": "6axle-c4c5c6-5-4-2",
+              "label": "IPM J4"
+            },
+            {
+              "slot": "6axle-c4c5c6-5-4-3",
+              "label": "IPM J5"
+            },
+            {
+              "slot": "6axle-c4c5c6-5-4-4",
+              "label": "IPM J6"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-6-1",
+          "seq": "6.1",
+          "description": "RIM/E-BOX基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "继电器箱",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-6-1-1",
+              "label": "继电器箱"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-6-2",
+          "seq": "6.2",
+          "description": "EBOX外观检查：\n1.仔细检查继电器的底座是否紧固，继电器与底座是否安装正常，继电器线缆连接是否固定到位，布线是否规范（如与端子排干涉、各线束是否存在接磨）；\n2.J4跳线是否老化（个别车型继电器座跳线老化可能需要联系项目进行更换）；\n3.需要将所有继电器状态及端子排拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "继电器1\n继电器2\n继电器3\n继电器4\n…",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-6-2-1",
+              "label": "继电器1"
+            },
+            {
+              "slot": "6axle-c4c5c6-6-2-2",
+              "label": "继电器2"
+            },
+            {
+              "slot": "6axle-c4c5c6-6-2-3",
+              "label": "继电器3"
+            },
+            {
+              "slot": "6axle-c4c5c6-6-2-4",
+              "label": "继电器4"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-6-3",
+          "seq": "6.3",
+          "description": "HDLC外观检查:\n1.检查接线盒的插座与线缆头的航空插头卡扣是否到位；\n2.拍照（备注：照片中航空插头的定位销需清晰可见）。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "HDLC1\nHDLC2",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-6-3-1",
+              "label": "HDLC1"
+            },
+            {
+              "slot": "6axle-c4c5c6-6-3-2",
+              "label": "HDLC2"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-7-1",
+          "seq": "7.1",
+          "description": "BCM基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCM SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-7-1-1",
+              "label": "BCM SN"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-7-2",
+          "seq": "7.2",
+          "description": "BCM外观检查：\n1.检查BCM的HARTING SOCKET螺栓有无拧紧(备注：包括底部的螺栓同样需要用手探知是否有松动)；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCM Plug1\nBCM Plug2",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-7-2-1",
+              "label": "BCM Plug1"
+            },
+            {
+              "slot": "6axle-c4c5c6-7-2-2",
+              "label": "BCM Plug2"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-7-3",
+          "seq": "7.3",
+          "description": "BCM内辅助模块检查：\n1.检查所有辅助模块开关的插头状态；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "辅助模块",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-7-3-1",
+              "label": "辅助模块"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-1",
+          "seq": "8.1",
+          "description": "BPCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BPCP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-1-1",
+              "label": "BPCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-2",
+          "seq": "8.2",
+          "description": "ERCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "ERCP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-2-1",
+              "label": "ERCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-3",
+          "seq": "8.3",
+          "description": "DBTV基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "DBTV SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-3-1",
+              "label": "DBTV SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-4",
+          "seq": "8.4",
+          "description": "16CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "16CP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-4-1",
+              "label": "16CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-5",
+          "seq": "8.5",
+          "description": "20CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "20CP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-5-1",
+              "label": "20CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-6",
+          "seq": "8.6",
+          "description": "BCCP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "BCCP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-6-1",
+              "label": "BCCP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-7",
+          "seq": "8.7",
+          "description": "13CP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "13CP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-7-1",
+              "label": "13CP SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-8",
+          "seq": "8.8",
+          "description": "PSJB基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "PSJB SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-8-1",
+              "label": "PSJB SN"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-9",
+          "seq": "8.9",
+          "description": "LRU航空检查：\n1.检查EPCU各个LRU上的航空插头卡扣是否已经拧到位（用手轻轻逆时针方向转动插头，看是否有明显的阻力），如果发现有松动，则需要打开检查，如果发现O型圈已丢失，需要及时安装新的O型圈 （PN： 779390），如果发现插头里已经有O型圈，但仍然松动，则需要在检查结果中做好记录，并联系客户对松动的插头进行处理。如部分客户已经对插头进行了绝缘胶带捆绑，则在检查结果中记录并确认已经拧紧即可；\n2.需要将J103 状态拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "J103",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-9-1",
+              "label": "J103"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-10",
+          "seq": "8.10",
+          "description": "LRU航空检查：\n1.检查PSJB 所有插头内部插针（ C6回段机车发生了多起插针歪斜导致故障，如EBVA/B插头未紧固到位，存在脱落风险）；\n2.完成检查后需将所有插头、插座紧固到位；\n3.需将J100A/J100B/J101/J102状态拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "J100A\nJ100B\nJ101\nJ102",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-10-1",
+              "label": "J100A"
+            },
+            {
+              "slot": "6axle-c4c5c6-8-10-2",
+              "label": "J100B"
+            },
+            {
+              "slot": "6axle-c4c5c6-8-10-3",
+              "label": "J101"
+            },
+            {
+              "slot": "6axle-c4c5c6-8-10-4",
+              "label": "J102"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-8-11",
+          "seq": "8.11",
+          "description": "EPCU总风滤芯检查：\n1.检查是否能正常排水（存在长期不排水导致模块油污严重的情况）；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "总风滤芯",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-8-11-1",
+              "label": "总风滤芯"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-9",
+          "seq": "9",
+          "description": "断钩保护开关检查：\n1.检查断钩保护开关的插头是否正常拧紧;\n2.确认安装面是否有泄露;\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "A71",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-9-1",
+              "label": "A71"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-10-1",
+          "seq": "10.1",
+          "description": "EBVB基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）;\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVB铭牌",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-10-1-1",
+              "label": "EBVB铭牌"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-10-2",
+          "seq": "10.2",
+          "description": "EBVB外观检查:\n1.检查EBV大小闸手柄各位置定位准确;\n2.推动过程中无过大阻力；\n3.EBV航空插头卡扣是否到位;\n4.插头照片需拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVB PLUG",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-10-2-1",
+              "label": "EBVB PLUG"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-10-3",
+          "seq": "10.3",
+          "description": "EBVB外观检查: \n1.检查21号阀相关管路的连接；\n2.检查NB11相关管路的连接；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVB PIPE\nNB11 CABB",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-10-3-1",
+              "label": "EBVB PIPE"
+            },
+            {
+              "slot": "6axle-c4c5c6-10-3-2",
+              "label": "NB11 CABB"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-10-4",
+          "seq": "10.4",
+          "description": "EBVB外观检查: \n1.检查EBV接地线状态；\n2.检查EBV插座内部插针状态;\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EBVB SOCKET",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-10-4-1",
+              "label": "EBVB SOCKET"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-11-1",
+          "seq": "11.1",
+          "description": "LCDMB基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "物料号",
+          "serialNumberInput": "序列号",
+          "overhaulOrManufactureDateInput": "大修/维修日期",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMB铭牌",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-11-1-1",
+              "label": "LCDMB铭牌"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-11-2",
+          "seq": "11.2",
+          "description": "LCDMB外观检查:\n1.检查LCDM通讯线缆和电源线是否卡扣到位；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMB Plug",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-11-2-1",
+              "label": "LCDMB Plug"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-12",
+          "seq": "12",
+          "description": "IPM和EPCU指示灯检查（送电前请确认满足送电条件，如：车下无人作业，其他设备允许上电，提醒车内作业人员即将送电等）：\n1.检查IPM，EPCU各指示灯状态；\n2.换端及各操作模式切换功能正常；\n备注：制动系统启动时间在2分钟之内；请在微机、制动机完全启动后进行换端等操作。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "无需该项",
+          "buttons": [],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-13",
+          "seq": "13",
+          "description": "LCDMA功能检查：\n1.检查LCDMA外观无损坏。屏幕显示正常，无花、白、黑屏或亮线，各按钮功能正常；\n2.确认LCDM软件版本（以最新版本为准），当前版本参考：HXD1D&HXD3D为1.4，其余车型为4.19；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMA SW",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-13-1",
+              "label": "LCDMA SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-14-1",
+          "seq": "14.1",
+          "description": "WSP基础信息检查或输入：\n1.核对物料号、序列号、大修信息是否准确无误（若错误需手动纠正）；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "WSP SN",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-14-1-1",
+              "label": "WSP SN"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-14-2",
+          "seq": "14.2",
+          "description": "WSP面板检查：\n1.确认WSP防滑器MB04B板卡上的LED状态显示 为“9999”； \n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "MB04B MMI",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-14-2-1",
+              "label": "MB04B MMI"
+            }
+          ],
+          "applicability": "C4/C5/C6",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-15",
+          "seq": "15",
+          "description": "LCDMB功能检查：\n1.检查LCDMB外观无损坏。屏幕显示正常，无花、白、黑屏或亮线，各按钮功能正常；\n2.确认LCDM软件版本（以最新版本为准），当前版本参考：HXD1D&HXD3D为1.4，其余车型为4.19；\n3.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "LCDMB SW",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-15-1",
+              "label": "LCDMB SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-16-1",
+          "seq": "16.1",
+          "description": "节点扫描：\n1.通过PTU扫描节点；\n2.拍照。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "EPCU SW",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-16-1-1",
+              "label": "EPCU SW"
+            }
+          ],
+          "applicability": "All",
+          "remarks": ""
+        },
+        {
+          "id": "6axle-c4c5c6-16-2",
+          "seq": "16.2",
+          "description": "各类日志下载：\n1.下载EAB, EPCU, EBV日志；\n2.检查日志是否存在异常。",
+          "materialNumberInput": "无需该项",
+          "serialNumberInput": "无需该项",
+          "overhaulOrManufactureDateInput": "无需该项",
+          "defaultInspectionResult": "",
+          "imageNaming": "Abnormal Log",
+          "buttons": [
+            {
+              "slot": "6axle-c4c5c6-16-2-1",
+              "label": "Abnormal Log"
+            }
+          ],
+          "applicability": "All",
+          "remarks": "电脑端：下载日志（Bin & Txt），解析，打包上传。\n手机端：检查正常无需上传图片；发现异常时再上传异常照片。",
+          "uploadHint": "仅检查异常时需上传，可多张按序号自动编号",
+          "uploadRequiredWhen": "abnormal"
+        }
+      ]
+    }
+  }
+}

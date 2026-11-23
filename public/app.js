@@ -20,9 +20,10 @@
     done: "No completed tasks in this view",
     all: "No tasks found",
   };
+  // 无车型时按 6 轴 fallback 模板统计（与 guidance v1.0 一致）
   const defaultStatsByMaint = {
-    c1c3: { items: 21, photos: 19 },
-    c4c6: { items: 32, photos: 45 },
+    c1c3: { items: 29, photos: 35 },
+    c4c6: { items: 43, photos: 56 },
   };
   let statusStore = readTaskStatusStore();
 

@@ -3,6 +3,7 @@
  */
 const { enrichIssueSubmitEntry } = require("./issue-submit-format");
 const { validateBasicInfoMileage } = require("./task-basic-fields");
+const { normalizeEquipmentMap } = require("./services/equipment-fields");
 
 function pickTaskId(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
@@ -35,7 +36,7 @@ function normalizeUploadsMap(uploads) {
   return out;
 }
 
-const ABNORMAL_SEVERITIES = new Set(["severe", "moderate", "minor"]);
+const ABNORMAL_SEVERITIES = new Set(["severe", "moderate", "minor", "undetectable"]);
 
 function normalizeAbnormalSeverity(raw) {
   const s = String(raw || "").trim().toLowerCase();
@@ -47,12 +48,12 @@ function normalizeIssueEntry(meta) {
   const enriched = enrichIssueSubmitEntry(meta);
   let status = String(enriched.status || "").trim().toLowerCase();
   if (status === "normal") status = "ok";
+  // enrich 已将历史 undetectable 顶层状态迁移为 abnormal
   const text = String(enriched.text || "").trim();
   const severity = normalizeAbnormalSeverity(enriched.severity);
   if (
     status !== "ok"
     && status !== "abnormal"
-    && status !== "undetectable"
     && status !== "no_equipment"
     && !text
   ) {
@@ -62,13 +63,12 @@ function normalizeIssueEntry(meta) {
   if (
     status === "ok"
     || status === "abnormal"
-    || status === "undetectable"
     || status === "no_equipment"
   ) {
     row.status = status;
   }
   if (text) row.text = text;
-  if (severity) row.severity = severity;
+  if (status === "abnormal" && severity) row.severity = severity;
   const result = String(enriched.result || "").trim();
   if (result) row.result = result;
   if (enriched.updatedAt) row.updatedAt = String(enriched.updatedAt);
@@ -107,7 +107,17 @@ function validateTaskWorkPayload(payload, { requireContent = false, requireMilea
   }
   const uploads = normalizeUploadsMap(body.uploads);
   const issues = normalizeIssuesMap(body.issues);
-  const hasContent = Object.keys(uploads).length > 0 || Object.keys(issues).length > 0;
+  const equipment = normalizeEquipmentMap(body.equipment);
+  const abnormalitySummary =
+    body.abnormalitySummary && typeof body.abnormalitySummary === "object"
+      ? body.abnormalitySummary
+      : body.abnormality_summary && typeof body.abnormality_summary === "object"
+        ? body.abnormality_summary
+        : undefined;
+  const hasContent =
+    Object.keys(uploads).length > 0
+    || Object.keys(issues).length > 0
+    || Object.keys(equipment).length > 0;
   if (requireContent && !hasContent && !body.allowEmptyUploads) {
     return { ok: false, error: "submit_payload_required" };
   }
@@ -123,11 +133,15 @@ function validateTaskWorkPayload(payload, { requireContent = false, requireMilea
     taskId,
     uploads,
     issues,
+    equipment,
+    abnormalitySummary,
     body: {
       ...body,
       uploads,
       issues,
+      equipment,
       basicInfo,
+      ...(abnormalitySummary ? { abnormalitySummary } : {}),
     },
   };
 }
@@ -151,6 +165,7 @@ module.exports = {
   normalizeAbnormalSeverity,
   normalizeIssueEntry,
   normalizeIssuesMap,
+  normalizeEquipmentMap,
   countValidUploads,
   countValidIssues,
   validateTaskWorkPayload,

@@ -1,7 +1,7 @@
 /**
  * 与 frontend/src/utils/issueSubmitFormat.ts 对齐：draft/submit 前规范化 issues。
  */
-const ABNORMAL_SEVERITIES = new Set(["severe", "moderate", "minor"]);
+const ABNORMAL_SEVERITIES = new Set(["severe", "moderate", "minor", "undetectable"]);
 
 function normalizeAbnormalSeverity(raw) {
   const s = String(raw || "").trim().toLowerCase();
@@ -9,13 +9,17 @@ function normalizeAbnormalSeverity(raw) {
 }
 
 const SEVERITY_LABEL_ZH = {
-  severe: "高风险",
-  moderate: "中风险",
-  minor: "低风险",
+  severe: "严重",
+  moderate: "中等",
+  minor: "一般",
+  undetectable: "无法检查",
 };
 
 function parseSeverityFromResultText(result) {
   const text = String(result || "");
+  if (text.includes("（无法检查）") || text.includes("（无法检测）") || /\(\s*undetectable\s*\)/i.test(text)) {
+    return "undetectable";
+  }
   if (text.includes("（高风险）") || text.includes("（严重）") || /\(\s*severe\s*\)/i.test(text)) {
     return "severe";
   }
@@ -32,7 +36,6 @@ function formatIssueResultZh(status, text, severity) {
   const labelBase = {
     ok: "检查正常",
     abnormal: "发现异常",
-    undetectable: "无法检测",
     no_equipment: "无此设备",
   };
   let label = labelBase[status] || "";
@@ -56,6 +59,11 @@ function enrichIssueSubmitEntry(meta) {
   if (status === "normal") status = "ok";
   const text = String(meta.text || "").trim();
   let severity = normalizeAbnormalSeverity(meta.severity);
+  // 历史顶层「无法检测」→ 发现异常 + 无法检查
+  if (status === "undetectable") {
+    status = "abnormal";
+    if (!severity) severity = "undetectable";
+  }
   if (!severity && status === "abnormal") {
     severity = parseSeverityFromResultText(meta.result);
   }

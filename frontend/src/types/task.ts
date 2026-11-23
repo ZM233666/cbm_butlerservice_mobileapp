@@ -19,8 +19,12 @@ export interface TaskDetail {
   employeeId: string
   title: string
   maint: string
+  /** 服务地点 */
   depot: string
+  /** 车号，如 HXD1-8888 */
   trainNo: string
+  /** 车型；缺失时可由车号解析 */
+  trainModel?: string
   /** 走行公里数（km） */
   mileageKm?: number
   deadline: string
@@ -45,7 +49,8 @@ export interface TaskCentreResponse {
   employeeId: string
   stats: TaskCentreStats
   monthStatusByMonth: Record<string, 'ok' | 'warn'>
-  checklistCounts: { c1c3: number; c4c6: number }
+  /** 兼容旧字段；新模板请用 guidance v1.0 按车型+修程计算 */
+  checklistCounts?: { c1c3: number; c4c6: number } & Record<string, number>
   tasks: TaskCard[]
 }
 
@@ -78,27 +83,39 @@ export interface TaskStatusEntry {
 
 export type TaskStatusStore = Record<string, TaskStatusEntry>
 
-export type InspectionStatus = 'ok' | 'abnormal' | 'undetectable' | 'no_equipment'
+/** 顶层三类；历史 undetectable 读入时会归一为 abnormal + severity=undetectable */
+export type InspectionStatus = 'ok' | 'abnormal' | 'no_equipment'
 
-export type AbnormalSeverity = 'severe' | 'moderate' | 'minor'
+export type AbnormalSeverity = 'severe' | 'moderate' | 'minor' | 'undetectable'
 
 export interface InspectionRecord {
   status: InspectionStatus
   text: string
   updatedAt: string
-  /** 仅 abnormal：severe=高风险, moderate=中风险, minor=低风险 */
+  /** 仅 abnormal：severe=严重, moderate=中等, minor=一般, undetectable=无法检查 */
   severity?: AbnormalSeverity
 }
 
 export interface GuidanceRow {
   id: string
   seq: string
+  description: string
+  /** @deprecated 旧模板字段；v1.0 已按模板拆分 */
   seqByTemplate?: {
     c1c3?: string
     c4c6?: string
   }
-  description: string
-  scopeTags: string[]
+  /** @deprecated 旧模板字段；v1.0 已按模板拆分 */
+  scopeTags?: string[]
+  materialNumberInput?: string
+  serialNumberInput?: string
+  overhaulOrManufactureDateInput?: string
+  defaultInspectionResult?: string
+  imageNaming?: string
+  applicability?: string
+  remarks?: string
   uploadHint?: string
+  /** 默认 always；abnormal=仅检查结果为「发现异常」时要求上传 */
+  uploadRequiredWhen?: 'always' | 'abnormal'
   buttons?: { slot: string; label: string }[]
 }

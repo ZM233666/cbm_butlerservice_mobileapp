@@ -2,10 +2,11 @@ import { apiGet, apiPost } from './client'
 import type { ManagerAssignment, ManagerDashboard } from '@/types/manager'
 import { cachedRequest, clearRequestCache } from './requestCache'
 
-export function fetchManagerDashboard(month?: string): Promise<ManagerDashboard> {
+export function fetchManagerDashboard(month?: string, scope: 'mine' | 'all' = 'mine'): Promise<ManagerDashboard> {
   const params: Record<string, string> = {}
   if (month) params.month = month
-  const cacheKey = `manager-dashboard:${month || 'current'}`
+  if (scope) params.scope = scope
+  const cacheKey = `manager-dashboard:${scope || 'mine'}:${month || 'current'}`
   return cachedRequest(cacheKey, () => apiGet<ManagerDashboard>('/api/manager/dashboard', params), 60_000)
 }
 
@@ -13,6 +14,7 @@ export interface CreateAssignmentPayload {
   assignedToEmployeeId: string
   maint: string
   vehicleNo: string
+  trainModel?: string
   depot: string
   plannedStart: string
   deadline: string

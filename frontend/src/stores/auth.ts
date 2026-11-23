@@ -28,7 +28,8 @@ const PAGE_ACCESS: Record<string, UserRole[]> = {
   '/task-center': [ROLE_FSE, ROLE_EXTERNAL_CONTRACTOR],
   '/records': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
   '/my': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
-  '/task-list': [ROLE_FSE, ROLE_EXTERNAL_CONTRACTOR],
+  // 经理只读查看工程师任务详情（首页「当前所有任务汇总」入口）
+  '/task-list': [ROLE_FSE, ROLE_RS_MANAGER, ROLE_FS_MANAGER, ROLE_FS_DIRECTOR, ROLE_EXTERNAL_CONTRACTOR],
 }
 
 function normalizeStringList(input: unknown): string[] {
@@ -174,7 +175,10 @@ export const useAuthStore = defineStore('auth', () => {
   function canAccess(path: string): boolean {
     const allowed = PAGE_ACCESS[path]
     if (!allowed) return true
-    return allowed.includes(role.value)
+    if (allowed.includes(role.value)) return true
+    // 经理页用 roleDisplayName 判定时，仍允许只读进入任务详情
+    if (path === '/task-list' && isManager.value) return true
+    return false
   }
 
   async function refreshProfile(force = false) {

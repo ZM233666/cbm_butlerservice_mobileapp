@@ -4,14 +4,14 @@ import { normalizeAbnormalSeverity } from '@/utils/inspectionSeverity'
 const STATUS_LABEL_ZH: Record<InspectionStatus, string> = {
   ok: '检查正常',
   abnormal: '发现异常',
-  undetectable: '无法检测',
   no_equipment: '无此设备',
 }
 
 const SEVERITY_LABEL_ZH: Record<AbnormalSeverity, string> = {
-  severe: '高风险',
-  moderate: '中风险',
-  minor: '低风险',
+  severe: '严重',
+  moderate: '中等',
+  minor: '一般',
+  undetectable: '无法检查',
 }
 
 /** 与 Django `format_issue_result` 中文案保持一致，便于入库 result 字段 */

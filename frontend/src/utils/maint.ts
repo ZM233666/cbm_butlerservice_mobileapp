@@ -1,4 +1,4 @@
-/** 修程：业务存储为 c1–c6；子任务模版仍为 c1c3 / c4c6 两套。 */
+/** 修程：业务存储为 c1–c6。子任务模版见 guidance-template（车型×修程 → 4 套）。 */
 
 export const MAINT_LEVELS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'] as const
 export type MaintLevel = (typeof MAINT_LEVELS)[number]
@@ -20,7 +20,7 @@ export function normalizeMaint(raw: unknown): MaintLevel | '' {
   return ''
 }
 
-/** 映射到子任务/检查项模版键（指导书 scopeTags）。 */
+/** 映射到修程分组（兼容旧 UI badge / 统计）；完整模板选择请用 selectTemplateKey。 */
 export function maintToTemplate(raw: unknown): MaintTemplate | '' {
   const v = compactMaint(raw)
   if (v === 'c1' || v === 'c2' || v === 'c3' || v === 'c1c3') return 'c1c3'

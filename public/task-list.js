@@ -2,40 +2,66 @@
   const STORAGE_KEY = "butlerTaskListDraft";
   const TASK_STATUS_KEY = "butlerTaskStatusMap";
   const TASK_STATUS_API = "/api/task-status";
-  const DATA_URL = "/data/brake-guidance-tasks.json";
-  const SCHEMATIC_SEQS = new Set([
-    "1",
-    "2",
-    "3",
-    "3.1",
-    "3.2",
-    "3.3",
-    "4",
-    "5",
-    "5.1",
-    "6",
-    "6.1",
-    "7",
-    "8",
-    "8.1",
-    "8.2",
-    "9",
-    "9.1",
-    "10",
-    "11",
-    "11.1",
-    "12",
-    "13",
-    "14",
-    "15",
-    "17.1",
-    "17.2",
-    "17.3",
-    "17.4",
-    "17.5",
-    "17.6",
+  const DATA_URL = "/data/brake-guidance-tasks-v1.0.json";
+  const PIC_SAMPLE_ALIAS = {
+    "Abnormal Log": "Abnormal Log1.png",
+    "BCM Plug1": "BCM Plug1_Plug2.png",
+    "BCM Plug2": "BCM Plug1_Plug2.png",
+    HDLC1: "HDLC1_2.png",
+    HDLC2: "HDLC1_2.png",
+    "IPM J1": "IPM J1_J4_J5_J6.png",
+    "IPM J4": "IPM J1_J4_J5_J6.png",
+    "IPM J5": "IPM J1_J4_J5_J6.png",
+    "IPM J6": "IPM J1_J4_J5_J6.png",
+    "IPM PN": "IPM PN_SN.png",
+    "IPM SN": "IPM PN_SN.png",
+    J100A: "J100A_101_102.png",
+    J100B: "J100A_101_102.png",
+    J101: "J100A_101_102.png",
+    J102: "J100A_101_102.png",
+    继电器1: "继电器1_2_3_4.png",
+    继电器2: "继电器1_2_3_4.png",
+    继电器3: "继电器1_2_3_4.png",
+    继电器4: "继电器1_2_3_4.png",
+  };
+  const PIC_SAMPLE_EXACT = new Set([
+    "13CP SN", "16CP SN", "20CP SN", "A71", "BCCP SN", "BCM SN", "BPCP SN", "DBTV SN",
+    "EBV PIPE", "EBV PLUG", "EBV SOCKET", "EBV铭牌", "EPCU SW", "ERCP SN", "IPM J6C",
+    "IPM Socket", "J103", "LCDM Plug", "LCDM SW", "LCDM铭牌", "LOCO Number", "MB04B MMI",
+    "PSJB SN", "U99", "WSP SN", "总风滤芯", "继电器箱", "辅助模块",
   ]);
 
+  function normalizePicLabelVariant(label) {
+    let s = String(label || "").trim();
+    [["EBVA", "EBV"], ["EBVB", "EBV"], ["LCDMA", "LCDM"], ["LCDMB", "LCDM"]].forEach(([pref, repl]) => {
+      if (s.startsWith(pref)) s = repl + s.slice(pref.length);
+    });
+    return s;
+  }
+
+  function resolvePicSampleFileForLabel(label) {
+    const raw = String(label || "").trim();
+    if (!raw) return "";
+    if (PIC_SAMPLE_ALIAS[raw]) return PIC_SAMPLE_ALIAS[raw];
+    if (PIC_SAMPLE_EXACT.has(raw)) return `${raw}.png`;
+    const normalized = normalizePicLabelVariant(raw);
+    if (normalized !== raw) {
+      if (PIC_SAMPLE_ALIAS[normalized]) return PIC_SAMPLE_ALIAS[normalized];
+      if (PIC_SAMPLE_EXACT.has(normalized)) return `${normalized}.png`;
+    }
+    return "";
+  }
+
+  function resolvePicSampleFileForRow(row) {
+    const buttons = Array.isArray(row && row.buttons) ? row.buttons : [];
+    for (let i = 0; i < buttons.length; i += 1) {
+      const file = resolvePicSampleFileForLabel(buttons[i] && buttons[i].label);
+      if (file) return file;
+    }
+    return "";
+  }
+
+  let guidanceDoc = null;
   let guidanceRows = [];
   let lang = "zh";
   let activeIssueRowId = "";
@@ -55,9 +81,10 @@
       basicInfo: "基本信息",
       subtask: "子任务",
       employee: "员工工号",
-      depot: "车辆段",
+      depot: "服务地点",
       project: "项目编号",
-      train: "列车号",
+      train: "车号",
+      trainModel: "车型",
       maint: "修程",
       deadline: "截止日期",
       taskid: "主任务 ID",
@@ -84,7 +111,7 @@
       locationFailed: "定位获取失败，已继续上传",
       reportIssue: "检查结果",
       issueDialogTitle: "检查结果",
-      issueDialogHelp: "请选择本项检查结果。发现异常需选择等级并填写说明；无法检测需填写说明；无此设备无需说明。",
+      issueDialogHelp: "请选择本项检查结果。发现异常需选择等级并填写说明；无此设备无需说明。",
       issuePlaceholder: "请描述异常现象或无法检测的原因",
       issuePlaceholderAbnormal: "请描述异常现象",
       issuePlaceholderUndetectable: "请说明无法检测的原因",
@@ -96,9 +123,10 @@
       issueNeedStatus: "请先选择检查结果",
       issueNeedDetail: "请填写异常现象或无法检测的原因",
       issueSeverityPlaceholder: "请选择异常等级",
-      issueSeveritySevere: "高风险",
-      issueSeverityModerate: "中风险",
-      issueSeverityMinor: "低风险",
+      issueSeveritySevere: "严重",
+      issueSeverityModerate: "中等",
+      issueSeverityMinor: "一般",
+      issueSeverityUndetectable: "无法检查",
       issueNeedSeverity: "请选择异常等级",
       submitNeedAllResults: "请先完成本任务全部检查结果后再提交",
       issueSave: "保存",
@@ -122,9 +150,10 @@
       basicInfo: "Basic Info",
       subtask: "Subtask",
       employee: "Employee ID",
-      depot: "Depot",
+      depot: "Service Location",
       project: "Project No.",
       train: "Train No.",
+      trainModel: "Model",
       maint: "Maintenance Type",
       deadline: "Deadline",
       taskid: "Main Task ID",
@@ -163,9 +192,10 @@
       issueNeedStatus: "Please select an inspection result",
       issueNeedDetail: "Please describe the abnormality or why it cannot be inspected",
       issueSeverityPlaceholder: "Select severity",
-      issueSeveritySevere: "High risk",
-      issueSeverityModerate: "Medium risk",
-      issueSeverityMinor: "Low risk",
+      issueSeveritySevere: "Severe",
+      issueSeverityModerate: "Moderate",
+      issueSeverityMinor: "Minor",
+      issueSeverityUndetectable: "Unable to inspect",
       issueNeedSeverity: "Please select severity",
       submitNeedAllResults: "Complete all inspection results before submitting",
       issueSave: "Save",
@@ -188,9 +218,9 @@
   function getMaintType() {
     const el = document.getElementById("f-maint-type");
     const raw = String((el && el.value) || "").trim().toLowerCase().replace(/[/\s_-]/g, "");
-    if (raw === "c1" || raw === "c2" || raw === "c3" || raw === "c1c3") return "c1c3";
-    if (raw === "c4" || raw === "c5" || raw === "c6" || raw === "c4c6") return "c4c6";
-    return "c4c6";
+    if (raw === "c1" || raw === "c2" || raw === "c3" || raw === "c1c3") return raw === "c1c3" ? "c1" : raw;
+    if (raw === "c4" || raw === "c5" || raw === "c6" || raw === "c4c6") return raw === "c4c6" ? "c4" : raw;
+    return "c4";
   }
 
   function displayMaintLabel(raw) {
@@ -201,32 +231,59 @@
     return String(raw || "").toUpperCase() || "-";
   }
 
-  function allowedByMaintCategory(row, maintType) {
-    const s = row.scopeTags;
-    if (maintType === "c1c3") {
-      if (s.length === 1 && s[0] === "c4c6") return false;
-      return true;
+  function extractModelToken(raw) {
+    const s = String(raw || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (!s) return "";
+    const known = ["HXD1", "SS4G", "FXD1B"];
+    for (let i = 0; i < known.length; i += 1) {
+      const model = known[i];
+      if (s === model || s.startsWith(model + "-") || s.startsWith(model + "_")) return model;
     }
-    if (maintType === "c4c6") {
-      if (s.length === 1 && s[0] === "c1c3") return false;
-      return true;
-    }
-    return true;
+    return s.split(/[-_]/)[0] || s;
   }
 
-  function seqForTemplate(row, maintType) {
-    const by = row && row.seqByTemplate ? row.seqByTemplate : {};
-    if (maintType === "c1c3" && by.c1c3) return String(by.c1c3);
-    if (maintType === "c4c6" && by.c4c6) return String(by.c4c6);
-    return String((row && row.seq) || "");
+  function selectTemplateKey(modelOrTrainNo, maint) {
+    const modelToken = extractModelToken(modelOrTrainNo);
+    const maintCode = String(maint || "").trim().toUpperCase().replace(/[/\s_-]/g, "");
+    const rules = (((guidanceDoc || {}).templateSelection || {}).rules || [])
+      .slice()
+      .sort((a, b) => Number(a.priority || 0) - Number(b.priority || 0));
+    for (let i = 0; i < rules.length; i += 1) {
+      const rule = rules[i];
+      const models = Array.isArray(rule.models) ? rule.models : [];
+      const maints = Array.isArray(rule.maintenance) ? rule.maintenance : [];
+      const modelOk = models.indexOf("*") >= 0 || models.some((m) => String(m || "").toUpperCase() === modelToken);
+      const maintOk = maints.some((m) => String(m || "").toUpperCase().replace(/[/\s_-]/g, "") === maintCode);
+      if (modelOk && maintOk && rule.template) return String(rule.template);
+    }
+    if (maintCode === "C1" || maintCode === "C2" || maintCode === "C3") return "6Axle+C1C2C3";
+    return "6Axle+C4C5C6";
+  }
+
+  function getTrainNoForTemplate() {
+    const modelEl = document.getElementById("f-train-model");
+    if (modelEl && String(modelEl.value || "").trim()) return String(modelEl.value).trim();
+    const el = document.getElementById("f-train");
+    if (el && String(el.value || "").trim()) return String(el.value).trim();
+    const q = new URLSearchParams(window.location.search);
+    return String(q.get("trainNo") || q.get("vehicleNo") || q.get("trainModel") || "").trim();
+  }
+
+  function refreshGuidanceRowsFromDoc() {
+    if (!guidanceDoc || !guidanceDoc.templates) {
+      guidanceRows = [];
+      return;
+    }
+    const key = selectTemplateKey(getTrainNoForTemplate(), getMaintType());
+    const tpl = guidanceDoc.templates[key];
+    guidanceRows = Array.isArray(tpl && tpl.rows) ? tpl.rows : [];
   }
 
   function visibleRows() {
-    const maintType = getMaintType();
-    const filtered = guidanceRows.filter((row) => allowedByMaintCategory(row, maintType));
-    return filtered.map((row) => ({
+    refreshGuidanceRowsFromDoc();
+    return guidanceRows.map((row) => ({
       ...row,
-      displaySeq: seqForTemplate(row, maintType) || row.seq,
+      displaySeq: row.seq,
     }));
   }
 
@@ -253,7 +310,8 @@
     const t = i18n[lang];
     const hint = document.getElementById("tl-filter-hint");
     if (hint) {
-      hint.textContent = t.filterHint + " " + (rows.length ? `（${rows.length}）` : "");
+      hint.hidden = true;
+      hint.textContent = "";
     }
 
     if (rows.length === 0) {
@@ -297,9 +355,10 @@
 
   function buildDescCell(row) {
     const text = escapeHtml(row.description);
-    if (SCHEMATIC_SEQS.has(row.seq)) {
+    const sampleFile = resolvePicSampleFileForRow(row);
+    if (sampleFile) {
       const link = lang === "zh" ? "获取帮助" : "Get help";
-      const imgUrl = `/PicSamples/${encodeURIComponent(row.seq)}.png`;
+      const imgUrl = `/PicSamples/${encodeURIComponent(sampleFile)}`;
       return `<span class="tl-desc-text">${text}</span><button type="button" class="tl-desc-btn tl-desc-btn--inline" data-schematic="${escapeHtml(imgUrl)}">${escapeHtml(link)}</button>`;
     }
     return text;
@@ -450,6 +509,7 @@
         employee: t.employee,
         project: t.project,
         train: t.train,
+        trainModel: t.trainModel,
         maint: t.maint,
         deadline: t.deadline,
         taskid: t.taskid,
@@ -494,7 +554,6 @@
       const options = [
         ["ok", t.issueStatusOk],
         ["abnormal", t.issueStatusAbnormal],
-        ["undetectable", t.issueStatusUndetectable],
         ["no_equipment", t.issueStatusNoEquipment],
       ];
       const prevStatus = String(issueStatus.value || "").trim();
@@ -509,9 +568,10 @@
     if (issueSeverity) {
       const sevOpts = [
         ["", t.issueSeverityPlaceholder],
-        ["minor", t.issueSeverityMinor],
-        ["moderate", t.issueSeverityModerate],
         ["severe", t.issueSeveritySevere],
+        ["moderate", t.issueSeverityModerate],
+        ["minor", t.issueSeverityMinor],
+        ["undetectable", t.issueSeverityUndetectable],
       ];
       const prev = issueSeverity.value;
       issueSeverity.innerHTML = sevOpts
@@ -1375,8 +1435,10 @@
     try {
       const res = await fetch(DATA_URL);
       const data = await res.json();
-      guidanceRows = data.rows || [];
+      guidanceDoc = data && data.templates ? data : null;
+      refreshGuidanceRowsFromDoc();
     } catch (e) {
+      guidanceDoc = null;
       guidanceRows = [];
       toast("Load failed");
     }

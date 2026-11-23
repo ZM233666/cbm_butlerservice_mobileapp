@@ -22,7 +22,7 @@
       "skillTypes": [
         "EMU"
       ],
-      "updatedAt": "2026-07-21T08:24:24.158Z"
+      "updatedAt": "2026-11-06T08:06:23.231Z"
     },
     {
       "employeeId": "2",
@@ -34,7 +34,7 @@
       "specialWorkCertificates": [],
       "qualifications": [],
       "skillTypes": [],
-      "updatedAt": "2026-07-21T08:24:24.158Z"
+      "updatedAt": "2026-11-06T08:06:23.231Z"
     },
     {
       "employeeId": "3",
@@ -51,7 +51,19 @@
       "skillTypes": [
         "LOCO"
       ],
-      "updatedAt": "2026-07-21T08:24:24.158Z"
+      "updatedAt": "2026-11-06T08:06:23.231Z"
+    },
+    {
+      "employeeId": "003",
+      "username": "Manager tester",
+      "email": "",
+      "department": "Central Function",
+      "region": "Central Function",
+      "role": "manager",
+      "specialWorkCertificates": [],
+      "qualifications": [],
+      "skillTypes": [],
+      "updatedAt": "2026-11-06T08:06:23.231Z"
     }
   ]
 }

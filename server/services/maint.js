@@ -1,6 +1,7 @@
 /**
- * 修程：业务存储 c1–c6；子任务模版仍为 c1c3 / c4c6。
- * Node 与各 service 共用同一套归一与映射。
+ * 修程：业务存储 c1–c6。
+ * 子任务完整模板选择见 guidance-template（车型×修程 → 4 套）。
+ * Node 与各 service 共用同一套修程归一与分组映射。
  */
 
 const LEVELS = new Set(["c1", "c2", "c3", "c4", "c5", "c6"]);

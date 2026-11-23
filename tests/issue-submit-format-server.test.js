@@ -11,7 +11,7 @@ test("enrichIssueSubmitEntry adds severity and bracketed result", () => {
     updatedAt: "2026-10-30T03:52:03.462Z",
   });
   assert.equal(out.severity, "severe");
-  assert.equal(out.result, "发现异常（高风险）：测试异常");
+  assert.equal(out.result, "发现异常（严重）：测试异常");
 });
 
 test("normalizeIssueEntry rebuilds result when severity present", () => {
@@ -22,5 +22,15 @@ test("normalizeIssueEntry rebuilds result when severity present", () => {
     result: "发现异常：测试异常",
   });
   assert.equal(out.severity, "moderate");
-  assert.equal(out.result, "发现异常（中风险）：测试异常");
+  assert.equal(out.result, "发现异常（中等）：测试异常");
+});
+
+test("legacy top-level undetectable migrates to abnormal severity", () => {
+  const out = normalizeIssueEntry({
+    status: "undetectable",
+    text: "盖板打不开",
+  });
+  assert.equal(out.status, "abnormal");
+  assert.equal(out.severity, "undetectable");
+  assert.equal(out.result, "发现异常（无法检查）：盖板打不开");
 });

@@ -7,16 +7,22 @@ import { useToastStore } from '@/stores/toast'
 import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
-import { createTaskCentreTask, fetchTaskCentre } from '@/api/tasks'
+import { createTaskCentreTask, fetchGuidanceTasks, fetchTaskCentre } from '@/api/tasks'
 import type { TaskCentreResponse } from '@/types/task'
 import {
   MAINT_LEVELS,
   type MaintLevel,
   formatMaintLabel,
-  maintToTemplate,
 } from '@/utils/maint'
+import {
+  type GuidanceDocV1,
+  buildPhotoCountsByTemplate,
+  deriveTrainModelFromTrainNo,
+  formatGuidanceTemplateLabel,
+  selectTemplateKey,
+} from '@/utils/guidance-template'
 
-type TaskTemplate = MaintLevel
+type TaskTemplate = MaintLevel | ''
 // 后续版本如需 Custom：改为 MaintLevel | 'custom'
 
 function nowMonth(): string {
@@ -45,18 +51,45 @@ let loadVersion = 0
 let addVersion = 0
 
 const form = ref({
-  template: 'c1' as TaskTemplate,
+  template: '' as TaskTemplate,
   // customName: '', // Custom 任务名称（后续版本恢复）
+  trainNo: '',
   trainModel: '',
-  requiredAttachments: 19,
+  requiredAttachments: 0,
   serviceCity: '',
   endDate: '',
 })
 
 const centre = ref<TaskCentreResponse | null>(null)
-const checklistCounts = ref({ c1c3: 19, c4c6: 45 })
+const guidanceDoc = ref<GuidanceDocV1 | null>(null)
+const photoCountsByTemplate = ref<Record<string, number>>({
+  '8Axle+C1C2C3': 28,
+  '8Axle+C4C5C6': 45,
+  '6Axle+C1C2C3': 35,
+  '6Axle+C4C5C6': 56,
+})
 
 const employeeId = computed(() => String(auth.user?.employeeId || '').trim())
+const hasSelectedMaint = computed(() => !!String(form.value.template || '').trim())
+const hasTrainModel = computed(() => !!String(form.value.trainModel || form.value.trainNo || '').trim())
+/** 模板由车型 + 修程共同决定，缺一不可 */
+const canResolveTemplate = computed(() => hasSelectedMaint.value && hasTrainModel.value)
+const selectedGuidanceTemplate = computed(() => {
+  if (!canResolveTemplate.value) return ''
+  return selectTemplateKey(
+    form.value.trainNo || form.value.trainModel,
+    form.value.template,
+    guidanceDoc.value?.templateSelection,
+  )
+})
+const selectedGuidanceTemplateLabel = computed(() => {
+  if (!canResolveTemplate.value) return t.value.tcTaskChecklist
+  return formatGuidanceTemplateLabel(selectedGuidanceTemplate.value, form.value.template)
+})
+const checklistPillText = computed(() => {
+  if (!canResolveTemplate.value) return t.value.tcTaskChecklist
+  return `${selectedGuidanceTemplateLabel.value} · ${t.value.tcChecklistCount.replace('{n}', String(form.value.requiredAttachments))}`
+})
 
 const loadError = computed(() =>
   hasLoadError.value ? t.value.tcLoadFail : '',
@@ -91,16 +124,37 @@ const attachmentStats = computed(() => {
   }
 })
 
-function syncRequiredAttachments(template: TaskTemplate) {
-  const tpl = maintToTemplate(template)
-  if (tpl === 'c1c3') form.value.requiredAttachments = checklistCounts.value.c1c3
-  else if (tpl === 'c4c6') form.value.requiredAttachments = checklistCounts.value.c4c6
-  else form.value.requiredAttachments = Math.max(0, form.value.requiredAttachments || 0)
+function syncRequiredAttachments() {
+  if (!canResolveTemplate.value || !selectedGuidanceTemplate.value) {
+    form.value.requiredAttachments = 0
+    return
+  }
+  const key = selectedGuidanceTemplate.value
+  const n = Number(photoCountsByTemplate.value[key])
+  form.value.requiredAttachments = Number.isFinite(n) ? n : 0
 }
 
-watch(() => form.value.template, (v) => {
-  syncRequiredAttachments(v)
+watch(() => form.value.trainNo, (raw) => {
+  form.value.trainModel = deriveTrainModelFromTrainNo(raw)
 })
+
+watch([() => form.value.template, () => form.value.trainNo, () => form.value.trainModel, selectedGuidanceTemplate], () => {
+  syncRequiredAttachments()
+})
+
+async function loadGuidancePhotoCounts() {
+  try {
+    const doc = await fetchGuidanceTasks()
+    guidanceDoc.value = doc
+    photoCountsByTemplate.value = {
+      ...photoCountsByTemplate.value,
+      ...buildPhotoCountsByTemplate(doc),
+    }
+    syncRequiredAttachments()
+  } catch {
+    /* keep defaults */
+  }
+}
 
 watch(() => form.value.endDate, (v) => {
   const text = String(v || '').trim()
@@ -111,10 +165,11 @@ watch(() => form.value.endDate, (v) => {
 const canAddTask = computed(() => {
   if (adding.value) return false
   const templateOk = !!String(form.value.template || '').trim()
-  const trainOk = !!String(form.value.trainModel || '').trim()
+  const trainOk = !!String(form.value.trainNo || '').trim()
+  const modelOk = !!String(form.value.trainModel || '').trim()
   const cityOk = !!String(form.value.serviceCity || '').trim()
   const endOk = !!String(form.value.endDate || '').trim()
-  if (!templateOk || !trainOk || !cityOk || !endOk) return false
+  if (!templateOk || !trainOk || !modelOk || !cityOk || !endOk) return false
   if (String(form.value.endDate || '').trim() < todayMin.value) return false
   // if (form.value.template === 'custom' && !String(form.value.customName || '').trim()) return false
   return true
@@ -139,14 +194,7 @@ async function loadCentre() {
     if (currentVersion !== loadVersion) return
 
     centre.value = data
-    const counts = data?.checklistCounts
-    if (counts && typeof counts === 'object') {
-      checklistCounts.value = {
-        c1c3: Number(counts.c1c3) || checklistCounts.value.c1c3,
-        c4c6: Number(counts.c4c6) || checklistCounts.value.c4c6,
-      }
-      syncRequiredAttachments(form.value.template)
-    }
+    syncRequiredAttachments()
   } catch {
     if (currentVersion !== loadVersion) return
     centre.value = null
@@ -169,6 +217,8 @@ watch(
   },
   { immediate: true },
 )
+
+void loadGuidancePhotoCounts()
 
 function templateTitle(tp: TaskTemplate) {
   // if (tp === 'custom') return t.value.tcTemplateCustom
@@ -198,7 +248,8 @@ async function addTask() {
     await createTaskCentreTask({
       employeeId: id,
       maint,
-      trainNo: form.value.trainModel.trim(),
+      trainNo: form.value.trainNo.trim(),
+      trainModel: form.value.trainModel.trim(),
       depot: form.value.serviceCity.trim(),
       deadline: form.value.endDate,
       title: name,
@@ -217,9 +268,12 @@ async function addTask() {
     toast.show(t.value.tcAdded, 'success', 1800)
 
     // form.value.customName = ''
+    form.value.template = ''
+    form.value.trainNo = ''
     form.value.trainModel = ''
     form.value.serviceCity = ''
     form.value.endDate = ''
+    form.value.requiredAttachments = 0
   } catch {
     if (currentAddVersion !== addVersion || employeeId.value !== id) return
     toast.show(t.value.tcCreateFail, 'error', 2200)
@@ -300,8 +354,9 @@ async function addTask() {
               </div>
             </header>
             <div class="tc-step__fields">
+              <label><span>{{ t.tcTrainNo }}</span><input v-model="form.trainNo" :placeholder="t.tcTrainPlaceholder" /></label>
+              <label><span>{{ t.tcTrainModel }}</span><input v-model="form.trainModel" :placeholder="t.tcTrainModelPlaceholder" readonly /></label>
               <label><span>{{ t.tcServiceCity }}</span><input v-model="form.serviceCity" :placeholder="t.tcDepotPlaceholder" /></label>
-              <label><span>{{ t.tcTrainModel }}</span><input v-model="form.trainModel" :placeholder="t.tcTrainPlaceholder" /></label>
             </div>
           </section>
 
@@ -317,6 +372,7 @@ async function addTask() {
               <label class="tc-step__field--maintenance">
                 <span>{{ t.tcTemplate }}</span>
                 <select v-model="form.template">
+                  <option value="" disabled>{{ t.tcMaintPlaceholder }}</option>
                   <option v-for="level in MAINT_LEVELS" :key="level" :value="level">
                     {{ formatMaintLabel(level) }}
                   </option>
@@ -326,7 +382,7 @@ async function addTask() {
                 </select>
               </label>
               <span class="tc-step__pill tc-step__pill--inline" :title="t.tcChecklistCountTitle">
-                {{ t.tcChecklistCount.replace('{n}', String(form.requiredAttachments)) }}
+                {{ checklistPillText }}
               </span>
               <!-- Custom 任务名称（后续版本恢复）
               <label v-if="form.template === 'custom'" class="tc-step__field--full"><span>{{ t.tcCustomName }}</span><input v-model="form.customName" :placeholder="t.tcCustomPlaceholder" /></label>

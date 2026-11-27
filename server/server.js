@@ -459,24 +459,21 @@ function safeReadJsonLines(absPath, maxLines) {
 }
 
 function requiredUploadSlotsByMaint() {
+  const { buildTemplateStats } = require("./services/guidance-template");
   const taskData = readJsonObject(cfg.tasksDataPath);
-  const rows = Array.isArray(taskData.rows) ? taskData.rows : [];
-  const setC1 = new Set();
-  const setC4 = new Set();
-  rows.forEach((r) => {
-    const scopeTags = Array.isArray(r && r.scopeTags) ? r.scopeTags : [];
-    const buttons = Array.isArray(r && r.buttons) ? r.buttons : [];
-    const slots = buttons.map((b) => String(b && b.slot || "").trim()).filter(Boolean);
-    if (!slots.length) return;
-    const hasAll = scopeTags.includes("all");
-    const hasC1 = scopeTags.includes("c1c3");
-    const hasC4 = scopeTags.includes("c4c6");
-    slots.forEach((s) => {
-      if (hasAll || hasC1) setC1.add(s);
-      if (hasAll || hasC4) setC4.add(s);
-    });
-  });
-  return { c1c3: setC1.size, c4c6: setC4.size };
+  if (taskData && taskData.templates) {
+    const stats = buildTemplateStats(taskData);
+    return {
+      "8Axle+C1C2C3": Number(stats["8Axle+C1C2C3"] && stats["8Axle+C1C2C3"].photos) || 0,
+      "8Axle+C4C5C6": Number(stats["8Axle+C4C5C6"] && stats["8Axle+C4C5C6"].photos) || 0,
+      "6Axle+C1C2C3": Number(stats["6Axle+C1C2C3"] && stats["6Axle+C1C2C3"].photos) || 0,
+      "6Axle+C4C5C6": Number(stats["6Axle+C4C5C6"] && stats["6Axle+C4C5C6"].photos) || 0,
+      // 兼容旧调用方
+      c1c3: Number(stats["6Axle+C1C2C3"] && stats["6Axle+C1C2C3"].photos) || 0,
+      c4c6: Number(stats["6Axle+C4C5C6"] && stats["6Axle+C4C5C6"].photos) || 0,
+    };
+  }
+  return { c1c3: 0, c4c6: 0 };
 }
 
 async function requestJson(url, headers) {
@@ -1104,6 +1101,7 @@ app.get("/api/task-submit-latest", async (req, res) => {
       submittedAt: data.submittedAt,
       uploads: data.uploads && typeof data.uploads === "object" ? data.uploads : {},
       issues: data.issues && typeof data.issues === "object" ? data.issues : {},
+      equipment: data.equipment && typeof data.equipment === "object" ? data.equipment : {},
     });
   } catch (err) {
     const code = err && err.payload && err.payload.code;
@@ -1117,8 +1115,7 @@ app.get("/api/task-submit-latest", async (req, res) => {
 
 app.get("/api/task-summary", (_req, res) => {
   const taskData = readJsonObject(cfg.tasksDataPath);
-  const rows = Array.isArray(taskData.rows) ? taskData.rows : [];
-  const summary = buildTaskSummary(rows);
+  const summary = buildTaskSummary(taskData);
   res.json({ ok: true, ...summary });
 });
 
@@ -1819,11 +1816,12 @@ app.get("/api/manager/dashboard", async (req, res) => {
     return res.status(403).json({ ok: false, error: "forbidden" });
   }
   const month = String(req.query.month || "").trim();
+  const scope = String(req.query.scope || "mine").trim().toLowerCase() || "mine";
   try {
     const token = authFromRequest(req);
     const dashboard = await djangoApiCache.getOrLoad(
-      `manager-dashboard:${String(actor.employeeId || "").trim()}:${month || "current"}`,
-      () => fetchManagerDashboardFromDb(month, token),
+      `manager-dashboard:${String(actor.employeeId || "").trim()}:${scope}:${month || "current"}`,
+      () => fetchManagerDashboardFromDb(month, token, scope),
       cfg.apiCacheManagerDashboardTtlMs,
     );
     return res.json({ ok: true, ...(dashboard && typeof dashboard === "object" ? dashboard : {}) });
@@ -1862,8 +1860,10 @@ app.post("/api/manager/assignments", async (req, res) => {
   }
 });
 
-app.get("/RVSChinaDT_Logo.png", (_req, res) => {
+function sendBrandLogo(res) {
   const logoCandidates = [
+    path.join(projectRoot, "frontend", "dist", "Rail-China-Digital-Team-Logo.png"),
+    path.join(projectRoot, "frontend", "public", "Rail-China-Digital-Team-Logo.png"),
     path.join(projectRoot, "RVSChinaDT_Logo.png"),
     path.join(projectRoot, "frontend", "dist", "RVSChinaDT_Logo.png"),
     path.join(projectRoot, "frontend", "public", "RVSChinaDT_Logo.png"),
@@ -1872,8 +1872,11 @@ app.get("/RVSChinaDT_Logo.png", (_req, res) => {
   if (!logoPath) {
     return res.status(404).json({ ok: false, error: "logo_not_found" });
   }
-  res.sendFile(logoPath);
-});
+  return res.sendFile(logoPath);
+}
+
+app.get("/Rail-China-Digital-Team-Logo.png", (_req, res) => sendBrandLogo(res));
+app.get("/RVSChinaDT_Logo.png", (_req, res) => sendBrandLogo(res));
 
 app.use("/PicSamples", express.static(cfg.picSamplesDir));
 app.use("/uploads/task", express.static(cfg.uploadsDir));
@@ -2006,6 +2009,7 @@ app.post("/api/task-draft", async (req, res) => {
       status: data && data.status ? data.status : undefined,
       uploads: data && data.uploads ? data.uploads : undefined,
       issues: data && data.issues ? data.issues : undefined,
+      equipment: data && data.equipment ? data.equipment : undefined,
       updatedSeqCount: data && data.updatedSeqCount != null ? data.updatedSeqCount : undefined,
     });
   } catch (err) {
@@ -2084,6 +2088,7 @@ app.post("/api/task-submit", async (req, res) => {
       status: data && data.status ? data.status : undefined,
       uploads: data && data.uploads ? data.uploads : undefined,
       issues: data && data.issues ? data.issues : undefined,
+      equipment: data && data.equipment ? data.equipment : undefined,
       updatedSeqCount: data && data.updatedSeqCount != null ? data.updatedSeqCount : undefined,
       report,
     });

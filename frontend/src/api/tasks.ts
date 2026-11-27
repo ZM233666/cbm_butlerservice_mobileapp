@@ -45,6 +45,8 @@ export interface CreateTaskCentrePayload {
   employeeId: string
   maint: string
   trainNo: string
+  /** 车型；可由车号前四位推导 */
+  trainModel?: string
   depot: string
   deadline: string
   title?: string
@@ -89,7 +91,9 @@ export function postTaskStatus(
 }
 
 export function fetchGuidanceTasks() {
-  return apiGet<{ rows: import('@/types/task').GuidanceRow[] }>('/data/brake-guidance-tasks.json')
+  return apiGet<import('@/utils/guidance-template').GuidanceDocV1>(
+    '/data/brake-guidance-tasks-v1.0.json',
+  )
 }
 
 export interface TaskSubmitResponse {
@@ -136,7 +140,18 @@ export function fetchLatestTaskSubmit(taskId: string) {
     found?: boolean
     submittedAt?: string
     uploads?: Record<string, { url: string; displayName?: string; capture?: { capturedAt?: string; location?: Record<string, unknown> } }>
-    issues?: Record<string, { status?: string; text?: string; result?: string; updatedAt?: string }>
+    issues?: Record<string, {
+      status?: string
+      text?: string
+      severity?: string
+      result?: string
+      updatedAt?: string
+    }>
+    equipment?: Record<string, {
+      materialNumber?: string
+      serialNumber?: string
+      overhaulOrManufactureDate?: string
+    }>
   }>('/api/task-submit-latest', { taskId })
 }
 

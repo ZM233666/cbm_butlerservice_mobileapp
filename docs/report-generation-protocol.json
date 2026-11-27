@@ -1,0 +1,230 @@
+{
+  "protocol": "butler.report.generation",
+  "version": "2.0",
+  "updated": "2026-11-13",
+  "purpose": "H5 作业提交后，报告生成（Word/PDF/邮件）的精简通信契约",
+  "flow": [
+    "H5 POST /api/task-submit",
+    "Django POST /api/business/task/h5/submit/",
+    "persist Task + TaskSubtask + MaintenanceRecord.abnormality_summary",
+    "enqueue generate_report_task({ task_id, template_code, options })",
+    "collect_report_data(payload) → render_word_report → PDF → workflow"
+  ],
+  "keys": {
+    "report_primary_key": "Task.id (int)",
+    "business_key": "Task.task_no (string, e.g. MT-CCBII-95816)"
+  },
+  "trigger": {
+    "celery_task": "generate_report_task",
+    "payload": {
+      "task_id": 410,
+      "template_code": "report_template",
+      "options": {
+        "trigger_workflow": true,
+        "emit_pdf": true
+      }
+    },
+    "notes": [
+      "template_code 由 repair_level 解析；若 report_template_c1c3.docx 不存在则回退 report_template",
+      "options 不携带 abnormality_summary；汇总只从库读取"
+    ]
+  },
+  "h5_submit": {
+    "method": "POST",
+    "path": "/api/task-submit",
+    "django_path": "/api/business/task/h5/submit/",
+    "body": {
+      "basicInfo": {
+        "taskId": "MT-CCBII-95816",
+        "employeeId": "829381",
+        "maintenanceType": "c1",
+        "trainNo": "HXD3D0388",
+        "trainModel": "HXD3",
+        "depot": "",
+        "templateKey": "6Axle+C1C2C3",
+        "mileageKm": 123456
+      },
+      "uploads": {
+        "<slotId>": {
+          "url": "/uploads/task/....jpg",
+          "displayName": "EBVA铭牌",
+          "capture": { "capturedAt": "2026-11-12T07:40:07.000Z" }
+        }
+      },
+      "issues": {
+        "<rowId>": {
+          "status": "ok | abnormal | no_equipment",
+          "text": "",
+          "result": "检查正常",
+          "updatedAt": "ISO-8601",
+          "severity": "仅 status=abnormal 时出现：severe | moderate | minor | undetectable"
+        }
+      },
+      "equipment": {
+        "<rowId>": {
+          "materialNumber": "782581",
+          "serialNumber": "C0-3615N1-H0",
+          "overhaulOrManufactureDate": "2425C3"
+        }
+      },
+      "abnormalitySummary": {
+        "total": 3,
+        "text": "本次管家式服务共发现3处异常，其中：\n高风险异常1处，分别为：第3.1步：IPM 插座针脚歪斜。\n中风险异常1处，分别为：第5.1步：航空插头锁紧不到位。\n低风险异常1处，分别为：第8.1步：手柄阻力偏大。",
+        "groups": {
+          "severe": [{ "seq": "3.1", "text": "IPM 插座针脚歪斜" }],
+          "moderate": [{ "seq": "5.1", "text": "航空插头锁紧不到位" }],
+          "minor": [{ "seq": "8.1", "text": "手柄阻力偏大" }]
+        }
+      }
+    },
+    "optional_flags": {
+      "allowEmptyUploads": "仅 true 时出现；默认省略"
+    }
+  },
+  "persist": {
+    "task_fields": [
+      "id",
+      "task_no",
+      "employee_no",
+      "repair_level",
+      "train_no",
+      "train_model",
+      "depot",
+      "mileage_km",
+      "status"
+    ],
+    "subtask": {
+      "seq_no": "指导书步骤号，如 2.1 / 3.1；特殊桶见 special_seq",
+      "issue_notes": { "<rowId>": { "status": "", "severity": "", "text": "", "result": "", "updatedAt": "" } },
+      "equipment": { "<rowId>": { "materialNumber": "", "serialNumber": "", "overhaulOrManufactureDate": "" } },
+      "image_paths": { "<slotId>": { "url": "", "displayName": "", "capture": {} } }
+    },
+    "special_seq": {
+      "_uploads": "未映射图片回退",
+      "_issues": "未映射检查结果回退",
+      "_equipment": "未映射设备回退"
+    },
+    "maintenance_record": {
+      "record_no": "SUB-{task_no}",
+      "abnormality_summary": "TextField，存 JSON 字符串：{text,total,groups,updatedAt}"
+    }
+  },
+  "abnormality_summary": {
+    "authority": "H5 body.abnormalitySummary → MaintenanceRecord.abnormality_summary(JSON) → task_summary.report_summary=text",
+    "h5_wire": {
+      "total": 4,
+      "text": "本次管家式服务共发现4处异常，其中：\\n高风险异常1处，分别为：第1步：无车号。\\n中风险异常2处，分别为：第6.5步：ddd；第6.8步：中等一场。\\n低风险异常1处，分别为：第6.9步：hhh。",
+      "groups": {
+        "severe": [{ "seq": "1", "text": "无车号" }],
+        "moderate": [
+          { "seq": "6.5", "text": "ddd" },
+          { "seq": "6.8", "text": "中等一场" }
+        ],
+        "minor": [{ "seq": "6.9", "text": "hhh" }]
+      }
+    },
+    "after_persist": {
+      "text": "...",
+      "total": 4,
+      "groups": {
+        "severe": [{ "seq": "1", "text": "无车号" }],
+        "moderate": [{ "seq": "6.5", "text": "ddd" }, { "seq": "6.8", "text": "中等一场" }],
+        "minor": [{ "seq": "6.9", "text": "hhh" }]
+      },
+      "updatedAt": "服务端补齐 ISO-8601"
+    },
+    "zero_example": {
+      "total": 0,
+      "text": "本次管家式服务共发现0处异常。",
+      "groups": { "severe": [], "moderate": [], "minor": [] }
+    },
+    "rules": [
+      "只统计 status=abnormal 且 severity∈{severe,moderate,minor}",
+      "不含 undetectable / no_equipment / ok",
+      "旧字段 lines 仅兼容入站补 text"
+    ]
+  },
+  "collect_report_data": {
+    "entry": "ReportManagement.services.data_provider.collect_report_data",
+    "input": { "task_id": 410, "options": { "trigger_workflow": true, "emit_pdf": true } },
+    "output": {
+      "task": "Task ORM",
+      "subtasks": "TaskSubtask[] ORM",
+      "subtask_map": { "<seq_no>": "TaskSubtask ORM" },
+      "task_summary": {
+        "id": 410,
+        "task_no": "MT-CCBII-95816",
+        "title": "",
+        "employee_no": "829381",
+        "depot": "",
+        "train_no": "HXD3D0388",
+        "train_model": "HXD3",
+        "repair_level": "c1",
+        "repair_level_display": "C1",
+        "maintenance_completion_date": "YYYY-MM-DD HH:MM:SS",
+        "executor": "姓名 (工号)",
+        "assistant": "",
+        "report_summary": "来自 MaintenanceRecord.abnormality_summary JSON 的 text 字段",
+        "status": "done",
+        "update_datetime": "YYYY-MM-DD HH:MM:SS",
+        "generated_at": "YYYY-MM-DD HH:MM:SS",
+        "mileage_km": "来自 Task.mileage_km（字符串，可空）"
+      }
+    },
+    "consumer_notes": [
+      "报告适配优先读 task_summary + subtask_map",
+      "报告总结只读 task_summary.report_summary",
+      "逐步检查结果优先用 issue_notes[*].result",
+      "设备三字段：materialNumber / serialNumber / overhaulOrManufactureDate",
+      "图片 url 为 /uploads/task/...，按 MEDIA 根解析"
+    ]
+  },
+  "enums": {
+    "issue_status": ["ok", "abnormal", "no_equipment"],
+    "issue_severity": ["severe", "moderate", "minor", "undetectable"],
+    "result_examples": [
+      "检查正常",
+      "无此设备",
+      "发现异常（严重）：...",
+      "发现异常（中等）：...",
+      "发现异常（一般）：...",
+      "发现异常（无法检查）：..."
+    ]
+  },
+  "examples": {
+    "subtask_ok_with_equipment": {
+      "seq_no": "2.1",
+      "issue_notes": {
+        "6axle-c1c2c3-2-1": {
+          "status": "ok",
+          "text": "",
+          "result": "检查正常",
+          "updatedAt": "2026-11-12T10:49:24.725Z"
+        }
+      },
+      "equipment": {
+        "6axle-c1c2c3-2-1": {
+          "materialNumber": "782581",
+          "serialNumber": "C0-3615N1-H0",
+          "overhaulOrManufactureDate": "2425C3"
+        }
+      },
+      "image_paths": {
+        "6axle-c1c2c3-2-1-1": {
+          "url": "/uploads/task/MT-CCBII-95816__EBVA__829381__20261112104838__0e39.jpg",
+          "displayName": "EBVA铭牌",
+          "capture": { "capturedAt": "2026-11-12T07:40:07.000Z" }
+        }
+      }
+    },
+    "guidance": {
+      "templateKey": "6Axle+C1C2C3",
+      "rowId_examples": [
+        "6axle-c1c2c3-2-1 → seq 2.1",
+        "6axle-c1c2c3-3-1 → seq 3.1",
+        "6axle-c1c2c3-5-1 → seq 5.1",
+        "6axle-c1c2c3-8-1 → seq 8.1"
+      ]
+    }
+  }
+}

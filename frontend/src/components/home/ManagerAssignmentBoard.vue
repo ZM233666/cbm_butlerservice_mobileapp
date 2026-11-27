@@ -2,11 +2,19 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { fetchManagerDashboard, postAssignment } from '@/api/manager'
+import { fetchGuidanceTasks } from '@/api/tasks'
 import type { FseMember, ManagerAssignment, ManagerDashboard } from '@/types/manager'
 import { fetchUsers } from '@/api/users'
 import { useI18n } from '@/composables/useI18n'
 import MonthPicker from '@/components/common/MonthPicker.vue'
 import { MAINT_LEVELS, formatMaintLabel } from '@/utils/maint'
+import {
+  buildPhotoCountsByTemplate,
+  deriveTrainModelFromTrainNo,
+  formatGuidanceTemplateLabel,
+  selectTemplateKey,
+  type GuidanceDocV1,
+} from '@/utils/guidance-template'
 
 const auth = useAuthStore()
 const { t, lang } = useI18n()
@@ -19,13 +27,64 @@ const fseMembers = ref<FseMember[]>([])
 
 const requiredCertificateName = ref('')
 const assignee = ref('')
-const maint = ref('c4')
+const maint = ref('')
 const region = ref('')
 const depot = ref('')
 const vehicleNo = ref('')
+const trainModel = ref('')
 const plannedStart = ref('')
 const deadline = ref('')
 const assigning = ref(false)
+
+const guidanceDoc = ref<GuidanceDocV1 | null>(null)
+const photoCountsByTemplate = ref<Record<string, number>>({
+  '8Axle+C1C2C3': 28,
+  '8Axle+C4C5C6': 45,
+  '6Axle+C1C2C3': 35,
+  '6Axle+C4C5C6': 56,
+})
+
+const hasSelectedMaint = computed(() => !!String(maint.value || '').trim())
+const hasTrainModel = computed(() => !!String(trainModel.value || vehicleNo.value || '').trim())
+const canResolveTemplate = computed(() => hasSelectedMaint.value && hasTrainModel.value)
+const selectedGuidanceTemplate = computed(() => {
+  if (!canResolveTemplate.value) return ''
+  return selectTemplateKey(
+    vehicleNo.value || trainModel.value,
+    maint.value,
+    guidanceDoc.value?.templateSelection,
+  )
+})
+const selectedGuidanceTemplateLabel = computed(() => {
+  if (!canResolveTemplate.value) return t.value.tcTaskChecklist
+  return formatGuidanceTemplateLabel(selectedGuidanceTemplate.value, maint.value)
+})
+const checklistCount = computed(() => {
+  if (!canResolveTemplate.value || !selectedGuidanceTemplate.value) return 0
+  const n = Number(photoCountsByTemplate.value[selectedGuidanceTemplate.value])
+  return Number.isFinite(n) ? n : 0
+})
+const checklistPillText = computed(() => {
+  if (!canResolveTemplate.value) return t.value.tcTaskChecklist
+  return `${selectedGuidanceTemplateLabel.value} · ${t.value.tcChecklistCount.replace('{n}', String(checklistCount.value))}`
+})
+
+watch(vehicleNo, (raw) => {
+  trainModel.value = deriveTrainModelFromTrainNo(raw)
+})
+
+async function loadGuidancePhotoCounts() {
+  try {
+    const doc = await fetchGuidanceTasks()
+    guidanceDoc.value = doc
+    photoCountsByTemplate.value = {
+      ...photoCountsByTemplate.value,
+      ...buildPhotoCountsByTemplate(doc),
+    }
+  } catch {
+    /* keep defaults */
+  }
+}
 
 const hintText = computed(() => {
   if (!hintKey.value) return ''
@@ -52,18 +111,23 @@ const selectedFseName = computed(() => {
   return filteredFseMembers.value.find(m => String(m.employeeId) === id)?.name || ''
 })
 
-const maintDisplay = computed(() => formatMaintLabel(maint.value))
+const maintDisplay = computed(() => formatMaintLabel(maint.value) || '—')
+const dash = '—'
 
 const dispatchSummary = computed(() => {
-  const v = vehicleNo.value.trim() || (lang.value === 'en' ? '—' : '—')
-  const m = maintDisplay.value || (lang.value === 'en' ? '—' : '—')
-  const who = selectedFseName.value || (lang.value === 'en' ? '—' : '—')
-  const s = String(plannedStart.value || '').trim() || (lang.value === 'en' ? '—' : '—')
-  const d = String(deadline.value || '').trim() || (lang.value === 'en' ? '—' : '—')
+  const v = vehicleNo.value.trim() || dash
+  const model = trainModel.value.trim()
+  const vehicleLabel = model && v !== dash ? `${v} / ${model}` : v
+  const m = canResolveTemplate.value
+    ? `${maintDisplay.value} · ${selectedGuidanceTemplateLabel.value}`
+    : (maintDisplay.value || dash)
+  const who = selectedFseName.value || dash
+  const s = String(plannedStart.value || '').trim() || dash
+  const d = String(deadline.value || '').trim() || dash
   if (lang.value === 'en') {
-    return `You are assigning [${v}] [${m}] to [${who}] planned start [${s}] and deadline [${d}].`
+    return `You are assigning [${vehicleLabel}] [${m}] to [${who}] planned start [${s}] and deadline [${d}].`
   }
-  return `你正将 [${v}] 的 [${m}] 分配给 [${who}]，计划开始 [${s}]，截止日期 [${d}]。`
+  return `你正将 [${vehicleLabel}] 的 [${m}] 分配给 [${who}]，计划开始 [${s}]，截止日期 [${d}]。`
 })
 
 const DRAFT_KEY = 'butler.manager.assignmentDraft'
@@ -81,6 +145,7 @@ function saveDraft() {
       region: region.value,
       depot: depot.value,
       vehicleNo: vehicleNo.value,
+      trainModel: trainModel.value,
       plannedStart: plannedStart.value,
       deadline: deadline.value,
     }
@@ -126,10 +191,12 @@ function buildDraftRow(): ManagerAssignment | null {
   const savedAt = String(data.savedAt || '').trim()
   const id = savedAt ? `draft:${savedAt}` : 'draft:local'
 
+  const trainModel = String(data.trainModel || '').trim()
   return {
     id,
     vehicleNo: vehicleNo || '-',
-    maint: maint || 'c4',
+    trainModel: trainModel || undefined,
+    maint: maint || '',
     depot: depotText,
     assignedTo: assigneeName ? { name: assigneeName, employeeId: assigneeId || undefined } : { employeeId: assigneeId || undefined },
     status: 'draft',
@@ -152,7 +219,7 @@ function applyDraftFromStorage() {
     const data = JSON.parse(raw) as Partial<Record<string, unknown>>
     if (data.requiredCertificateName != null) requiredCertificateName.value = String(data.requiredCertificateName || '')
     if (data.assignee != null) assignee.value = String(data.assignee || '')
-    if (data.maint != null) maint.value = String(data.maint || maint.value)
+    if (data.maint != null) maint.value = String(data.maint || '')
     if (data.region != null || data.depot != null) {
       const r = String(data.region || '').trim()
       const d = String(data.depot || '').trim()
@@ -160,6 +227,11 @@ function applyDraftFromStorage() {
       region.value = r
     }
     if (data.vehicleNo != null) vehicleNo.value = String(data.vehicleNo || '')
+    if (data.trainModel != null) {
+      trainModel.value = String(data.trainModel || '')
+    } else if (data.vehicleNo != null) {
+      trainModel.value = deriveTrainModelFromTrainNo(vehicleNo.value)
+    }
     if (data.plannedStart != null) plannedStart.value = String(data.plannedStart || '')
     if (data.deadline != null) deadline.value = String(data.deadline || '')
   } catch {
@@ -227,6 +299,7 @@ async function onAssign() {
     !maint.value ||
     !depot.value.trim() ||
     !vehicleNo.value.trim() ||
+    !trainModel.value.trim() ||
     !plannedStart.value ||
     !deadline.value
   ) {
@@ -246,6 +319,7 @@ async function onAssign() {
       maint: maint.value,
       depot: depotText,
       vehicleNo: vehicleNo.value.trim(),
+      trainModel: trainModel.value.trim(),
       plannedStart: plannedStart.value,
       deadline: deadline.value,
       requiresSpecialWorkCertificate: !!requiredCertificateName.value,
@@ -272,6 +346,8 @@ async function onAssign() {
     region.value = ''
     depot.value = ''
     vehicleNo.value = ''
+    trainModel.value = ''
+    maint.value = ''
     plannedStart.value = ''
     await load()
   } catch {
@@ -283,7 +359,7 @@ async function onAssign() {
 }
 
 onMounted(async () => {
-  await load()
+  await Promise.all([load(), loadGuidancePhotoCounts()])
   applyDraftFromStorage()
 })
 </script>
@@ -309,7 +385,7 @@ onMounted(async () => {
             <span class="mgr-step__no" aria-hidden="true">1</span>
             <div class="mgr-step__copy">
               <p class="mgr-step__title">{{ lang === 'zh' ? '任务人员' : 'Task Personnel' }}</p>
-              <p class="mgr-step__sub">{{ lang === 'zh' ? '选择工程师并填写车辆与地点' : 'Pick an engineer and fill vehicle/location' }}</p>
+              <p class="mgr-step__sub">{{ lang === 'zh' ? '选择工程师，填写车号（自动带出车型）与地点' : 'Pick an engineer; train model follows vehicle no.' }}</p>
             </div>
           </header>
           <div class="mgr-step__fields">
@@ -332,6 +408,14 @@ onMounted(async () => {
               </select>
             </label>
             <label class="manager-field">
+              <span>{{ t.mgrVehicleNo }}</span>
+              <input v-model="vehicleNo" type="text" :placeholder="t.tcTrainPlaceholder" required />
+            </label>
+            <label class="manager-field">
+              <span>{{ t.tcTrainModel }}</span>
+              <input v-model="trainModel" type="text" :placeholder="t.tcTrainModelPlaceholder" readonly />
+            </label>
+            <label class="manager-field manager-field--full">
               <span>{{ lang === 'zh' ? '服务地点/机务段' : 'Service Location / Depot' }}</span>
               <input
                 v-model="depot"
@@ -339,10 +423,6 @@ onMounted(async () => {
                 :placeholder="lang === 'zh' ? '服务地点/机务段' : 'Service Location / Depot'"
                 required
               />
-            </label>
-            <label class="manager-field">
-              <span>{{ t.mgrVehicleNo }}</span>
-              <input v-model="vehicleNo" type="text" :placeholder="t.mgrVehiclePlaceholder" required />
             </label>
           </div>
         </section>
@@ -352,18 +432,22 @@ onMounted(async () => {
             <span class="mgr-step__no" aria-hidden="true">2</span>
             <div class="mgr-step__copy">
               <p class="mgr-step__title">{{ lang === 'zh' ? '内容与标准' : 'What & How' }}</p>
-              <p class="mgr-step__sub">{{ lang === 'zh' ? '选择保养大类' : 'Pick a maintenance category' }}</p>
+              <p class="mgr-step__sub">{{ lang === 'zh' ? '选修程后按车型自动匹配任务清单' : 'Pick maintenance; checklist follows train model' }}</p>
             </div>
           </header>
-          <div class="mgr-step__fields">
-            <label class="manager-field manager-field--full">
+          <div class="mgr-step__fields mgr-step__fields--standard">
+            <label class="manager-field mgr-step__field--maintenance">
               <span>{{ t.mgrMaint }}</span>
               <select v-model="maint" required>
+                <option value="" disabled>{{ t.tcMaintPlaceholder }}</option>
                 <option v-for="level in MAINT_LEVELS" :key="level" :value="level">
                   {{ formatMaintLabel(level) }}
                 </option>
               </select>
             </label>
+            <span class="mgr-step__pill mgr-step__pill--inline" :title="t.tcChecklistCountTitle">
+              {{ checklistPillText }}
+            </span>
           </div>
         </section>
 
@@ -427,7 +511,10 @@ onMounted(async () => {
             </tr>
             <tr v-for="assignment in assignments" :key="assignment.id">
               <td>{{ assignment.id }}</td>
-              <td>{{ assignment.vehicleNo || '-' }}</td>
+              <td>
+                {{ assignment.vehicleNo || '-' }}
+                <template v-if="assignment.trainModel"> / {{ assignment.trainModel }}</template>
+              </td>
               <td>{{ formatMaintLabel(assignment.maint) }}</td>
               <td>{{ assignment.depot || '-' }}</td>
               <td>{{ assignment.assignedTo?.name || assignment.assignedTo?.employeeId || '-' }}</td>

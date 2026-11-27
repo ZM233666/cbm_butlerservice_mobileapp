@@ -514,6 +514,15 @@ body.tl-page {
   display: block;
 }
 
+.tl-thumb__meta-title {
+  display: block;
+  margin-bottom: 0.12rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #27272a;
+  letter-spacing: 0.01em;
+}
+
 .tl-issue-wrap {
   position: absolute;
   left: 0.45rem;
@@ -581,6 +590,12 @@ body.tl-page {
   border-color: rgba(133, 116, 54, 0.28);
   background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
   color: #6b5d2e;
+}
+
+.tl-issue-btn.is-no-equipment {
+  border-color: rgba(91, 33, 182, 0.22);
+  background: linear-gradient(180deg, rgba(245, 243, 255, 0.98) 0%, #ffffff 100%);
+  color: #5b21b6;
 }
 
 .tl-issue-btn:active {
@@ -1058,6 +1073,10 @@ body.tl-page {
 
 .tl-thumb__meta {
   font-size: 0.61rem;
+}
+
+.tl-thumb__meta-title {
+  font-size: 0.68rem;
 }
 
 .tl-modal__inner h3 {

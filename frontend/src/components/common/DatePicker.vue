@@ -4,7 +4,9 @@ import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{
   modelValue: string
+  /** 不传则允许历史日期（默认 2000-01-01）；任务截止日期等请显式传今天 */
   min?: string
+  max?: string
   placeholder?: string
   disabled?: boolean
 }>()
@@ -58,7 +60,11 @@ const activeMonth = ref(new Date().getMonth() + 1)
 const current = computed(() => (isDateValue(props.modelValue) ? props.modelValue : ''))
 const minDate = computed(() => {
   const raw = String(props.min || '').trim()
-  return isDateValue(raw) ? raw : todayIso()
+  return isDateValue(raw) ? raw : '2000-01-01'
+})
+const maxDate = computed(() => {
+  const raw = String(props.max || '').trim()
+  return isDateValue(raw) ? raw : ''
 })
 const { lang, t } = useI18n()
 
@@ -102,11 +108,13 @@ const dayCells = computed(() => {
   for (let i = 0; i < offset; i += 1) cells.push(null)
   for (let day = 1; day <= total; day += 1) {
     const iso = toIsoDate(year, month, day)
+    const beforeMin = compareIso(iso, minDate.value) < 0
+    const afterMax = maxDate.value ? compareIso(iso, maxDate.value) > 0 : false
     cells.push({
       key: iso,
       day,
       iso,
-      disabled: compareIso(iso, minDate.value) < 0,
+      disabled: beforeMin || afterMax,
       isActive: current.value === iso,
       isToday: iso === today,
     })
@@ -136,6 +144,7 @@ function setValue(v: string) {
 
 function pickDay(iso: string) {
   if (!isDateValue(iso) || compareIso(iso, minDate.value) < 0) return
+  if (maxDate.value && compareIso(iso, maxDate.value) > 0) return
   setValue(iso)
   close()
 }
@@ -166,6 +175,7 @@ function nextMonth() {
 function setToday() {
   const today = todayIso()
   if (compareIso(today, minDate.value) < 0) return
+  if (maxDate.value && compareIso(today, maxDate.value) > 0) return
   const parsed = parseIsoDate(today)
   if (parsed) {
     activeYear.value = parsed.year

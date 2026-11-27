@@ -1,15 +1,25 @@
 /**
  * 从 Django butler-service 读取任务数据（TASK_DATA_SOURCE=db）。
  */
-const fs = require("fs");
 const path = require("path");
-const { runWithTimeout, upstreamTimeoutMs } = require("./fetch-timeout");
+const {
+  runWithTimeout,
+  runWithTransientRetry,
+  upstreamTimeoutMs,
+  upstreamFetchAttempts,
+} = require("./fetch-timeout");
 
 function remoteApiBase() {
   return String(process.env.REMOTE_API_BASE || "http://117.62.232.51:8004").replace(/\/$/, "");
 }
 
 let _slotSeqCache = {};
+
+const {
+  readGuidanceDoc,
+  buildSlotSeqMapFromDoc,
+  resolveGuidancePath,
+} = require("./guidance-template");
 
 function authHeaders(token) {
   const headers = { accept: "application/json" };
@@ -48,52 +58,42 @@ async function fetchDjangoJson(pathUrl, { token, method = "GET", body } = {}) {
     },
   };
   if (body) init.body = JSON.stringify(body);
-  const { res, payload } = await runWithTimeout(async (signal) => {
-    const response = await fetch(upstream, { ...init, signal });
-    const responsePayload = await response.json().catch(() => null);
-    return { res: response, payload: responsePayload };
-  }, upstreamTimeoutMs(method));
-  if (!res.ok || !payload || payload.code !== 2000) {
-    const err = new Error(upstreamErrorMessage(payload, res));
-    err.status = upstreamHttpStatus(res, payload);
-    err.payload = payload;
-    throw err;
-  }
-  return payload.data;
+  return runWithTransientRetry(
+    async () => {
+      const { res, payload } = await runWithTimeout(async (signal) => {
+        const response = await fetch(upstream, { ...init, signal });
+        const responsePayload = await response.json().catch(() => null);
+        return { res: response, payload: responsePayload };
+      }, upstreamTimeoutMs(method));
+      if (!res.ok || !payload || payload.code !== 2000) {
+        const err = new Error(upstreamErrorMessage(payload, res));
+        err.status = upstreamHttpStatus(res, payload);
+        err.payload = payload;
+        throw err;
+      }
+      return payload.data;
+    },
+    { attempts: upstreamFetchAttempts() },
+  );
 }
 
-function maintToTemplate(raw) {
-  const value = String(raw || "").trim().toLowerCase().replace(/[/\s_-]/g, "");
-  if (["c1", "c2", "c3", "c1c3"].includes(value)) return "c1c3";
-  if (["c4", "c5", "c6", "c4c6"].includes(value)) return "c4c6";
-  return "";
-}
-
-function buildSlotSeqMap(projectRoot, maint) {
-  const template = maintToTemplate(maint) || "default";
-  if (_slotSeqCache[template]) return _slotSeqCache[template];
-  const guidancePath = path.join(projectRoot, "public", "data", "brake-guidance-tasks.json");
-  const map = {};
+function buildSlotSeqMap(projectRoot, maint, modelOrTrainNo) {
+  const modelKey = String(modelOrTrainNo || "").trim().toUpperCase() || "*";
+  const maintKey = String(maint || "").trim().toLowerCase() || "default";
+  const cacheKey = `${modelKey}::${maintKey}`;
+  if (_slotSeqCache[cacheKey]) return _slotSeqCache[cacheKey];
+  let map = {};
   try {
-    const raw = JSON.parse(fs.readFileSync(guidancePath, "utf8"));
-    const rows = Array.isArray(raw && raw.rows) ? raw.rows : [];
-    rows.forEach((row) => {
-      const by = row && row.seqByTemplate ? row.seqByTemplate : {};
-      const seq = String((template !== "default" && by[template]) || (row && row.seq) || "").trim();
-      if (!seq) return;
-      const tags = Array.isArray(row.scopeTags) ? row.scopeTags.map((x) => String(x || "").toLowerCase()) : [];
-      if (template === "c1c3" && tags.length === 1 && tags[0] === "c4c6") return;
-      if (template === "c4c6" && tags.length === 1 && tags[0] === "c1c3") return;
-      const buttons = Array.isArray(row.buttons) ? row.buttons : [];
-      buttons.forEach((btn) => {
-        const slot = String((btn && btn.slot) || "").trim();
-        if (slot) map[slot] = seq;
-      });
-    });
+    const guidancePath = resolveGuidancePath(
+      projectRoot,
+      path.join(projectRoot, "public", "data", "brake-guidance-tasks-v1.0.json"),
+    );
+    const doc = readGuidanceDoc(guidancePath);
+    map = buildSlotSeqMapFromDoc(doc, modelOrTrainNo, maint).map;
   } catch (_e) {
     /* ignore */
   }
-  _slotSeqCache[template] = map;
+  _slotSeqCache[cacheKey] = map;
   return map;
 }
 
@@ -175,9 +175,13 @@ async function fetchSubmitLatestFromDb(taskId, token) {
 }
 
 async function postTaskSubmitToDb(body, token, projectRoot) {
+  const { expandSlotSeqMapForExtraUploads } = require("../upload-extra-slots");
   const payload = body && typeof body === "object" ? { ...body } : {};
-  const maint = payload.basicInfo && payload.basicInfo.maintenanceType;
-  payload.slotSeqMap = buildSlotSeqMap(projectRoot, maint);
+  const basic = payload.basicInfo && typeof payload.basicInfo === "object" ? payload.basicInfo : {};
+  const maint = basic.maintenanceType;
+  const modelOrTrainNo = basic.trainModel || basic.trainNo || basic.vehicleNo || "";
+  const baseMap = buildSlotSeqMap(projectRoot, maint, modelOrTrainNo);
+  payload.slotSeqMap = expandSlotSeqMapForExtraUploads(baseMap, payload.uploads);
   return fetchDjangoJson("/api/business/task/h5/submit/", {
     token,
     method: "POST",
@@ -209,9 +213,13 @@ async function postReportGenerateToDb(taskPk, token, options = {}) {
 }
 
 async function postTaskDraftToDb(body, token, projectRoot) {
+  const { expandSlotSeqMapForExtraUploads } = require("../upload-extra-slots");
   const payload = body && typeof body === "object" ? { ...body } : {};
-  const maint = payload.basicInfo && payload.basicInfo.maintenanceType;
-  payload.slotSeqMap = buildSlotSeqMap(projectRoot, maint);
+  const basic = payload.basicInfo && typeof payload.basicInfo === "object" ? payload.basicInfo : {};
+  const maint = basic.maintenanceType;
+  const modelOrTrainNo = basic.trainModel || basic.trainNo || basic.vehicleNo || "";
+  const baseMap = buildSlotSeqMap(projectRoot, maint, modelOrTrainNo);
+  payload.slotSeqMap = expandSlotSeqMapForExtraUploads(baseMap, payload.uploads);
   return fetchDjangoJson("/api/business/task/h5/draft/", {
     token,
     method: "POST",
@@ -219,10 +227,14 @@ async function postTaskDraftToDb(body, token, projectRoot) {
   });
 }
 
-async function fetchManagerDashboardFromDb(month, token) {
+async function fetchManagerDashboardFromDb(month, token, scope) {
+  const qs = new URLSearchParams();
   const monthQ = String(month || "").trim();
-  const qs = monthQ ? `?month=${encodeURIComponent(monthQ)}` : "";
-  return fetchDjangoJson(`/api/business/task/h5/manager/dashboard/${qs}`, { token });
+  const scopeQ = String(scope || "").trim().toLowerCase();
+  if (monthQ) qs.set("month", monthQ);
+  if (scopeQ) qs.set("scope", scopeQ);
+  const text = qs.toString();
+  return fetchDjangoJson(`/api/business/task/h5/manager/dashboard/${text ? `?${text}` : ""}`, { token });
 }
 
 async function postManagerAssignmentToDb(body, token) {

@@ -213,10 +213,10 @@ async function acceptReco(card: TaskCard) {
       <div class="home-top__row">
         <img
           class="home-top__logo"
-          src="/RVSChinaDT_Logo_white.png"
-          width="364"
-          height="230"
-          alt="RVS-CHINA DIGITAL TEAM"
+          src="/Rail-China-Digital-Team-Logo-White.png"
+          width="1662"
+          height="946"
+          alt="RAIL-CHINA DIGITAL TEAM"
           decoding="async"
         />
         <LangSwitch class="home-top__lang" />

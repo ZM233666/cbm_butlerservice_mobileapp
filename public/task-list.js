@@ -2,40 +2,66 @@
   const STORAGE_KEY = "butlerTaskListDraft";
   const TASK_STATUS_KEY = "butlerTaskStatusMap";
   const TASK_STATUS_API = "/api/task-status";
-  const DATA_URL = "/data/brake-guidance-tasks.json";
-  const SCHEMATIC_SEQS = new Set([
-    "1",
-    "2",
-    "3",
-    "3.1",
-    "3.2",
-    "3.3",
-    "4",
-    "5",
-    "5.1",
-    "6",
-    "6.1",
-    "7",
-    "8",
-    "8.1",
-    "8.2",
-    "9",
-    "9.1",
-    "10",
-    "11",
-    "11.1",
-    "12",
-    "13",
-    "14",
-    "15",
-    "17.1",
-    "17.2",
-    "17.3",
-    "17.4",
-    "17.5",
-    "17.6",
+  const DATA_URL = "/data/brake-guidance-tasks-v1.0.json";
+  const PIC_SAMPLE_ALIAS = {
+    "Abnormal Log": "Abnormal Log1.png",
+    "BCM Plug1": "BCM Plug1_Plug2.png",
+    "BCM Plug2": "BCM Plug1_Plug2.png",
+    HDLC1: "HDLC1_2.png",
+    HDLC2: "HDLC1_2.png",
+    "IPM J1": "IPM J1_J4_J5_J6.png",
+    "IPM J4": "IPM J1_J4_J5_J6.png",
+    "IPM J5": "IPM J1_J4_J5_J6.png",
+    "IPM J6": "IPM J1_J4_J5_J6.png",
+    "IPM PN": "IPM PN_SN.png",
+    "IPM SN": "IPM PN_SN.png",
+    J100A: "J100A_101_102.png",
+    J100B: "J100A_101_102.png",
+    J101: "J100A_101_102.png",
+    J102: "J100A_101_102.png",
+    继电器1: "继电器1_2_3_4.png",
+    继电器2: "继电器1_2_3_4.png",
+    继电器3: "继电器1_2_3_4.png",
+    继电器4: "继电器1_2_3_4.png",
+  };
+  const PIC_SAMPLE_EXACT = new Set([
+    "13CP SN", "16CP SN", "20CP SN", "A71", "BCCP SN", "BCM SN", "BPCP SN", "DBTV SN",
+    "EBV PIPE", "EBV PLUG", "EBV SOCKET", "EBV铭牌", "EPCU SW", "ERCP SN", "IPM J6C",
+    "IPM Socket", "J103", "LCDM Plug", "LCDM SW", "LCDM铭牌", "LOCO Number", "MB04B MMI",
+    "PSJB SN", "U99", "WSP SN", "总风滤芯", "继电器箱", "辅助模块",
   ]);
 
+  function normalizePicLabelVariant(label) {
+    let s = String(label || "").trim();
+    [["EBVA", "EBV"], ["EBVB", "EBV"], ["LCDMA", "LCDM"], ["LCDMB", "LCDM"]].forEach(([pref, repl]) => {
+      if (s.startsWith(pref)) s = repl + s.slice(pref.length);
+    });
+    return s;
+  }
+
+  function resolvePicSampleFileForLabel(label) {
+    const raw = String(label || "").trim();
+    if (!raw) return "";
+    if (PIC_SAMPLE_ALIAS[raw]) return PIC_SAMPLE_ALIAS[raw];
+    if (PIC_SAMPLE_EXACT.has(raw)) return `${raw}.png`;
+    const normalized = normalizePicLabelVariant(raw);
+    if (normalized !== raw) {
+      if (PIC_SAMPLE_ALIAS[normalized]) return PIC_SAMPLE_ALIAS[normalized];
+      if (PIC_SAMPLE_EXACT.has(normalized)) return `${normalized}.png`;
+    }
+    return "";
+  }
+
+  function resolvePicSampleFileForRow(row) {
+    const buttons = Array.isArray(row && row.buttons) ? row.buttons : [];
+    for (let i = 0; i < buttons.length; i += 1) {
+      const file = resolvePicSampleFileForLabel(buttons[i] && buttons[i].label);
+      if (file) return file;
+    }
+    return "";
+  }
+
+  let guidanceDoc = null;
   let guidanceRows = [];
   let lang = "zh";
   let activeIssueRowId = "";
@@ -55,12 +81,17 @@
       basicInfo: "基本信息",
       subtask: "子任务",
       employee: "员工工号",
-      depot: "车辆段",
+      depot: "服务地点",
       project: "项目编号",
-      train: "列车号",
+      train: "车号",
+      trainModel: "车型",
       maint: "修程",
       deadline: "截止日期",
       taskid: "主任务 ID",
+      mileage: "公里数",
+      mileagePlaceholder: "请输入公里数",
+      mileageRequired: "请填写公里数",
+      mileageInvalid: "公里数格式无效",
       colSeq: "序号",
       colDesc: "操作说明",
       colUpload: "上传图片",
@@ -80,7 +111,7 @@
       locationFailed: "定位获取失败，已继续上传",
       reportIssue: "检查结果",
       issueDialogTitle: "检查结果",
-      issueDialogHelp: "请选择本项检查结果。发现异常或无法检测时需填写说明。",
+      issueDialogHelp: "请选择本项检查结果。发现异常需选择等级并填写说明；无此设备无需说明。",
       issuePlaceholder: "请描述异常现象或无法检测的原因",
       issuePlaceholderAbnormal: "请描述异常现象",
       issuePlaceholderUndetectable: "请说明无法检测的原因",
@@ -88,8 +119,15 @@
       issueStatusOk: "检查正常",
       issueStatusAbnormal: "发现异常",
       issueStatusUndetectable: "无法检测",
+      issueStatusNoEquipment: "无此设备",
       issueNeedStatus: "请先选择检查结果",
       issueNeedDetail: "请填写异常现象或无法检测的原因",
+      issueSeverityPlaceholder: "请选择异常等级",
+      issueSeveritySevere: "严重",
+      issueSeverityModerate: "中等",
+      issueSeverityMinor: "一般",
+      issueSeverityUndetectable: "无法检查",
+      issueNeedSeverity: "请选择异常等级",
       submitNeedAllResults: "请先完成本任务全部检查结果后再提交",
       issueSave: "保存",
       issueCancel: "取消",
@@ -112,12 +150,17 @@
       basicInfo: "Basic Info",
       subtask: "Subtask",
       employee: "Employee ID",
-      depot: "Depot",
+      depot: "Service Location",
       project: "Project No.",
       train: "Train No.",
+      trainModel: "Model",
       maint: "Maintenance Type",
       deadline: "Deadline",
       taskid: "Main Task ID",
+      mileage: "Mileage (km)",
+      mileagePlaceholder: "Enter mileage",
+      mileageRequired: "Mileage is required",
+      mileageInvalid: "Invalid mileage",
       colSeq: "No.",
       colDesc: "Instructions",
       colUpload: "Upload",
@@ -137,7 +180,7 @@
       locationFailed: "Location failed, upload continued",
       reportIssue: "Inspection Result",
       issueDialogTitle: "Inspection Result",
-      issueDialogHelp: "Select the inspection result. Details are required for Abnormal or Unable to inspect.",
+      issueDialogHelp: "Select the inspection result. Abnormal requires severity and details; Unable to inspect requires details; No such equipment needs no details.",
       issuePlaceholder: "Describe the abnormality or why it cannot be inspected",
       issuePlaceholderAbnormal: "Describe the abnormality",
       issuePlaceholderUndetectable: "Explain why it cannot be inspected",
@@ -145,8 +188,15 @@
       issueStatusOk: "Normal",
       issueStatusAbnormal: "Abnormal",
       issueStatusUndetectable: "Unable to inspect",
+      issueStatusNoEquipment: "No such equipment",
       issueNeedStatus: "Please select an inspection result",
       issueNeedDetail: "Please describe the abnormality or why it cannot be inspected",
+      issueSeverityPlaceholder: "Select severity",
+      issueSeveritySevere: "Severe",
+      issueSeverityModerate: "Moderate",
+      issueSeverityMinor: "Minor",
+      issueSeverityUndetectable: "Unable to inspect",
+      issueNeedSeverity: "Please select severity",
       submitNeedAllResults: "Complete all inspection results before submitting",
       issueSave: "Save",
       issueCancel: "Cancel",
@@ -168,9 +218,9 @@
   function getMaintType() {
     const el = document.getElementById("f-maint-type");
     const raw = String((el && el.value) || "").trim().toLowerCase().replace(/[/\s_-]/g, "");
-    if (raw === "c1" || raw === "c2" || raw === "c3" || raw === "c1c3") return "c1c3";
-    if (raw === "c4" || raw === "c5" || raw === "c6" || raw === "c4c6") return "c4c6";
-    return "c4c6";
+    if (raw === "c1" || raw === "c2" || raw === "c3" || raw === "c1c3") return raw === "c1c3" ? "c1" : raw;
+    if (raw === "c4" || raw === "c5" || raw === "c6" || raw === "c4c6") return raw === "c4c6" ? "c4" : raw;
+    return "c4";
   }
 
   function displayMaintLabel(raw) {
@@ -181,32 +231,59 @@
     return String(raw || "").toUpperCase() || "-";
   }
 
-  function allowedByMaintCategory(row, maintType) {
-    const s = row.scopeTags;
-    if (maintType === "c1c3") {
-      if (s.length === 1 && s[0] === "c4c6") return false;
-      return true;
+  function extractModelToken(raw) {
+    const s = String(raw || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (!s) return "";
+    const known = ["HXD1", "SS4G", "FXD1B"];
+    for (let i = 0; i < known.length; i += 1) {
+      const model = known[i];
+      if (s === model || s.startsWith(model + "-") || s.startsWith(model + "_")) return model;
     }
-    if (maintType === "c4c6") {
-      if (s.length === 1 && s[0] === "c1c3") return false;
-      return true;
-    }
-    return true;
+    return s.split(/[-_]/)[0] || s;
   }
 
-  function seqForTemplate(row, maintType) {
-    const by = row && row.seqByTemplate ? row.seqByTemplate : {};
-    if (maintType === "c1c3" && by.c1c3) return String(by.c1c3);
-    if (maintType === "c4c6" && by.c4c6) return String(by.c4c6);
-    return String((row && row.seq) || "");
+  function selectTemplateKey(modelOrTrainNo, maint) {
+    const modelToken = extractModelToken(modelOrTrainNo);
+    const maintCode = String(maint || "").trim().toUpperCase().replace(/[/\s_-]/g, "");
+    const rules = (((guidanceDoc || {}).templateSelection || {}).rules || [])
+      .slice()
+      .sort((a, b) => Number(a.priority || 0) - Number(b.priority || 0));
+    for (let i = 0; i < rules.length; i += 1) {
+      const rule = rules[i];
+      const models = Array.isArray(rule.models) ? rule.models : [];
+      const maints = Array.isArray(rule.maintenance) ? rule.maintenance : [];
+      const modelOk = models.indexOf("*") >= 0 || models.some((m) => String(m || "").toUpperCase() === modelToken);
+      const maintOk = maints.some((m) => String(m || "").toUpperCase().replace(/[/\s_-]/g, "") === maintCode);
+      if (modelOk && maintOk && rule.template) return String(rule.template);
+    }
+    if (maintCode === "C1" || maintCode === "C2" || maintCode === "C3") return "6Axle+C1C2C3";
+    return "6Axle+C4C5C6";
+  }
+
+  function getTrainNoForTemplate() {
+    const modelEl = document.getElementById("f-train-model");
+    if (modelEl && String(modelEl.value || "").trim()) return String(modelEl.value).trim();
+    const el = document.getElementById("f-train");
+    if (el && String(el.value || "").trim()) return String(el.value).trim();
+    const q = new URLSearchParams(window.location.search);
+    return String(q.get("trainNo") || q.get("vehicleNo") || q.get("trainModel") || "").trim();
+  }
+
+  function refreshGuidanceRowsFromDoc() {
+    if (!guidanceDoc || !guidanceDoc.templates) {
+      guidanceRows = [];
+      return;
+    }
+    const key = selectTemplateKey(getTrainNoForTemplate(), getMaintType());
+    const tpl = guidanceDoc.templates[key];
+    guidanceRows = Array.isArray(tpl && tpl.rows) ? tpl.rows : [];
   }
 
   function visibleRows() {
-    const maintType = getMaintType();
-    const filtered = guidanceRows.filter((row) => allowedByMaintCategory(row, maintType));
-    return filtered.map((row) => ({
+    refreshGuidanceRowsFromDoc();
+    return guidanceRows.map((row) => ({
       ...row,
-      displaySeq: seqForTemplate(row, maintType) || row.seq,
+      displaySeq: row.seq,
     }));
   }
 
@@ -233,7 +310,8 @@
     const t = i18n[lang];
     const hint = document.getElementById("tl-filter-hint");
     if (hint) {
-      hint.textContent = t.filterHint + " " + (rows.length ? `（${rows.length}）` : "");
+      hint.hidden = true;
+      hint.textContent = "";
     }
 
     if (rows.length === 0) {
@@ -277,9 +355,10 @@
 
   function buildDescCell(row) {
     const text = escapeHtml(row.description);
-    if (SCHEMATIC_SEQS.has(row.seq)) {
+    const sampleFile = resolvePicSampleFileForRow(row);
+    if (sampleFile) {
       const link = lang === "zh" ? "获取帮助" : "Get help";
-      const imgUrl = `/PicSamples/${encodeURIComponent(row.seq)}.png`;
+      const imgUrl = `/PicSamples/${encodeURIComponent(sampleFile)}`;
       return `<span class="tl-desc-text">${text}</span><button type="button" class="tl-desc-btn tl-desc-btn--inline" data-schematic="${escapeHtml(imgUrl)}">${escapeHtml(link)}</button>`;
     }
     return text;
@@ -313,22 +392,41 @@
     </div>`;
   }
 
+  function normalizeAbnormalSeverity(raw) {
+    const s = String(raw || "").trim().toLowerCase();
+    if (s === "severe" || s === "moderate" || s === "minor") return s;
+    return "";
+  }
+
   function normalizeIssueRecord(raw) {
     if (!raw || typeof raw !== "object") return null;
     const text = String(raw.text || "").trim();
     let status = String(raw.status || "").trim().toLowerCase();
     if (status === "normal") status = "ok";
-    if (status === "ok" || status === "abnormal" || status === "undetectable") {
-      return { status, text, updatedAt: String(raw.updatedAt || "") };
+    const severity = normalizeAbnormalSeverity(raw.severity);
+    if (
+      status === "ok"
+      || status === "abnormal"
+      || status === "undetectable"
+      || status === "no_equipment"
+    ) {
+      const row = { status, text, updatedAt: String(raw.updatedAt || "") };
+      if (status === "abnormal" && severity) row.severity = severity;
+      return row;
     }
-    if (text) return { status: "abnormal", text, updatedAt: String(raw.updatedAt || "") };
+    if (text) {
+      const row = { status: "abnormal", text, updatedAt: String(raw.updatedAt || "") };
+      if (severity) row.severity = severity;
+      return row;
+    }
     return null;
   }
 
   function isIssueComplete(raw) {
     const rec = normalizeIssueRecord(raw);
     if (!rec) return false;
-    if (rec.status === "ok") return true;
+    if (rec.status === "ok" || rec.status === "no_equipment") return true;
+    if (rec.status === "abnormal") return !!rec.severity && rec.text.length > 0;
     return rec.text.length > 0;
   }
 
@@ -337,6 +435,15 @@
     if (status === "ok") return t.issueStatusOk;
     if (status === "abnormal") return t.issueStatusAbnormal;
     if (status === "undetectable") return t.issueStatusUndetectable;
+    if (status === "no_equipment") return t.issueStatusNoEquipment;
+    return "";
+  }
+
+  function abnormalSeverityLabel(severity) {
+    const t = i18n[lang];
+    if (severity === "severe") return t.issueSeveritySevere;
+    if (severity === "moderate") return t.issueSeverityModerate;
+    if (severity === "minor") return t.issueSeverityMinor;
     return "";
   }
 
@@ -344,7 +451,14 @@
     const item = normalizeIssueRecord(rec);
     if (!item) return "";
     const label = inspectionStatusLabel(item.status);
-    if (item.status === "ok" || !item.text) return label;
+    if (item.status === "ok" || item.status === "no_equipment") return label;
+    if (item.status === "abnormal") {
+      const sev = abnormalSeverityLabel(item.severity);
+      const head = sev ? `${label}（${sev}）` : label;
+      if (!item.text) return head;
+      return `${head}：${item.text}`;
+    }
+    if (!item.text) return label;
     return `${label}：${item.text}`;
   }
 
@@ -363,6 +477,7 @@
       el.classList.toggle("is-ok", complete && rec?.status === "ok");
       el.classList.toggle("is-abnormal", complete && rec?.status === "abnormal");
       el.classList.toggle("is-undetectable", complete && rec?.status === "undetectable");
+      el.classList.toggle("is-no-equipment", complete && rec?.status === "no_equipment");
     });
   }
 
@@ -394,9 +509,11 @@
         employee: t.employee,
         project: t.project,
         train: t.train,
+        trainModel: t.trainModel,
         maint: t.maint,
         deadline: t.deadline,
         taskid: t.taskid,
+        mileage: t.mileage,
         "col-seq": t.colSeq,
         "col-desc": t.colDesc,
         "col-upload": t.colUpload,
@@ -414,12 +531,17 @@
     if (btnSave) btnSave.textContent = t.save;
     if (btnSubmit) btnSubmit.textContent = t.submit;
 
+    const mileageEl = document.getElementById("f-mileage");
+    if (mileageEl) mileageEl.placeholder = t.mileagePlaceholder || "";
+
     const st = document.getElementById("schematic-title");
     const cl = document.getElementById("dlg-close");
     const zr = document.getElementById("dlg-zoom-reset");
     const issueTitle = document.getElementById("issue-title");
     const issueHelp = document.getElementById("issue-help");
     const issueStatus = document.getElementById("issue-status");
+    const issueSeverity = document.getElementById("issue-severity");
+    const issueSeverityLabel = document.getElementById("issue-severity-label");
     const issueText = document.getElementById("issue-text");
     const issueSave = document.getElementById("issue-save");
     const issueCancel = document.getElementById("issue-cancel");
@@ -430,14 +552,32 @@
     if (issueHelp) issueHelp.textContent = t.issueDialogHelp;
     if (issueStatus) {
       const options = [
-        ["", t.issueStatusPlaceholder],
         ["ok", t.issueStatusOk],
         ["abnormal", t.issueStatusAbnormal],
-        ["undetectable", t.issueStatusUndetectable],
+        ["no_equipment", t.issueStatusNoEquipment],
       ];
+      const prevStatus = String(issueStatus.value || "").trim();
       issueStatus.innerHTML = options
         .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`)
         .join("");
+      issueStatus.value = ["ok", "abnormal", "undetectable", "no_equipment"].includes(prevStatus)
+        ? prevStatus
+        : "ok";
+    }
+    if (issueSeverityLabel) issueSeverityLabel.textContent = t.issueSeverityPlaceholder;
+    if (issueSeverity) {
+      const sevOpts = [
+        ["", t.issueSeverityPlaceholder],
+        ["severe", t.issueSeveritySevere],
+        ["moderate", t.issueSeverityModerate],
+        ["minor", t.issueSeverityMinor],
+        ["undetectable", t.issueSeverityUndetectable],
+      ];
+      const prev = issueSeverity.value;
+      issueSeverity.innerHTML = sevOpts
+        .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`)
+        .join("");
+      issueSeverity.value = prev;
     }
     if (issueText) issueText.setAttribute("placeholder", t.issuePlaceholder);
     if (issueSave) issueSave.textContent = t.issueSave;
@@ -612,7 +752,56 @@
     toast._t = setTimeout(() => el.classList.remove("is-show"), 2200);
   }
 
+  function sanitizeMileageKmDigits(raw) {
+    const digits = String(raw ?? "").replace(/\D/g, "");
+    if (!digits) return "";
+    const trimmed = digits.replace(/^0+(?=\d)/, "");
+    const normalized = trimmed || "0";
+    return normalized.length > 7 ? normalized.slice(0, 7) : normalized;
+  }
+
+  function normalizeMileageKm(raw) {
+    const text = sanitizeMileageKmDigits(raw);
+    if (!text) return null;
+    const num = Number(text);
+    if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0 || num > 9999999) return null;
+    return num;
+  }
+
+  function bindMileageInput() {
+    const mileageEl = document.getElementById("f-mileage");
+    if (!mileageEl || mileageEl.dataset.mileageBound) return;
+    mileageEl.dataset.mileageBound = "1";
+    mileageEl.addEventListener("input", () => {
+      const next = sanitizeMileageKmDigits(mileageEl.value);
+      if (mileageEl.value !== next) mileageEl.value = next;
+    });
+  }
+
+  function validateMileageFormat() {
+    const el = document.getElementById("f-mileage");
+    const raw = el ? el.value : "";
+    if (!String(raw || "").trim()) return true;
+    if (normalizeMileageKm(raw) != null) return true;
+    toast(i18n[lang].mileageInvalid);
+    return false;
+  }
+
+  function validateMileageForSubmit() {
+    const el = document.getElementById("f-mileage");
+    const raw = el ? el.value : "";
+    const n = normalizeMileageKm(raw);
+    if (n != null) return true;
+    if (!String(raw || "").trim()) {
+      toast(i18n[lang].mileageRequired);
+      return false;
+    }
+    toast(i18n[lang].mileageInvalid);
+    return false;
+  }
+
   function collectBasicInfo() {
+    const mileageKm = normalizeMileageKm(document.getElementById("f-mileage")?.value);
     return {
       employeeId: document.getElementById("f-employee-id")?.value ?? "",
       depot: document.getElementById("f-depot")?.value ?? "",
@@ -621,6 +810,7 @@
       maintenanceType: getMaintType(),
       deadline: document.getElementById("f-deadline")?.value ?? "",
       mainTaskId: document.getElementById("f-task-id")?.value ?? "",
+      ...(mileageKm != null ? { mileageKm } : {}),
     };
   }
 
@@ -628,8 +818,78 @@
     return window.__uploadRecords || {};
   }
 
+  function formatIssueResultForSubmit(rec) {
+    const item = normalizeIssueRecord(rec);
+    if (!item) return null;
+    const text = String(item.text || "").trim();
+    let label = inspectionStatusLabel(item.status);
+    if (item.status === "abnormal" && item.severity) {
+      const sev = abnormalSeverityLabel(item.severity);
+      if (sev) label = `${label}（${sev}）`;
+    }
+    if (!label) return text;
+    if (item.status === "ok" || item.status === "no_equipment") {
+      return text && text !== label ? `${label}：${text}` : label;
+    }
+    return text && text !== label ? `${label}：${text}` : label;
+  }
+
+  async function syncIssueDraftToServer() {
+    if (!validateMileageFormat()) return;
+    const basic = collectBasicInfo();
+    const taskId = String(basic.taskId || basic.mainTaskId || "").trim();
+    if (!taskId) return;
+    const body = {
+      basicInfo: { ...basic, taskId },
+      uploads: collectUploadState(),
+      issues: collectIssueState(),
+      allowEmptyUploads: true,
+    };
+    try {
+      const res = await fetch("/api/task-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) return;
+      const serverIssues = data.issues && typeof data.issues === "object" ? data.issues : null;
+      if (serverIssues) {
+        window.__issueRecords = window.__issueRecords || {};
+        Object.entries(serverIssues).forEach(([rowId, item]) => {
+          const rec = normalizeIssueRecord(item);
+          if (!rec) return;
+          const local = normalizeIssueRecord(window.__issueRecords[rowId]);
+          if (local && rec.status === "abnormal" && !rec.severity && local.severity) {
+            window.__issueRecords[rowId] = { ...rec, severity: local.severity };
+          } else {
+            window.__issueRecords[rowId] = rec;
+          }
+        });
+        refreshIssueNotes();
+      }
+    } catch {
+      /* ignore: local state already saved */
+    }
+  }
+
   function collectIssueState() {
-    return window.__issueRecords || {};
+    const src = window.__issueRecords || {};
+    const out = {};
+    Object.entries(src).forEach(([rowId, raw]) => {
+      const rec = normalizeIssueRecord(raw);
+      if (!rec) return;
+      const row = {
+        status: rec.status,
+        text: rec.text,
+        updatedAt: rec.updatedAt,
+      };
+      if (rec.status === "abnormal" && rec.severity) row.severity = rec.severity;
+      const result = formatIssueResultForSubmit(rec);
+      if (result) row.result = result;
+      out[rowId] = row;
+    });
+    return out;
   }
 
   function getRequiredSlots() {
@@ -684,15 +944,20 @@
   function syncIssueDetailVisibility() {
     const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
+    const severityWrap = document.getElementById("issue-severity-wrap");
+    const severityEl = document.getElementById("issue-severity");
     if (!statusEl || !textEl) return;
     const status = String(statusEl.value || "").trim();
     const needDetail = status === "abnormal" || status === "undetectable";
+    const isAbnormal = status === "abnormal";
     textEl.hidden = !needDetail;
+    if (severityWrap) severityWrap.hidden = !isAbnormal;
     const t = i18n[lang];
     if (status === "undetectable") textEl.setAttribute("placeholder", t.issuePlaceholderUndetectable);
     else if (status === "abnormal") textEl.setAttribute("placeholder", t.issuePlaceholderAbnormal);
     else textEl.setAttribute("placeholder", t.issuePlaceholder);
     if (!needDetail) textEl.value = "";
+    if (!isAbnormal && severityEl) severityEl.value = "";
   }
 
   function readTaskStatusStore() {
@@ -790,11 +1055,17 @@
   document.getElementById("issue-save")?.addEventListener("click", () => {
     const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
+    const severityEl = document.getElementById("issue-severity");
     if (!statusEl || !textEl || !activeIssueRowId) return;
     const status = String(statusEl.value || "").trim();
     const content = textEl.value.trim();
+    const severity = normalizeAbnormalSeverity(severityEl && severityEl.value);
     if (!status) {
       toast(i18n[lang].issueNeedStatus);
+      return;
+    }
+    if (status === "abnormal" && !severity) {
+      toast(i18n[lang].issueNeedSeverity);
       return;
     }
     if ((status === "abnormal" || status === "undetectable") && !content) {
@@ -802,15 +1073,18 @@
       return;
     }
     window.__issueRecords = window.__issueRecords || {};
-    window.__issueRecords[activeIssueRowId] = {
+    const row = {
       status,
-      text: status === "ok" ? "" : content,
+      text: status === "ok" || status === "no_equipment" ? "" : content,
       updatedAt: new Date().toISOString(),
     };
+    if (status === "abnormal" && severity) row.severity = severity;
+    window.__issueRecords[activeIssueRowId] = row;
     toast(i18n[lang].issueSaved);
     refreshIssueNotes();
     document.getElementById("dlg-issue")?.close();
     updateSubmitButtonState();
+    void syncIssueDraftToServer();
   });
   document.getElementById("dlg-zoom-in")?.addEventListener("click", () => {
     setSchematicZoom(schematicZoom + SCHEMATIC_ZOOM_STEP);
@@ -853,10 +1127,13 @@
     const dlg = document.getElementById("dlg-issue");
     const statusEl = document.getElementById("issue-status");
     const textEl = document.getElementById("issue-text");
+    const severityEl = document.getElementById("issue-severity");
     if (!dlg || !statusEl || !textEl) return;
     const rec = normalizeIssueRecord(window.__issueRecords?.[rowId]);
-    statusEl.value = rec?.status || "";
-    textEl.value = rec?.text || "";
+    // 首次未选择时默认「检查正常」；已保存则保留原选项
+    statusEl.value = rec?.status || "ok";
+    if (severityEl) severityEl.value = rec?.status === "abnormal" ? rec.severity || "" : "";
+    textEl.value = rec?.status === "ok" || rec?.status === "no_equipment" ? "" : (rec?.text || "");
     syncIssueDetailVisibility();
     dlg.showModal();
     statusEl.focus();
@@ -1025,7 +1302,7 @@
     }
     const nameValue = data?.displayName || data?.originalname || "未获取";
     return [
-      `<span class="tl-thumb__meta-line">${escapeHtml(nameValue)}</span>`,
+      `<span class="tl-thumb__meta-title">${escapeHtml(nameValue)}</span>`,
       `<span class="tl-thumb__meta-line">拍摄时间：${escapeHtml(timeValue)}</span>`,
       `<span class="tl-thumb__meta-line">拍摄地点：${escapeHtml(locValue)}</span>`,
     ].join("");
@@ -1092,6 +1369,7 @@
   });
 
   document.getElementById("btn-submit")?.addEventListener("click", async () => {
+    if (!validateMileageForSubmit()) return;
     if (getIncompleteInspectionRows().length) {
       toast(i18n[lang].submitNeedAllResults);
       focusFirstIncompleteInspection();
@@ -1157,14 +1435,17 @@
     try {
       const res = await fetch(DATA_URL);
       const data = await res.json();
-      guidanceRows = data.rows || [];
+      guidanceDoc = data && data.templates ? data : null;
+      refreshGuidanceRowsFromDoc();
     } catch (e) {
+      guidanceDoc = null;
       guidanceRows = [];
       toast("Load failed");
     }
     updateSchematicZoomUI();
     bindSchematicPinch();
     applyLang();
+    bindMileageInput();
     updateSubmitButtonState();
   }
 

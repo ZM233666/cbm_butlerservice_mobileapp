@@ -1,37 +1,66 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  DEFAULT_READ_TIMEOUT_MS,
-  DEFAULT_WRITE_TIMEOUT_MS,
-  upstreamTimeoutMs,
-  runWithTimeout,
+  isTransientFetchError,
+  formatUpstreamFetchError,
+  runWithTransientRetry,
 } = require("../server/services/fetch-timeout");
 
-test("upstream timeout defaults distinguish reads and writes", () => {
-  assert.equal(upstreamTimeoutMs("GET", {}), DEFAULT_READ_TIMEOUT_MS);
-  assert.equal(upstreamTimeoutMs("HEAD", {}), DEFAULT_READ_TIMEOUT_MS);
-  assert.equal(upstreamTimeoutMs("POST", {}), DEFAULT_WRITE_TIMEOUT_MS);
-  assert.equal(upstreamTimeoutMs("PATCH", {}), DEFAULT_WRITE_TIMEOUT_MS);
+test("isTransientFetchError detects undici fetch failed", () => {
+  const err = new Error("fetch failed");
+  err.cause = Object.assign(new Error("connect ECONNRESET"), { code: "ECONNRESET" });
+  assert.equal(isTransientFetchError(err), true);
 });
 
-test("upstream timeout values can be configured", () => {
-  const env = { UPSTREAM_READ_TIMEOUT_MS: "45000", UPSTREAM_WRITE_TIMEOUT_MS: "120000" };
-  assert.equal(upstreamTimeoutMs("GET", env), 45_000);
-  assert.equal(upstreamTimeoutMs("POST", env), 120_000);
+test("isTransientFetchError ignores HTTP and timeout errors", () => {
+  const httpErr = new Error("mileage_required");
+  httpErr.status = 400;
+  assert.equal(isTransientFetchError(httpErr), false);
+
+  const timeoutErr = new Error("upstream_timeout");
+  timeoutErr.code = "upstream_timeout";
+  timeoutErr.status = 504;
+  assert.equal(isTransientFetchError(timeoutErr), false);
 });
 
-test("runWithTimeout converts an expired request to a 504 timeout error", async () => {
-  const neverCompletes = (signal) => new Promise((_resolve, reject) => {
-    signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
-  });
-  await assert.rejects(
-    runWithTimeout(neverCompletes, 10),
-    (err) => err && err.code === "upstream_timeout" && err.status === 504,
+test("formatUpstreamFetchError appends cause code", () => {
+  const err = new Error("fetch failed");
+  err.cause = { code: "ECONNRESET", message: "read ECONNRESET" };
+  assert.match(formatUpstreamFetchError(err), /ECONNRESET/);
+});
+
+test("runWithTransientRetry recovers after transient failures", async () => {
+  let attempts = 0;
+  const value = await runWithTransientRetry(
+    async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        const err = new Error("fetch failed");
+        err.cause = { code: "ECONNRESET" };
+        throw err;
+      }
+      return "ok";
+    },
+    { attempts: 3, delayMs: 1 },
   );
+  assert.equal(value, "ok");
+  assert.equal(attempts, 3);
 });
 
-test("runWithTimeout returns successful values before the deadline", async () => {
-  const response = { ok: true };
-  const result = await runWithTimeout(async () => response, 100);
-  assert.equal(result, response);
+test("runWithTransientRetry does not retry business errors", async () => {
+  let attempts = 0;
+  await assert.rejects(
+    () =>
+      runWithTransientRetry(
+        async () => {
+          attempts += 1;
+          const err = new Error("mileage_required");
+          err.status = 400;
+          throw err;
+        },
+        { attempts: 3, delayMs: 1 },
+      ),
+    /mileage_required/,
+  );
+  assert.equal(attempts, 1);
 });

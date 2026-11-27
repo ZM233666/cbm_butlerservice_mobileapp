@@ -17,7 +17,7 @@ const auth = useAuthStore()
   <header class="top-brand-bar" :class="{ 'top-brand-bar--exclusive': auth.isManager }" aria-label="品牌栏">
     <div class="top-brand-bar__left">
       <router-link v-if="backTo" class="top-brand-bar__back" :to="backTo">{{ backLabel }}</router-link>
-      <img v-else class="top-brand-bar__logo" src="/RVSChinaDT_Logo.png" width="364" height="230" alt="RVS-CHINA DIGITAL TEAM" decoding="async" />
+      <img v-else class="top-brand-bar__logo" src="/Rail-China-Digital-Team-Logo.png" width="567" height="323" alt="RAIL-CHINA DIGITAL TEAM" decoding="async" />
     </div>
     <span class="top-brand-bar__title">{{ title ?? 'Digital CBM' }}</span>
     <LangSwitch class="top-brand-bar__lang" />
@@ -77,7 +77,7 @@ const auth = useAuthStore()
   width: min(38vw, 8.6rem);
   height: auto;
   max-height: 1.9rem;
-  aspect-ratio: 364 / 230;
+  aspect-ratio: 567 / 323;
   object-fit: contain;
   -webkit-user-drag: none;
   -webkit-user-select: none;

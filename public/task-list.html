@@ -23,40 +23,44 @@
           <h2 class="tl-card__head" id="basic-info-title">Basic Info</h2>
           <dl class="tl-basic">
             <div class="tl-basic__row">
-              <dt data-i18n="depot">Depot</dt>
-              <dd><input type="text" name="depot" id="f-depot" class="tl-readonly" value="Shanghai" readonly tabindex="-1" /></dd>
-            </div>
-            <div class="tl-basic__row">
-              <dt data-i18n="project">Project No.</dt>
-              <dd>
-                <input type="text" name="project" id="f-project" class="tl-readonly" value="PRJ-2026-RVS-01" readonly tabindex="-1" />
-              </dd>
-            </div>
-            <div class="tl-basic__row">
-              <dt data-i18n="train">Train No.</dt>
+              <dt data-i18n="train">车号</dt>
               <dd><input type="text" name="train" id="f-train" class="tl-readonly" value="HXD1-1234" readonly tabindex="-1" /></dd>
             </div>
             <div class="tl-basic__row">
-              <dt data-i18n="employee">员工工号</dt>
-              <dd><input type="text" name="employeeId" id="f-employee-id" class="tl-readonly" value="" readonly tabindex="-1" /></dd>
+              <dt data-i18n="trainModel">车型</dt>
+              <dd><input type="text" name="trainModel" id="f-train-model" class="tl-readonly" value="HXD1" readonly tabindex="-1" /></dd>
             </div>
             <div class="tl-basic__row">
-              <dt data-i18n="maint">Maintenance Type</dt>
+              <dt data-i18n="depot">服务地点</dt>
+              <dd><input type="text" name="depot" id="f-depot" class="tl-readonly" value="Shanghai" readonly tabindex="-1" /></dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="maint">修程</dt>
               <dd>
                 <input type="hidden" id="f-maint-type" name="maintType" value="c4c6" />
                 <input type="text" id="f-maint-type-label" class="tl-readonly" value="C4～C6" readonly tabindex="-1" />
               </dd>
             </div>
             <div class="tl-basic__row">
-              <dt data-i18n="taskid">Main Task ID</dt>
+              <dt data-i18n="deadline">截止日期</dt>
               <dd>
-                <input type="text" name="taskId" id="f-task-id" class="tl-readonly" value="MT-CCBII-88421" readonly tabindex="-1" />
+                <input type="text" name="deadline" id="f-deadline" class="tl-readonly" value="2026-04-30" readonly tabindex="-1" />
               </dd>
             </div>
             <div class="tl-basic__row">
-              <dt data-i18n="deadline">Deadline</dt>
+              <dt data-i18n="mileage">公里数</dt>
               <dd>
-                <input type="text" name="deadline" id="f-deadline" class="tl-readonly" value="2026-04-30" readonly tabindex="-1" />
+                <input type="text" name="mileageKm" id="f-mileage" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="" />
+              </dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="employee">员工工号</dt>
+              <dd><input type="text" name="employeeId" id="f-employee-id" class="tl-readonly" value="" readonly tabindex="-1" /></dd>
+            </div>
+            <div class="tl-basic__row">
+              <dt data-i18n="taskid">主任务 ID</dt>
+              <dd>
+                <input type="text" name="taskId" id="f-task-id" class="tl-readonly" value="MT-CCBII-88421" readonly tabindex="-1" />
               </dd>
             </div>
           </dl>
@@ -117,10 +121,19 @@
         <label class="tl-issue-field">
           <span class="tl-issue-field__label" id="issue-status-label">请选择检查结果</span>
           <select id="issue-status" class="tl-issue-select">
-            <option value="">请选择检查结果</option>
-            <option value="ok">检查正常</option>
+            <option value="ok" selected>检查正常</option>
             <option value="abnormal">发现异常</option>
             <option value="undetectable">无法检测</option>
+            <option value="no_equipment">无此设备</option>
+          </select>
+        </label>
+        <label class="tl-issue-field" id="issue-severity-wrap" hidden>
+          <span class="tl-issue-field__label" id="issue-severity-label">请选择异常等级</span>
+          <select id="issue-severity" class="tl-issue-select">
+            <option value="">请选择异常等级</option>
+            <option value="minor">低风险</option>
+            <option value="moderate">中风险</option>
+            <option value="severe">高风险</option>
           </select>
         </label>
         <textarea id="issue-text" class="tl-issue-text" hidden placeholder="请描述异常现象或无法检测的原因"></textarea>

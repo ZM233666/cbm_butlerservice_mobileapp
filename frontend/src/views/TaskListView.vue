@@ -11,13 +11,49 @@ import type { SlotUploadStatus } from '@/components/task/TaskUploadSlot.vue'
 import { fetchGuidanceTasks, fetchHomeConfig, fetchTaskStatus, fetchTaskDetail, postTaskStatus, postTaskSubmit, postTaskDraft, postTaskEditRequest, fetchLatestTaskSubmit, type TaskSubmitResponse } from '@/api/tasks'
 import { uploadImage } from '@/api/upload'
 import type { UploadResult } from '@/api/upload'
-import type { GuidanceRow, InspectionRecord, InspectionStatus, TaskDetail } from '@/types/task'
-import { formatMaintLabel, maintToTemplate, normalizeMaint } from '@/utils/maint'
+import type {
+  AbnormalSeverity,
+  GuidanceRow,
+  InspectionRecord,
+  InspectionStatus,
+  TaskDetail,
+} from '@/types/task'
+import {
+  ABNORMAL_SEVERITY_OPTIONS,
+  normalizeAbnormalSeverity,
+  parseSeverityFromResultText,
+} from '@/utils/inspectionSeverity'
+import { buildIssueSubmitEntry, buildIssuesSubmitMap } from '@/utils/issueSubmitFormat'
+import { picSampleUrl, resolvePicSampleFileForRow, rowHasPicSample } from '@/utils/pic-samples'
+import { formatMaintLabel, normalizeMaint } from '@/utils/maint'
+import {
+  type GuidanceDocV1,
+  type GuidanceEquipmentFieldKey,
+  deriveTrainModelFromTrainNo,
+  getGuidanceEquipmentFlags,
+  getTemplateRows,
+  isGuidanceDataSyncRow,
+  isRowUploadRequiredNow,
+  rowNeedsEquipmentInputs,
+  selectTemplateKey,
+} from '@/utils/guidance-template'
+import { normalizeMileageKmInput, sanitizeMileageKmDigits } from '@/utils/mileageKm'
+import {
+  MAX_EXTRA_PHOTOS_PER_SLOT,
+  buildCompactUploadSlotMoves,
+  buildExtraDisplayName,
+  buildExtraUploadSlotId,
+  getBaseUploadSlotId,
+  groupUploadSlotIds,
+  listExtraUploadSlotIds,
+  nextExtraUploadIndex,
+  resolveUploadDisplayName,
+} from '@/utils/uploadSlots'
 import * as exifr from 'exifr'
 
 defineOptions({ name: 'TaskListView' })
 
-let guidanceRowsMemoryCache: GuidanceRow[] | null = null
+let guidanceDocMemoryCache: GuidanceDocV1 | null = null
 
 const route = useRoute()
 const router = useRouter()
@@ -25,19 +61,27 @@ const auth = useAuthStore()
 const { lang, t } = useI18n()
 const toastStore = useToastStore()
 
-const SCHEMATIC_SEQS = new Set(['1','2','3','3.1','3.2','3.3','4','5','5.1','6','6.1','7','8','8.1','8.2','9','9.1','10','11','11.1','12','13','14','15','17.1','17.2','17.3','17.4','17.5','17.6'])
+// TODO: 新模板样例图就绪后，按 row.seq / id 重新配置；当前先预留按钮逻辑，不展示
 const FALLBACK_UPLOAD_MAX_BYTES = 30 * 1024 * 1024
 const LOW_RES_MAX_EDGE = 1000
 
 type ClientCaptureMeta = { capturedAt: string; latitude?: number; longitude?: number; accuracy?: number }
 
+type EquipmentRecord = {
+  materialNumber?: string
+  serialNumber?: string
+  overhaulOrManufactureDate?: string
+}
+
 const maintType = ref<string>('c4')
 const taskDetail = ref<TaskDetail | null>(null)
-const guidanceRows = ref<GuidanceRow[]>([])
+const mileageKmInput = ref('')
+const guidanceDoc = ref<GuidanceDocV1 | null>(null)
 const uploadRecords = ref<Record<string, { url: string; capture?: UploadResult['capture']; displayName?: string }>>({})
 const localPreviewRecords = ref<Record<string, string>>({})
 const slotUploadStatus = ref<Record<string, SlotUploadStatus>>({})
 const issueRecords = ref<Record<string, InspectionRecord>>({})
+const equipmentRecords = ref<Record<string, EquipmentRecord>>({})
 const uploadMaxBytes = ref(FALLBACK_UPLOAD_MAX_BYTES)
 const uploadAllowedContentTypePrefixes = ref(['image/'])
 
@@ -66,6 +110,8 @@ type UploadQueueItem = {
 
 const preparedUploads = ref<Record<string, PreparedUpload>>({})
 const pendingRetrySources = ref<Record<string, PendingRetrySource>>({})
+const addPhotoInputRef = ref<HTMLInputElement | null>(null)
+const addPhotoPickerTarget = ref<{ baseSlot: string; baseLabel: string } | null>(null)
 const uploadQueue = ref<UploadQueueItem[]>([])
 const slotTokens: Record<string, number> = {}
 let uploadPumpRunning = false
@@ -99,15 +145,27 @@ let pinchStartZoom = 1
 const issueOpen = ref(false)
 const issueRowId = ref('')
 const issueStatus = ref<InspectionStatus | ''>('')
+const issueSeverity = ref<AbnormalSeverity | ''>('')
 const issueText = ref('')
 const flashingRowId = ref('')
+const flashingEquipmentKey = ref('')
+/** 当前展开的子任务卡片（空=全部折叠） */
+const expandedRowId = ref('')
+const mileageFlash = ref(false)
+/** 闪红两轮（CSS 0.9s × 2）后再清除 class */
+const FLASH_CLEAR_MS = 2000
 let flashTimer: ReturnType<typeof setTimeout> | null = null
+let mileageFlashTimer: ReturnType<typeof setTimeout> | null = null
 const submitConfirmOpen = ref(false)
+const abnormalitySummaryOpen = ref(false)
+const pendingSubmitAllowEmpty = ref(false)
+const submittingTask = ref(false)
 const currentTaskStatus = ref<'todo' | 'doing' | 'done' | 'rejected'>('todo')
 const editRequestOpen = ref(false)
 const editRequestReason = ref('')
 const editRequestSubmitting = ref(false)
 const savingDraft = ref(false)
+const syncingIssueDraft = ref(false)
 // taskKey：统一以 Main Task ID 作为唯一 key（来自 query.k / query.taskId）
 const taskKey = computed(() => String(route.query.k || route.query.taskId || '').trim())
 const fallbackTaskKey = computed(() => {
@@ -127,47 +185,69 @@ function displayField(value: string | undefined | null) {
   return text || EMPTY_FIELD
 }
 
-const basicDepot = computed(() => displayField(taskDetail.value?.depot))
-const basicTrainNo = computed(() => displayField(taskDetail.value?.trainNo))
+const basicServiceLocation = computed(() => displayField(taskDetail.value?.depot))
+const basicTrainNo = computed(() => {
+  const fromDetail = String(taskDetail.value?.trainNo || '').trim()
+  if (fromDetail) return fromDetail
+  return displayField(String(route.query.trainNo || route.query.vehicleNo || '').trim())
+})
+const basicTrainModel = computed(() => {
+  const explicit = String(
+    taskDetail.value?.trainModel
+      || (taskDetail.value as { vehicleModel?: string } | null)?.vehicleModel
+      || route.query.trainModel
+      || route.query.model
+      || '',
+  ).trim()
+  if (explicit) return explicit.toUpperCase()
+  const token = deriveTrainModelFromTrainNo(basicTrainNo.value === EMPTY_FIELD ? '' : basicTrainNo.value)
+  return displayField(token)
+})
+const trainNoForTemplate = computed(() => {
+  // 模板选择优先用完整车号（可识别 FXD1B 等 8 轴型号）
+  const fromDetail = String(taskDetail.value?.trainNo || '').trim()
+  if (fromDetail) return fromDetail
+  const fromQuery = String(route.query.trainNo || route.query.vehicleNo || '').trim()
+  if (fromQuery) return fromQuery
+  return String(
+    taskDetail.value?.trainModel
+      || (taskDetail.value as { vehicleModel?: string } | null)?.vehicleModel
+      || route.query.trainModel
+      || '',
+  ).trim()
+})
 const basicEmployeeId = computed(() => displayField(taskDetail.value?.employeeId || auth.user?.employeeId))
 const basicMaintLabel = computed(() =>
   formatMaintLabel(taskDetail.value?.maint || maintType.value),
 )
 
-const maintTemplate = computed(() => maintToTemplate(maintType.value) || 'c4c6')
+const guidanceTemplateKey = computed(() =>
+  selectTemplateKey(trainNoForTemplate.value, maintType.value, guidanceDoc.value?.templateSelection),
+)
+const guidanceRows = computed<GuidanceRow[]>(() =>
+  getTemplateRows(guidanceDoc.value, guidanceTemplateKey.value) as GuidanceRow[],
+)
 const basicTaskId = computed(() => displayField(taskDetail.value?.taskId || mainTaskId.value))
 const basicDeadline = computed(() => displayField(taskDetail.value?.deadline || String(route.query.deadline || '')))
+
+function applyMileageFromDetail(task: TaskDetail | null | undefined) {
+  if (task?.mileageKm != null && Number.isFinite(Number(task.mileageKm))) {
+    mileageKmInput.value = String(Math.trunc(Number(task.mileageKm)))
+  }
+}
+
 const homeRefreshStamp = ref(0)
 const backToHome = computed(() => {
   if (!homeRefreshStamp.value) return '/'
   return { path: '/', query: { refresh: String(homeRefreshStamp.value) } }
 })
 
-function isGuidanceDataSyncRow(row: GuidanceRow) {
-  const seq = String(row.seq || '')
-  return seq === '17' || seq.startsWith('17.')
-}
-
-function seqForTemplate(row: GuidanceRow, template: string) {
-  const by = row.seqByTemplate
-  if (template === 'c1c3' && by?.c1c3) return by.c1c3
-  if (template === 'c4c6' && by?.c4c6) return by.c4c6
-  return row.seq
-}
-
-const visibleRows = computed(() => {
-  const template = maintTemplate.value
-  const filtered = guidanceRows.value.filter((row) => {
-    if (template === 'c1c3') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c4c6')
-    if (template === 'c4c6') return !(row.scopeTags.length === 1 && row.scopeTags[0] === 'c1c3')
-    return true
-  })
-
-  return filtered.map((row) => ({
+const visibleRows = computed(() =>
+  guidanceRows.value.map((row) => ({
     ...row,
-    displaySeq: seqForTemplate(row, template) || row.seq,
-  }))
-})
+    displaySeq: row.seq,
+  })),
+)
 
 const EN_DESC: Record<string, string> = {
   r1: 'Locomotive number photo: take a photo and upload it to the system attachment.',
@@ -214,6 +294,134 @@ function isDataSyncRow(row: GuidanceRow) {
   return isGuidanceDataSyncRow(row)
 }
 
+function equipmentFlagsOf(row: GuidanceRow) {
+  return getGuidanceEquipmentFlags(row)
+}
+
+function equipmentValue(rowId: string, key: GuidanceEquipmentFieldKey): string {
+  return String(equipmentRecords.value[rowId]?.[key] || '')
+}
+
+/** 大修/维修日期：存 yyyy-mm-dd；兼容历史非日期文案 */
+function isIsoDateValue(raw: string): boolean {
+  const text = String(raw || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false
+  const [y, m, d] = text.split('-').map((x) => Number(x))
+  if (!y || !m || !d) return false
+  const dt = new Date(y, m - 1, d)
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
+}
+
+function todayIsoDate(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const equipmentDateMin = '1990-01-01'
+const equipmentDateMax = computed(() => todayIsoDate())
+
+function equipmentDateInputValue(rowId: string): string {
+  const v = equipmentValue(rowId, 'overhaulOrManufactureDate').trim()
+  return isIsoDateValue(v) ? v : ''
+}
+
+function equipmentLegacyDateHint(rowId: string): string {
+  const v = equipmentValue(rowId, 'overhaulOrManufactureDate').trim()
+  if (!v || isIsoDateValue(v)) return ''
+  return lang.value === 'zh'
+    ? `原填写：${v}（请点日历重新选择日期）`
+    : `Previous: ${v} (tap calendar to set a date)`
+}
+
+function openEquipmentDatePicker(ev: Event) {
+  if (!canEditWork.value) return
+  const root = (ev.currentTarget as HTMLElement | null)?.closest('.tl-equipment-field__control')
+  const input = root?.querySelector('input[type="date"]') as HTMLInputElement | null
+  if (!input || input.disabled || input.readOnly) return
+  try {
+    if (typeof input.showPicker === 'function') {
+      input.showPicker()
+      return
+    }
+  } catch {
+    /* fall through */
+  }
+  input.focus()
+  input.click()
+}
+
+function setEquipmentValue(rowId: string, key: GuidanceEquipmentFieldKey, raw: string) {
+  let value = String(raw || '')
+  if (key === 'overhaulOrManufactureDate') {
+    value = value.trim()
+    // 仅接受 yyyy-mm-dd；清空允许
+    if (value && !isIsoDateValue(value)) return
+  }
+  const prev = equipmentRecords.value[rowId] || {}
+  const draft: EquipmentRecord = { ...prev, [key]: value }
+  const cleaned: EquipmentRecord = {}
+  const mat = String(draft.materialNumber ?? '')
+  const ser = String(draft.serialNumber ?? '')
+  const date = String(draft.overhaulOrManufactureDate ?? '')
+  if (mat.trim()) cleaned.materialNumber = mat
+  if (ser.trim()) cleaned.serialNumber = ser
+  if (date.trim()) cleaned.overhaulOrManufactureDate = date.trim()
+  const map = { ...equipmentRecords.value }
+  if (Object.keys(cleaned).length) map[rowId] = cleaned
+  else delete map[rowId]
+  equipmentRecords.value = map
+}
+
+function normalizeEquipmentRecord(raw: unknown): EquipmentRecord | null {
+  if (!raw || typeof raw !== 'object') return null
+  const src = raw as Record<string, unknown>
+  const materialNumber = String(src.materialNumber ?? src.material_number ?? '').trim()
+  const serialNumber = String(src.serialNumber ?? src.serial_number ?? '').trim()
+  const overhaulOrManufactureDate = String(
+    src.overhaulOrManufactureDate
+      ?? src.overhaul_or_manufacture_date
+      ?? src.overhaulDate
+      ?? src.manufactureDate
+      ?? '',
+  ).trim()
+  if (!materialNumber && !serialNumber && !overhaulOrManufactureDate) return null
+  const out: EquipmentRecord = {}
+  if (materialNumber) out.materialNumber = materialNumber
+  if (serialNumber) out.serialNumber = serialNumber
+  if (overhaulOrManufactureDate) out.overhaulOrManufactureDate = overhaulOrManufactureDate
+  return out
+}
+
+function buildEquipmentSubmitMap(records: Record<string, EquipmentRecord>) {
+  const out: Record<string, EquipmentRecord> = {}
+  Object.entries(records || {}).forEach(([rowId, item]) => {
+    const key = String(rowId || '').trim()
+    const rec = normalizeEquipmentRecord(item)
+    if (!key || !rec) return
+    out[key] = rec
+  })
+  return out
+}
+
+function equipmentFieldLabel(key: GuidanceEquipmentFieldKey): string {
+  if (lang.value === 'zh') {
+    if (key === 'materialNumber') return '物料号'
+    if (key === 'serialNumber') return '序列号'
+    return '大修/维修日期'
+  }
+  if (key === 'materialNumber') return 'Material No.'
+  if (key === 'serialNumber') return 'Serial No.'
+  return 'Overhaul / Mfr. Date'
+}
+
+/** 输入框 placeholder：去掉中英文括号说明 */
+function inputPlaceholder(raw: unknown): string {
+  return String(raw || '')
+    .replace(/（[^）]*）/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .trim()
+}
+
 function isDataSyncStart(index: number) {
   const row = visibleRows.value[index]
   if (!row || !isDataSyncRow(row)) return false
@@ -221,46 +429,287 @@ function isDataSyncStart(index: number) {
   return !isDataSyncRow(visibleRows.value[index - 1])
 }
 
-const colLabels = computed(() => {
-  if (lang.value === 'zh') return { seq: '序号', desc: '操作说明', upload: '上传图片' }
-  return { seq: 'No.', desc: 'Instructions', upload: 'Upload' }
-})
+function rowIssueStatus(rowId: string): InspectionStatus | '' {
+  return normalizeIssueRecord(issueRecords.value[rowId])?.status || ''
+}
 
-const requiredSlots = computed(() => {
-  const slots = new Set<string>()
-  visibleRows.value.forEach(row => {
-    (row.buttons || []).forEach(b => { if (b.slot) slots.add(b.slot) })
+/** 卡片标题基底：取说明首行，去掉末尾冒号 */
+function rowCardTitleBase(row: GuidanceRow): string {
+  const desc = String(rowDescription.value(row) || '').trim()
+  const firstLine = (desc.split(/\r?\n/)[0] || '').trim()
+  const title = firstLine.replace(/[：:]\s*$/, '').trim()
+  return title || String(row.seq || row.id || '')
+}
+
+/** 同名标题加 1/2/3 后缀，便于收起态区分 */
+const rowCardDisplayTitles = computed(() => {
+  const rows = visibleRows.value
+  const bases = rows.map((row) => ({ id: row.id, base: rowCardTitleBase(row) }))
+  const counts = new Map<string, number>()
+  bases.forEach((item) => {
+    counts.set(item.base, (counts.get(item.base) || 0) + 1)
   })
-  return Array.from(slots)
+  const seen = new Map<string, number>()
+  const out: Record<string, string> = {}
+  bases.forEach((item) => {
+    const total = counts.get(item.base) || 0
+    if (total <= 1) {
+      out[item.id] = item.base
+      return
+    }
+    const n = (seen.get(item.base) || 0) + 1
+    seen.set(item.base, n)
+    out[item.id] = `${item.base}${n}`
+  })
+  return out
 })
-const incompleteSlots = computed(() => requiredSlots.value.filter(s => !uploadRecords.value[s]?.url))
-const isSubmitReady = computed(() => incompleteSlots.value.length === 0)
 
-const incompleteRows = computed(() => {
-  return visibleRows.value.filter((row) => {
+function rowCardTitle(row: GuidanceRow): string {
+  return rowCardDisplayTitles.value[row.id] || rowCardTitleBase(row)
+}
+
+function rowUploadStats(row: GuidanceRow): { uploaded: number; required: number } {
+  const buttons = row.buttons || []
+  let uploaded = 0
+  const required = buttons.length
+  for (const btn of buttons) {
+    if (displayedUploadUrl(btn.slot)) uploaded += 1
+    for (const extraId of extraSlotsForBase(btn.slot)) {
+      if (displayedUploadUrl(extraId)) uploaded += 1
+    }
+  }
+  return { uploaded, required }
+}
+
+function isRowWorkComplete(row: GuidanceRow): boolean {
+  if (!isIssueComplete(issueRecords.value[row.id])) return false
+  if (missingEquipmentFieldsOf(row).length > 0) return false
+  const status = rowIssueStatus(row.id)
+  if (status === 'no_equipment') return true
+  if (!isRowUploadRequiredNow(row, status)) return true
+  const buttons = row.buttons || []
+  if (!buttons.length) return true
+  return buttons.every((b) => !!uploadRecords.value[b.slot]?.url)
+}
+
+function rowHasAnyProgress(row: GuidanceRow): boolean {
+  if (normalizeIssueRecord(issueRecords.value[row.id])) return true
+  const equip = equipmentRecords.value[row.id]
+  if (equip && Object.values(equip).some((v) => String(v || '').trim())) return true
+  const buttons = row.buttons || []
+  return buttons.some((b) => {
+    if (displayedUploadUrl(b.slot)) return true
+    return extraSlotsForBase(b.slot).some((id) => !!displayedUploadUrl(id))
+  })
+}
+
+type SubtaskWorkStatus = 'done' | 'doing' | 'todo'
+
+function rowWorkStatus(row: GuidanceRow): SubtaskWorkStatus {
+  if (isRowWorkComplete(row)) return 'done'
+  if (rowHasAnyProgress(row) || expandedRowId.value === row.id) return 'doing'
+  return 'todo'
+}
+
+function rowWorkStatusLabel(status: SubtaskWorkStatus): string {
+  if (lang.value === 'zh') {
+    if (status === 'done') return '已完成'
+    if (status === 'doing') return '进行中'
+    return '未开始'
+  }
+  if (status === 'done') return 'Done'
+  if (status === 'doing') return 'In progress'
+  return 'Not started'
+}
+
+/** 收起态主状态：完成后展示检查结果文案，否则展示作业进度 */
+function rowCollapsedStatusLabel(row: GuidanceRow): string {
+  if (rowWorkStatus(row) === 'done') {
+    return rowCollapsedIssueLabel(row) || rowWorkStatusLabel('done')
+  }
+  return rowWorkStatusLabel(rowWorkStatus(row))
+}
+
+/** 收起态主状态样式：完成后与检查结果按钮配色同步 */
+function rowCollapsedStatusClass(row: GuidanceRow): Record<string, boolean> {
+  const work = rowWorkStatus(row)
+  if (work === 'done') {
+    const issue = issueBtnClass(row.id)
+    return {
+      'is-done': true,
+      'is-issue': true,
+      'is-ok': !!issue['is-ok'],
+      'is-abnormal': !!issue['is-abnormal'],
+      'is-abnormal-minor': !!issue['is-abnormal-minor'],
+      'is-abnormal-moderate': !!issue['is-abnormal-moderate'],
+      'is-abnormal-severe': !!issue['is-abnormal-severe'],
+      'is-undetectable': !!issue['is-undetectable'],
+      'is-no-equipment': !!issue['is-no-equipment'],
+    }
+  }
+  return {
+    'is-doing': work === 'doing',
+    'is-todo': work === 'todo',
+  }
+}
+
+function rowSeqClass(row: GuidanceRow): Record<string, boolean> {
+  const work = rowWorkStatus(row)
+  if (work === 'done') {
+    const issue = issueBtnClass(row.id)
+    return {
+      'is-done': true,
+      'is-ok': !!issue['is-ok'],
+      'is-abnormal': !!issue['is-abnormal'],
+      'is-abnormal-minor': !!issue['is-abnormal-minor'],
+      'is-abnormal-moderate': !!issue['is-abnormal-moderate'],
+      'is-abnormal-severe': !!issue['is-abnormal-severe'],
+      'is-undetectable': !!issue['is-undetectable'],
+      'is-no-equipment': !!issue['is-no-equipment'],
+    }
+  }
+  return {
+    'is-doing': work === 'doing',
+  }
+}
+
+function rowCollapsedMeta(row: GuidanceRow): string {
+  const buttons = row.buttons || []
+  const stats = rowUploadStats(row)
+  const labels = buttons.map((b) => String(b.label || '').trim()).filter(Boolean)
+  const naming = String(row.imageNaming || '')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const head = (labels.length ? labels.join('/') : naming.join('/')).trim()
+
+  if (!buttons.length) {
+    return String(row.uploadHint || (lang.value === 'zh' ? '无需拍照' : 'No photo required'))
+  }
+  const uploadedText = lang.value === 'zh'
+    ? `已上传${stats.uploaded}张`
+    : `${stats.uploaded} uploaded`
+  return head ? `${head} · ${uploadedText}` : uploadedText
+}
+
+/** 卡片内「添加照片」：优先挂到仍可追加的主槽 */
+function rowAddExtraTarget(row: GuidanceRow): { baseSlot: string; baseLabel: string } | null {
+  for (const btn of row.buttons || []) {
+    if (canAddExtraPhoto(btn.slot)) {
+      return { baseSlot: btn.slot, baseLabel: btn.label }
+    }
+  }
+  return null
+}
+
+function onRowAddExtraPhoto(row: GuidanceRow) {
+  const target = rowAddExtraTarget(row)
+  if (!target) return
+  onAddExtraPhoto(target.baseSlot, target.baseLabel)
+}
+
+/** 收起态右侧：检查已完成时展示检查结果短标签 */
+function rowCollapsedIssueLabel(row: GuidanceRow): string {
+  const rec = normalizeIssueRecord(issueRecords.value[row.id])
+  if (!isIssueComplete(rec) || !rec) return ''
+  const label = inspectionStatusLabel(rec.status)
+  if (rec.status === 'abnormal') {
+    const sev = abnormalSeverityLabel(rec.severity)
+    return sev ? `${label}·${sev}` : label
+  }
+  return label
+}
+
+const subtaskProgress = computed(() => {
+  const rows = visibleRows.value
+  const total = rows.length
+  const completed = rows.filter((row) => isRowWorkComplete(row)).length
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0
+  return { completed, total, percent }
+})
+
+const subtaskProgressText = computed(() => {
+  const { completed, total } = subtaskProgress.value
+  return lang.value === 'zh'
+    ? `${completed}/${total} 已完成`
+    : `${completed}/${total} done`
+})
+
+function isSubtaskExpanded(rowId: string) {
+  return expandedRowId.value === rowId
+}
+
+function toggleSubtaskCard(rowId: string) {
+  expandedRowId.value = expandedRowId.value === rowId ? '' : rowId
+}
+
+function expandSubtaskCard(rowId: string) {
+  expandedRowId.value = rowId
+}
+
+/** 异常条件必传且缺失照片的行（硬拦截，不允许「仍然提交」绕过）。 */
+const hardIncompleteUploadRows = computed(() =>
+  visibleRows.value.filter((row) => {
+    if (!isRowUploadRequiredNow(row, rowIssueStatus(row.id))) return false
+    if ((row.uploadRequiredWhen || 'always') !== 'abnormal') return false
+    const buttons = row.buttons || []
+    return buttons.some((b) => !uploadRecords.value[b.slot]?.url)
+  }),
+)
+
+/** 普通必传缺失（可弹窗确认后仍提交）。无此设备不计入。 */
+const incompleteRows = computed(() =>
+  visibleRows.value.filter((row) => {
+    if ((row.uploadRequiredWhen || 'always') === 'abnormal') return false
+    if (!isRowUploadRequiredNow(row, rowIssueStatus(row.id))) return false
     const buttons = row.buttons || []
     if (!buttons.length) return false
     return buttons.some((b) => !uploadRecords.value[b.slot]?.url)
-  })
-})
+  }),
+)
 
-const INSPECTION_STATUSES: InspectionStatus[] = ['ok', 'abnormal', 'undetectable']
+const isSubmitReady = computed(
+  () => hardIncompleteUploadRows.value.length === 0 && incompleteRows.value.length === 0,
+)
+
+function focusFirstHardIncompleteUpload() {
+  const first = hardIncompleteUploadRows.value[0]
+  if (!first) return
+  flashRowById(first.id)
+}
+
+const INSPECTION_STATUSES: InspectionStatus[] = ['ok', 'abnormal', 'no_equipment']
 
 function normalizeIssueRecord(raw: unknown): InspectionRecord | null {
   if (!raw || typeof raw !== 'object') return null
-  const item = raw as { status?: string; text?: string; updatedAt?: string }
+  const item = raw as { status?: string; text?: string; updatedAt?: string; severity?: string; result?: string }
   const text = String(item.text || '').trim()
   const statusRaw = String(item.status || '').trim().toLowerCase()
-  const status = (statusRaw === 'normal' ? 'ok' : statusRaw) as InspectionStatus | ''
+  let status = (statusRaw === 'normal' ? 'ok' : statusRaw) as InspectionStatus | 'undetectable' | ''
+  let severity = normalizeAbnormalSeverity(item.severity)
+  // 历史：顶层「无法检测」→ 发现异常 + 等级无法检查
+  if (status === 'undetectable') {
+    status = 'abnormal'
+    if (!severity) severity = 'undetectable'
+  }
+  if (!severity && status === 'abnormal') {
+    severity = parseSeverityFromResultText(item.result)
+  }
   if (INSPECTION_STATUSES.includes(status as InspectionStatus)) {
     return {
       status: status as InspectionStatus,
       text,
       updatedAt: String(item.updatedAt || ''),
+      ...(status === 'abnormal' && severity ? { severity } : {}),
     }
   }
   if (text) {
-    return { status: 'abnormal', text, updatedAt: String(item.updatedAt || '') }
+    return {
+      status: 'abnormal',
+      text,
+      updatedAt: String(item.updatedAt || ''),
+      ...(severity ? { severity } : {}),
+    }
   }
   return null
 }
@@ -268,25 +717,41 @@ function normalizeIssueRecord(raw: unknown): InspectionRecord | null {
 function isIssueComplete(raw: unknown): boolean {
   const rec = normalizeIssueRecord(raw)
   if (!rec) return false
-  if (rec.status === 'ok') return true
-  return rec.text.trim().length > 0
+  if (rec.status === 'ok' || rec.status === 'no_equipment') return true
+  if (rec.status === 'abnormal') {
+    return !!rec.severity && rec.text.trim().length > 0
+  }
+  return false
+}
+
+function abnormalSeverityLabel(severity: AbnormalSeverity | '' | undefined) {
+  if (severity === 'severe') return t.value.issueSeveritySevere
+  if (severity === 'moderate') return t.value.issueSeverityModerate
+  if (severity === 'minor') return t.value.issueSeverityMinor
+  if (severity === 'undetectable') return t.value.issueSeverityUndetectable
+  return ''
 }
 
 function issueBtnClass(rowId: string) {
   const rec = normalizeIssueRecord(issueRecords.value[rowId])
   if (!isIssueComplete(rec)) return {}
+  const severity = rec?.status === 'abnormal' ? normalizeAbnormalSeverity(rec.severity) : ''
   return {
     'is-filled': true,
     'is-ok': rec?.status === 'ok',
-    'is-abnormal': rec?.status === 'abnormal',
-    'is-undetectable': rec?.status === 'undetectable',
+    'is-abnormal': rec?.status === 'abnormal' && severity !== 'undetectable',
+    'is-abnormal-minor': severity === 'minor',
+    'is-abnormal-moderate': severity === 'moderate',
+    'is-abnormal-severe': severity === 'severe',
+    'is-undetectable': rec?.status === 'abnormal' && severity === 'undetectable',
+    'is-no-equipment': rec?.status === 'no_equipment',
   }
 }
 
 function inspectionStatusLabel(status: InspectionStatus | '' | undefined) {
   if (status === 'ok') return t.value.issueStatusOk
   if (status === 'abnormal') return t.value.issueStatusAbnormal
-  if (status === 'undetectable') return t.value.issueStatusUndetectable
+  if (status === 'no_equipment') return t.value.issueStatusNoEquipment
   return ''
 }
 
@@ -294,8 +759,14 @@ function issueNoteDisplay(rowId: string) {
   const rec = normalizeIssueRecord(issueRecords.value[rowId])
   if (!rec) return ''
   const label = inspectionStatusLabel(rec.status)
-  if (rec.status === 'ok' || !rec.text) return label
-  return `${label}：${rec.text}`
+  if (rec.status === 'ok' || rec.status === 'no_equipment') return label
+  if (rec.status === 'abnormal') {
+    const sev = abnormalSeverityLabel(rec.severity)
+    const head = sev ? `${label}（${sev}）` : label
+    if (!rec.text) return head
+    return `${head}：${rec.text}`
+  }
+  return label
 }
 
 function issueNotePreview(rowId: string) {
@@ -304,10 +775,13 @@ function issueNotePreview(rowId: string) {
   return text.length > 44 ? `${text.slice(0, 44)}...` : text
 }
 
-const issueDetailRequired = computed(() => issueStatus.value === 'abnormal' || issueStatus.value === 'undetectable')
+const issueAbnormalFields = computed(() => issueStatus.value === 'abnormal')
+const issueDetailRequired = computed(() => issueAbnormalFields.value)
 const issuePlaceholderText = computed(() => {
-  if (issueStatus.value === 'undetectable') return t.value.issuePlaceholderUndetectable
-  if (issueStatus.value === 'abnormal') return t.value.issuePlaceholderAbnormal
+  if (issueStatus.value === 'abnormal') {
+    if (issueSeverity.value === 'undetectable') return t.value.issuePlaceholderUndetectable
+    return t.value.issuePlaceholderAbnormal
+  }
   return t.value.issuePlaceholder
 })
 
@@ -315,23 +789,179 @@ const incompleteInspectionRows = computed(() =>
   visibleRows.value.filter((row) => !isIssueComplete(issueRecords.value[row.id])),
 )
 
-function focusFirstIncompleteInspection() {
-  const first = incompleteInspectionRows.value[0]
-  if (!first) return
-  flashingRowId.value = first.id
+function missingEquipmentFieldsOf(row: GuidanceRow): GuidanceEquipmentFieldKey[] {
+  if (!rowNeedsEquipmentInputs(row)) return []
+  // 「无此设备」时不要求填写物料信息
+  if (rowIssueStatus(row.id) === 'no_equipment') return []
+  const flags = equipmentFlagsOf(row)
+  const missing: GuidanceEquipmentFieldKey[] = []
+  if (flags.materialNumber && !equipmentValue(row.id, 'materialNumber').trim()) {
+    missing.push('materialNumber')
+  }
+  if (flags.serialNumber && !equipmentValue(row.id, 'serialNumber').trim()) {
+    missing.push('serialNumber')
+  }
+  if (flags.overhaulOrManufactureDate && !equipmentValue(row.id, 'overhaulOrManufactureDate').trim()) {
+    missing.push('overhaulOrManufactureDate')
+  }
+  return missing
+}
+
+const incompleteEquipmentRows = computed(() =>
+  visibleRows.value.filter((row) => missingEquipmentFieldsOf(row).length > 0),
+)
+
+function flashRowById(rowId: string) {
+  expandSubtaskCard(rowId)
+  flashingRowId.value = rowId
   void nextTick(() => {
-    const el = document.querySelector(`[data-row-id="${CSS.escape(first.id)}"]`) as HTMLElement | null
+    const el = document.querySelector(`[data-row-id="${CSS.escape(rowId)}"]`) as HTMLElement | null
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   })
   if (flashTimer) clearTimeout(flashTimer)
   flashTimer = setTimeout(() => {
-    if (flashingRowId.value === first.id) flashingRowId.value = ''
+    if (flashingRowId.value === rowId) flashingRowId.value = ''
+    if (flashingEquipmentKey.value.startsWith(`${rowId}:`)) flashingEquipmentKey.value = ''
     flashTimer = null
-  }, 1200)
+  }, FLASH_CLEAR_MS)
 }
+
+function focusFirstIncompleteInspection() {
+  const first = incompleteInspectionRows.value[0]
+  if (!first) return
+  flashingEquipmentKey.value = ''
+  flashRowById(first.id)
+}
+
+function focusFirstIncompleteEquipment() {
+  const first = incompleteEquipmentRows.value[0]
+  if (!first) return
+  const missing = missingEquipmentFieldsOf(first)
+  const field = missing[0]
+  flashingEquipmentKey.value = field ? `${first.id}:${field}` : ''
+  flashRowById(first.id)
+  if (field) {
+    void nextTick(() => {
+      const key = `${first.id}:${field}`
+      const el = document.querySelector(
+        `[data-equipment-field="${CSS.escape(key)}"] input`,
+      ) as HTMLInputElement | null
+      el?.focus({ preventScroll: true })
+    })
+  }
+}
+
+type AbnormalitySummaryItem = { seq: string; text: string }
+
+const abnormalitySummaryGroups = computed(() => {
+  const severe: AbnormalitySummaryItem[] = []
+  const moderate: AbnormalitySummaryItem[] = []
+  const minor: AbnormalitySummaryItem[] = []
+  visibleRows.value.forEach((row) => {
+    const rec = normalizeIssueRecord(issueRecords.value[row.id])
+    if (!rec || rec.status !== 'abnormal') return
+    const severity = normalizeAbnormalSeverity(rec.severity)
+    // 无法检查、无此设备不汇总；无等级也不汇总
+    if (!severity || severity === 'undetectable') return
+    const text = String(rec.text || '').trim()
+    const item = {
+      seq: String(row.displaySeq || row.seq || '').trim() || '-',
+      text: text || (lang.value === 'zh' ? '（无描述）' : '(no detail)'),
+    }
+    if (severity === 'severe') severe.push(item)
+    else if (severity === 'moderate') moderate.push(item)
+    else if (severity === 'minor') minor.push(item)
+  })
+  return { severe, moderate, minor }
+})
+
+const abnormalitySummaryTotal = computed(
+  () =>
+    abnormalitySummaryGroups.value.severe.length
+    + abnormalitySummaryGroups.value.moderate.length
+    + abnormalitySummaryGroups.value.minor.length,
+)
+
+function formatAbnormalityGroupLine(
+  label: string,
+  items: AbnormalitySummaryItem[],
+): string {
+  if (lang.value === 'zh') {
+    if (!items.length) return `${label}异常0处。`
+    const parts = items.map((it) => `第${it.seq}步：${it.text}`).join('；')
+    return `${label}异常${items.length}处，分别为：${parts}。`
+  }
+  if (!items.length) return `${label}: 0.`
+  const parts = items.map((it) => `Step ${it.seq}: ${it.text}`).join('; ')
+  return `${label}: ${items.length} — ${parts}.`
+}
+
+const abnormalitySummaryLines = computed(() => {
+  const groups = abnormalitySummaryGroups.value
+  const total = abnormalitySummaryTotal.value
+  if (lang.value === 'zh') {
+    if (!total) return [t.value.abnormalitySummaryEmpty]
+    return [
+      `本次管家式服务共发现${total}处异常，其中：`,
+      formatAbnormalityGroupLine('高风险', groups.severe),
+      formatAbnormalityGroupLine('中风险', groups.moderate),
+      formatAbnormalityGroupLine('低风险', groups.minor),
+    ]
+  }
+  if (!total) return [t.value.abnormalitySummaryEmpty]
+  return [
+    `This butler service found ${total} abnormalities:`,
+    formatAbnormalityGroupLine('High risk', groups.severe),
+    formatAbnormalityGroupLine('Medium risk', groups.moderate),
+    formatAbnormalityGroupLine('Low risk', groups.minor),
+  ]
+})
+const isViewOnly = computed(() => {
+  const raw = String(route.query.readonly || route.query.mode || '').trim().toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'view'
+})
 const isTaskDone = computed(() => currentTaskStatus.value === 'done')
 const isTaskTodo = computed(() => currentTaskStatus.value === 'todo')
 const isTaskDoing = computed(() => currentTaskStatus.value === 'doing')
+const canEditWork = computed(() => isTaskDoing.value && !isViewOnly.value)
+
+function focusMileageField() {
+  mileageFlash.value = true
+  void nextTick(() => {
+    const el = document.querySelector('[data-mileage-field]') as HTMLElement | null
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const input = el?.querySelector('input') as HTMLInputElement | null
+    input?.focus({ preventScroll: true })
+  })
+  if (mileageFlashTimer) clearTimeout(mileageFlashTimer)
+  mileageFlashTimer = setTimeout(() => {
+    mileageFlash.value = false
+    mileageFlashTimer = null
+  }, FLASH_CLEAR_MS)
+}
+
+function validateMileageForWork({ required = false }: { required?: boolean } = {}): boolean {
+  if (!canEditWork.value) return true
+  const n = normalizeMileageKmInput(mileageKmInput.value)
+  if (n != null) return true
+  if (!String(mileageKmInput.value || '').trim()) {
+    if (required) {
+      toast(t.value.mileageRequired, 'warn')
+      focusMileageField()
+    }
+    return !required
+  }
+  toast(t.value.mileageInvalid, 'warn')
+  focusMileageField()
+  return false
+}
+
+function onMileageKmInput(event: Event) {
+  const el = event.target as HTMLInputElement
+  const next = sanitizeMileageKmDigits(el.value)
+  if (el.value !== next) el.value = next
+  mileageKmInput.value = next
+}
 const isTaskRejected = computed(() => currentTaskStatus.value === 'rejected')
 const editRequestBtnText = computed(() => {
   const dict = t.value as Record<string, string>
@@ -512,47 +1142,139 @@ const schematicImageStyle = computed(() => ({
   transform: `translate(${schematicPanX.value}px, ${schematicPanY.value}px) scale(${schematicZoom.value})`,
 }))
 
-function openSchematic(seq: string) {
-  schematicSrc.value = `/PicSamples/${encodeURIComponent(seq)}.png`
+function openSchematicForRow(row: GuidanceRow) {
+  const file = resolvePicSampleFileForRow(row)
+  const url = picSampleUrl(file)
+  if (!url) return
+  schematicSrc.value = url
   resetSchematicView()
   schematicOpen.value = true
 }
 
+const issueTargetRow = computed(() =>
+  visibleRows.value.find((row) => row.id === issueRowId.value) || null,
+)
+
+/** 各类日志下载子任务：弹窗内提示电脑端操作。 */
+const issueShowLogPcTip = computed(() => {
+  const row = issueTargetRow.value
+  if (!row) return false
+  if ((row.uploadRequiredWhen || 'always') === 'abnormal') return true
+  return /各类日志下载/.test(String(row.description || ''))
+})
+
 function openIssue(rowId: string) {
-  if (!isTaskDoing.value) return
+  if (!canEditWork.value) return
   issueRowId.value = rowId
   const rec = normalizeIssueRecord(issueRecords.value[rowId])
-  issueStatus.value = rec?.status || ''
-  issueText.value = rec?.text || ''
+  // 首次未选择时默认「检查正常」；已保存则保留原选项
+  issueStatus.value = rec?.status || 'ok'
+  issueSeverity.value = rec?.status === 'abnormal' ? (rec.severity || '') : ''
+  issueText.value = rec?.status === 'ok' || rec?.status === 'no_equipment' ? '' : (rec?.text || '')
   issueOpen.value = true
 }
 
 function onIssueStatusChange() {
+  if (issueStatus.value !== 'abnormal') issueSeverity.value = ''
   if (!issueDetailRequired.value) issueText.value = ''
 }
 
+function severityOptionLabel(level: AbnormalSeverity) {
+  if (level === 'severe') return t.value.issueSeveritySevere
+  if (level === 'moderate') return t.value.issueSeverityModerate
+  if (level === 'minor') return t.value.issueSeverityMinor
+  return t.value.issueSeverityUndetectable
+}
+
+function mergeIssueRecordPreferringSeverity(
+  local: InspectionRecord | undefined,
+  server: InspectionRecord,
+): InspectionRecord {
+  if (!local) return server
+  const localSeverity = normalizeAbnormalSeverity(local.severity)
+  const serverSeverity = normalizeAbnormalSeverity(server.severity)
+  if (serverSeverity) return server
+  if (!localSeverity) return server
+  if (local.text === server.text || local.status === server.status) {
+    return { ...server, severity: localSeverity }
+  }
+  const localTs = Date.parse(local.updatedAt || '') || 0
+  const serverTs = Date.parse(server.updatedAt || '') || 0
+  if (localTs >= serverTs) {
+    return { ...server, severity: localSeverity }
+  }
+  return server
+}
+
+async function syncIssueDraftToServer() {
+  if (!mainTaskId.value || !canEditWork.value || syncingIssueDraft.value) return
+  if (!validateMileageForWork({ required: false })) return
+  syncingIssueDraft.value = true
+  try {
+    const res = await postTaskDraft(buildTaskSubmitPayload(true)) as {
+      issues?: Record<string, unknown>
+      equipment?: Record<string, unknown>
+    }
+    const serverIssues = res?.issues && typeof res.issues === 'object' ? res.issues : null
+    if (serverIssues) {
+      const next = { ...issueRecords.value }
+      Object.entries(serverIssues).forEach(([rowId, item]) => {
+        const rec = normalizeIssueRecord(item)
+        if (!rec) return
+        next[rowId] = mergeIssueRecordPreferringSeverity(next[rowId], rec)
+      })
+      issueRecords.value = next
+    }
+    const serverEquipment = res?.equipment && typeof res.equipment === 'object' ? res.equipment : null
+    if (serverEquipment) {
+      const nextEq = { ...equipmentRecords.value }
+      Object.entries(serverEquipment).forEach(([rowId, item]) => {
+        const rec = normalizeEquipmentRecord(item)
+        if (!rec) return
+        nextEq[rowId] = { ...nextEq[rowId], ...rec }
+      })
+      equipmentRecords.value = nextEq
+    }
+    persistTaskListCache()
+  } catch {
+    toast(t.value.saveFail, 'error')
+  } finally {
+    syncingIssueDraft.value = false
+  }
+}
+
 function saveIssue() {
-  if (!isTaskDoing.value) return
+  if (!canEditWork.value) return
   if (!issueRowId.value) return
   if (!issueStatus.value) {
     toast(t.value.issueNeedStatus, 'warn')
     return
   }
   const text = issueText.value.trim()
+  if (issueStatus.value === 'abnormal' && !issueSeverity.value) {
+    toast(t.value.issueNeedSeverity, 'warn')
+    return
+  }
   if (issueDetailRequired.value && !text) {
     toast(t.value.issueNeedDetail, 'warn')
     return
   }
+  const row: InspectionRecord = {
+    status: issueStatus.value,
+    text: issueStatus.value === 'ok' || issueStatus.value === 'no_equipment' ? '' : text,
+    updatedAt: new Date().toISOString(),
+  }
+  if (issueStatus.value === 'abnormal' && issueSeverity.value) {
+    row.severity = issueSeverity.value
+  }
   issueRecords.value = {
     ...issueRecords.value,
-    [issueRowId.value]: {
-      status: issueStatus.value,
-      text: issueStatus.value === 'ok' ? '' : text,
-      updatedAt: new Date().toISOString(),
-    },
+    [issueRowId.value]: row,
   }
+  persistTaskListCache()
   toast(t.value.issueSaved)
   issueOpen.value = false
+  void syncIssueDraftToServer()
 }
 
 let lastGeo: { latitude: number; longitude: number; accuracy?: number; fetchedAt: number } | null = null
@@ -629,11 +1351,9 @@ function formatCapturedAt(iso?: string) {
   return `${y}-${m}-${dd} ${hh}:${mm}:${ss}`
 }
 
-function captureLines(capture?: UploadResult['capture'], displayName?: string) {
+function captureLines(capture?: UploadResult['capture']) {
+  if (!capture) return []
   const lines: string[] = []
-  const name = String(displayName || '').trim()
-  if (name) lines.push(name)
-  if (!capture) return lines
   const at = formatCapturedAt(capture.capturedAt)
   const loc = capture.location || {}
   const locText =
@@ -644,10 +1364,220 @@ function captureLines(capture?: UploadResult['capture'], displayName?: string) {
   return lines
 }
 
-function uploadMetaLines(slotId: string, slotLabel?: string) {
+function uploadLabelForSlot(slotId: string, baseLabel: string) {
   const rec = uploadRecords.value[slotId]
-  const displayName = String(rec?.displayName || slotLabel || '').trim()
-  return captureLines(rec?.capture, displayName)
+  return resolveUploadDisplayName(slotId, baseLabel, rec?.displayName)
+}
+
+function uploadMetaTitle(slotId: string, slotLabel?: string) {
+  return uploadLabelForSlot(slotId, slotLabel || '')
+}
+
+function allUploadSlotKeys(): string[] {
+  const keys = new Set<string>([
+    ...Object.keys(uploadRecords.value),
+    ...Object.keys(localPreviewRecords.value),
+    ...Object.keys(slotUploadStatus.value),
+  ])
+  return Array.from(keys)
+}
+
+function extraSlotIsVisible(extraId: string): boolean {
+  if (displayedUploadUrl(extraId)) return true
+  return slotStatusOf(extraId) !== 'idle'
+}
+
+function extraSlotsForBase(baseSlot: string): string[] {
+  return listExtraUploadSlotIds(baseSlot, allUploadSlotKeys()).filter((id) => extraSlotIsVisible(id))
+}
+
+function countExtraPhotos(baseSlot: string): number {
+  return listExtraUploadSlotIds(baseSlot, allUploadSlotKeys()).filter((id) => {
+    if (uploadRecords.value[id]?.url || localPreviewRecords.value[id]) return true
+    const st = slotStatusOf(id)
+    return st === 'processing' || st === 'queued' || st === 'uploading' || st === 'failed'
+  }).length
+}
+
+function canAddExtraPhoto(baseSlot: string): boolean {
+  if (!canEditWork.value) return false
+  if (!displayedUploadUrl(baseSlot)) return false
+  return countExtraPhotos(baseSlot) < MAX_EXTRA_PHOTOS_PER_SLOT
+}
+
+function onAddExtraPhoto(baseSlot: string, baseLabel: string) {
+  if (!canAddExtraPhoto(baseSlot)) {
+    toast(t.value.extraPhotoMax, 'warn', 3200)
+    return
+  }
+  addPhotoPickerTarget.value = { baseSlot, baseLabel }
+  addPhotoInputRef.value?.click()
+}
+
+async function onAddPhotoPickerChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  const target = addPhotoPickerTarget.value
+  addPhotoPickerTarget.value = null
+  try {
+    if (!file || !target) return
+    if (!canAddExtraPhoto(target.baseSlot)) {
+      toast(t.value.extraPhotoMax, 'warn', 3200)
+      return
+    }
+    const extraId = buildExtraUploadSlotId(
+      target.baseSlot,
+      nextExtraUploadIndex(target.baseSlot, allUploadSlotKeys()),
+    )
+    await processSelectedUploadFile(extraId, target.baseLabel, file)
+  } finally {
+    input.value = ''
+  }
+}
+
+function labelForUploadSlot(slotId: string): string {
+  const baseSlot = getBaseUploadSlotId(slotId)
+  for (const row of guidanceRows.value) {
+    const buttons = Array.isArray(row.buttons) ? row.buttons : []
+    for (const btn of buttons) {
+      if (String(btn?.slot || '').trim() === baseSlot) {
+        return String(btn?.label || '').trim()
+      }
+    }
+  }
+  return ''
+}
+
+function uploadSlotHasContent(slotId: string): boolean {
+  if (String(uploadRecords.value[slotId]?.url || '').trim()) return true
+  if (localPreviewRecords.value[slotId]) return true
+  const st = slotStatusOf(slotId)
+  return st === 'processing' || st === 'queued' || st === 'uploading' || st === 'failed'
+}
+
+/** 删除后把剩余照片顶到 base / extra_1 / extra_2…，并修正展示名 */
+function compactUploadSlotsForBase(baseSlot: string, baseLabel: string) {
+  const base = String(baseSlot || '').trim()
+  if (!base) return
+  const keys = allUploadSlotKeys()
+  const moves = buildCompactUploadSlotMoves(base, keys, uploadSlotHasContent)
+  const needsRemap = moves.some((m) => m.from !== m.to)
+    || moves.some((m) => {
+      if (m.extraIndex == null) {
+        return !!String(uploadRecords.value[m.to]?.displayName || '').trim()
+      }
+      const expected = buildExtraDisplayName(baseLabel, m.extraIndex)
+      return uploadRecords.value[m.to]?.displayName !== expected
+    })
+  if (!moves.length && !needsRemap) return
+
+  type Snap = {
+    record?: { url: string; capture?: UploadResult['capture']; displayName?: string }
+    preview?: string
+    status?: SlotUploadStatus
+    prepared?: PreparedUpload
+    pending?: PendingRetrySource
+    queue: UploadQueueItem[]
+  }
+
+  const snaps: Snap[] = moves.map(({ from }) => ({
+    record: uploadRecords.value[from]
+      ? { ...uploadRecords.value[from] }
+      : undefined,
+    preview: localPreviewRecords.value[from],
+    status: slotUploadStatus.value[from],
+    prepared: preparedUploads.value[from],
+    pending: pendingRetrySources.value[from],
+    queue: uploadQueue.value.filter(
+      (q) => q.slotId === from && q.taskId === mainTaskId.value,
+    ),
+  }))
+
+  const taskId = mainTaskId.value
+  for (const id of groupUploadSlotIds(base, keys)) {
+    removeSlotFromUploadQueue(id, taskId)
+    clearPendingRetrySource(id)
+    cleanupLocalPreview(id)
+    const nextPrepared = { ...preparedUploads.value }
+    delete nextPrepared[id]
+    preparedUploads.value = nextPrepared
+    const nextRecords = { ...uploadRecords.value }
+    delete nextRecords[id]
+    uploadRecords.value = nextRecords
+    const nextStatus = { ...slotUploadStatus.value }
+    delete nextStatus[id]
+    slotUploadStatus.value = nextStatus
+  }
+
+  moves.forEach(({ to, extraIndex }, i) => {
+    const snap = snaps[i]
+    if (!snap) return
+    if (snap.record?.url) {
+      const record = { ...snap.record }
+      if (extraIndex == null) {
+        delete record.displayName
+      } else {
+        record.displayName = buildExtraDisplayName(baseLabel, extraIndex)
+      }
+      uploadRecords.value = { ...uploadRecords.value, [to]: record }
+    }
+    if (snap.preview) {
+      localPreviewRecords.value = { ...localPreviewRecords.value, [to]: snap.preview }
+    }
+    if (snap.status && snap.status !== 'idle') {
+      setSlotUploadStatus(to, snap.status)
+    } else if (uploadRecords.value[to]?.url) {
+      setSlotUploadStatus(to, 'success')
+    }
+    if (snap.prepared) {
+      preparedUploads.value = {
+        ...preparedUploads.value,
+        [to]: { ...snap.prepared, slotId: to, slotLabel: extraIndex == null ? baseLabel : buildExtraDisplayName(baseLabel, extraIndex) },
+      }
+    }
+    if (snap.pending) {
+      pendingRetrySources.value = {
+        ...pendingRetrySources.value,
+        [to]: { ...snap.pending, slotId: to, slotLabel: extraIndex == null ? baseLabel : buildExtraDisplayName(baseLabel, extraIndex) },
+      }
+    }
+    if (snap.queue.length) {
+      uploadQueue.value = [
+        ...uploadQueue.value,
+        ...snap.queue.map((q) => ({ ...q, slotId: to })),
+      ]
+    }
+  })
+
+  if (previewOpen.value && previewSlotId.value) {
+    const hit = moves.find((m) => m.from === previewSlotId.value)
+    if (hit) previewSlotId.value = hit.to
+  }
+}
+
+function removeSlotPhoto(slotId: string) {
+  if (!canEditWork.value) return
+  const taskId = mainTaskId.value
+  const baseSlot = getBaseUploadSlotId(slotId)
+  const baseLabel = labelForUploadSlot(slotId)
+  removeSlotFromUploadQueue(slotId, taskId)
+  const nextPrepared = { ...preparedUploads.value }
+  delete nextPrepared[slotId]
+  preparedUploads.value = nextPrepared
+  clearPendingRetrySource(slotId)
+  cleanupLocalPreview(slotId)
+  const nextRecords = { ...uploadRecords.value }
+  delete nextRecords[slotId]
+  uploadRecords.value = nextRecords
+  setSlotUploadStatus(slotId, 'idle')
+  if (previewOpen.value && previewSlotId.value === slotId) closeUploadPreview()
+  compactUploadSlotsForBase(baseSlot, baseLabel)
+  persistTaskListCache()
+  void syncIssueDraftToServer()
+}
+
+function uploadMetaLines(slotId: string) {
+  return captureLines(uploadRecords.value[slotId]?.capture)
 }
 
 function resolveTaskStatus(entry: unknown): 'todo' | 'doing' | 'done' | 'rejected' | null {
@@ -670,9 +1600,11 @@ function readTaskListCache() {
     return JSON.parse(raw) as {
       uploadRecords?: Record<string, { url: string; capture?: UploadResult['capture']; displayName?: string }>
       issueRecords?: Record<string, InspectionRecord>
+      equipmentRecords?: Record<string, EquipmentRecord>
       currentTaskStatus?: 'todo' | 'doing' | 'done' | 'rejected'
       taskRejected?: boolean
       maintType?: string
+      mileageKm?: string
     }
   } catch {
     return null
@@ -684,8 +1616,10 @@ function persistTaskListCache() {
     sessionStorage.setItem(taskListCacheKey(), JSON.stringify({
       uploadRecords: uploadRecords.value,
       issueRecords: issueRecords.value,
+      equipmentRecords: equipmentRecords.value,
       currentTaskStatus: currentTaskStatus.value,
       maintType: maintType.value,
+      mileageKm: mileageKmInput.value,
     }))
   } catch { /* ignore quota / private mode */ }
 }
@@ -711,10 +1645,13 @@ async function hydrateTaskPage() {
   applyMaintFromQueryOrDetail(route.query.maint)
 
   taskDetail.value = null
+  mileageKmInput.value = ''
   uploadRecords.value = {}
   issueRecords.value = {}
+  equipmentRecords.value = {}
   preparedUploads.value = {}
   pendingRetrySources.value = {}
+  addPhotoPickerTarget.value = null
   uploadQueue.value = []
   slotUploadStatus.value = {}
   revokeAllLocalPreviews()
@@ -735,24 +1672,35 @@ async function hydrateTaskPage() {
       })
       issueRecords.value = next
     }
+    if (cached.equipmentRecords && typeof cached.equipmentRecords === 'object') {
+      const nextEq: Record<string, EquipmentRecord> = {}
+      Object.entries(cached.equipmentRecords).forEach(([rowId, item]) => {
+        const rec = normalizeEquipmentRecord(item)
+        if (rec) nextEq[rowId] = rec
+      })
+      equipmentRecords.value = nextEq
+    }
     if (cached.currentTaskStatus === 'todo' || cached.currentTaskStatus === 'doing' || cached.currentTaskStatus === 'done' || cached.currentTaskStatus === 'rejected') {
       currentTaskStatus.value = cached.currentTaskStatus
     } else if (cached.taskRejected) {
       currentTaskStatus.value = 'rejected'
     }
     if (cached.maintType) applyMaintFromQueryOrDetail(cached.maintType)
+    if (cached.mileageKm != null && String(cached.mileageKm).trim()) {
+      mileageKmInput.value = String(cached.mileageKm).trim()
+    }
   }
 
   if (hydrateToken !== hydrateGeneration) return
 
-  if (guidanceRowsMemoryCache?.length) {
-    guidanceRows.value = guidanceRowsMemoryCache
-  } else if (!guidanceRows.value.length) {
+  if (guidanceDocMemoryCache) {
+    guidanceDoc.value = guidanceDocMemoryCache
+  } else if (!guidanceDoc.value) {
     try {
       const data = await fetchGuidanceTasks()
       if (hydrateToken !== hydrateGeneration) return
-      guidanceRows.value = data.rows || []
-      guidanceRowsMemoryCache = guidanceRows.value
+      guidanceDoc.value = data
+      guidanceDocMemoryCache = data
     } catch { toast('Load failed') }
   }
 
@@ -765,6 +1713,7 @@ async function hydrateTaskPage() {
         if (hydrateToken !== hydrateGeneration) return
         if (detailData?.task) {
           taskDetail.value = detailData.task
+          applyMileageFromDetail(detailData.task)
           if (detailData.task.maint) applyMaintFromQueryOrDetail(detailData.task.maint)
           if (
             detailData.task.status === 'todo'
@@ -794,23 +1743,36 @@ async function hydrateTaskPage() {
       const latest = await fetchLatestTaskSubmit(mainTaskId.value)
       if (hydrateToken !== hydrateGeneration) return
       if (latest && latest.found) {
+        // 服务端 uploads 为完整快照：覆盖本地，避免已删除图片被缓存“加回”
         const uploads = latest.uploads && typeof latest.uploads === 'object' ? latest.uploads : {}
+        const nextUploads: Record<string, { url: string; capture?: UploadResult['capture']; displayName?: string }> = {}
         Object.entries(uploads).forEach(([slot, item]) => {
           const url = String((item as any)?.url || '').trim()
           if (!url) return
           const displayName = String((item as any)?.displayName || '').trim()
-          uploadRecords.value[slot] = {
+          nextUploads[slot] = {
             url,
             capture: (item as any)?.capture,
             ...(displayName ? { displayName } : {}),
           }
         })
+        uploadRecords.value = nextUploads
         const issues = latest.issues && typeof latest.issues === 'object' ? latest.issues : {}
+        const mergedIssues = { ...issueRecords.value }
         Object.entries(issues).forEach(([rowId, item]) => {
           const rec = normalizeIssueRecord(item)
           if (!rec) return
-          issueRecords.value[rowId] = rec
+          mergedIssues[rowId] = mergeIssueRecordPreferringSeverity(mergedIssues[rowId], rec)
         })
+        issueRecords.value = mergedIssues
+        const equipment = latest.equipment && typeof latest.equipment === 'object' ? latest.equipment : {}
+        const mergedEquipment = { ...equipmentRecords.value }
+        Object.entries(equipment).forEach(([rowId, item]) => {
+          const rec = normalizeEquipmentRecord(item)
+          if (!rec) return
+          mergedEquipment[rowId] = { ...mergedEquipment[rowId], ...rec }
+        })
+        equipmentRecords.value = mergedEquipment
         persistTaskListCache()
       }
     } catch {
@@ -825,6 +1787,10 @@ async function hydrateTaskPage() {
     if (uploadRecords.value[slotId]?.url) nextStatus[slotId] = 'success'
   })
   slotUploadStatus.value = nextStatus
+
+  const rows = visibleRows.value
+  const preferred = rows.find((row) => !isRowWorkComplete(row)) || rows[0]
+  expandedRowId.value = preferred?.id || ''
 }
 
 function displayedUploadUrl(slotId: string) {
@@ -1215,7 +2181,7 @@ async function prepareAndEnqueueUpload(
 }
 
 function retryUpload(slotId: string) {
-  if (!isTaskDoing.value) return
+  if (!canEditWork.value) return
   if (slotStatusOf(slotId) !== 'failed') return
 
   const prepared = preparedUploads.value[slotId]
@@ -1244,17 +2210,11 @@ function retryUpload(slotId: string) {
   void prepareAndEnqueueUpload(slotId, source.slotLabel, source.sourceFile, token, source.taskId)
 }
 
-async function handleUpload(slotId: string, slotLabel: string, event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  if (!isTaskDoing.value) {
-    input.value = ''
-    return
-  }
+async function processSelectedUploadFile(slotId: string, baseLabel: string, file: File) {
+  const slotLabel = uploadLabelForSlot(slotId, baseLabel)
+  if (!canEditWork.value) return
   if (!isAllowedUploadType(file)) {
     toast(invalidUploadTypeMessage(), 'error')
-    input.value = ''
     return
   }
 
@@ -1278,8 +2238,15 @@ async function handleUpload(slotId: string, slotLabel: string, event: Event) {
   await nextTick()
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
+  await prepareAndEnqueueUpload(slotId, slotLabel || slotId, file, token, taskId)
+}
+
+async function handleUpload(slotId: string, baseLabel: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
   try {
-    await prepareAndEnqueueUpload(slotId, slotLabel || slotId, file, token, taskId)
+    if (!file) return
+    await processSelectedUploadFile(slotId, baseLabel, file)
   } finally {
     input.value = ''
   }
@@ -1323,7 +2290,9 @@ async function setTaskStatus(status: 'todo' | 'doing' | 'done' | 'rejected'): Pr
 }
 
 async function onSave() {
+  if (isViewOnly.value) return
   if (savingDraft.value) return
+  if (!validateMileageForWork({ required: false })) return
   savingDraft.value = true
   try {
     await postTaskDraft(buildTaskSubmitPayload(true))
@@ -1337,6 +2306,7 @@ async function onSave() {
 }
 
 async function onAccept() {
+  if (isViewOnly.value) return
   const ok = await setTaskStatus('doing')
   if (ok) {
     currentTaskStatus.value = 'doing'
@@ -1346,6 +2316,7 @@ async function onAccept() {
 }
 
 async function onReject() {
+  if (isViewOnly.value) return
   const ok = await setTaskStatus('rejected')
   if (!ok) {
     toast((t.value as any).rejectFailed || (lang.value === 'zh' ? '拒绝失败，请稍后重试' : 'Reject failed. Please try again.'), 'error')
@@ -1356,6 +2327,21 @@ async function onReject() {
   toast((t.value as any).rejected || (lang.value === 'zh' ? '已拒绝，该任务仍保留在 To Do' : 'Rejected. Task stays in To Do'), 'info')
   await wait(700)
   router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
+}
+
+/** 提交用精简汇总：total + text + groups（UI 展示仍用 abnormalitySummaryLines） */
+function buildAbnormalitySummaryPayload() {
+  const groups = abnormalitySummaryGroups.value
+  const lines = abnormalitySummaryLines.value
+  return {
+    total: abnormalitySummaryTotal.value,
+    text: lines.join('\n'),
+    groups: {
+      severe: groups.severe.map((it) => ({ seq: it.seq, text: it.text })),
+      moderate: groups.moderate.map((it) => ({ seq: it.seq, text: it.text })),
+      minor: groups.minor.map((it) => ({ seq: it.seq, text: it.text })),
+    },
+  }
 }
 
 function buildTaskSubmitPayload(allowEmptyUploads = false) {
@@ -1369,14 +2355,22 @@ function buildTaskSubmitPayload(allowEmptyUploads = false) {
       ...(meta?.displayName ? { displayName: meta.displayName } : {}),
     }
   })
+  const mileageKm = normalizeMileageKmInput(mileageKmInput.value)
   return {
     basicInfo: {
       maintenanceType: maintType.value,
       employeeId: auth.user?.employeeId,
       taskId: mainTaskId.value,
+      trainNo: basicTrainNo.value === EMPTY_FIELD ? trainNoForTemplate.value : basicTrainNo.value,
+      trainModel: basicTrainModel.value === EMPTY_FIELD ? '' : basicTrainModel.value,
+      depot: basicServiceLocation.value === EMPTY_FIELD ? '' : basicServiceLocation.value,
+      templateKey: guidanceTemplateKey.value,
+      ...(mileageKm != null ? { mileageKm } : {}),
     },
     uploads,
-    issues: issueRecords.value,
+    issues: buildIssuesSubmitMap(issueRecords.value),
+    equipment: buildEquipmentSubmitMap(equipmentRecords.value),
+    abnormalitySummary: buildAbnormalitySummaryPayload(),
     ...(allowEmptyUploads ? { allowEmptyUploads: true } : {}),
   }
 }
@@ -1407,7 +2401,9 @@ async function finalizeSubmit(submitResp: TaskSubmitResponse) {
   router.push({ path: '/', query: { refresh: String(homeRefreshStamp.value) } })
 }
 
-async function onSubmit() {
+/** 提交前公共校验；通过返回 true。 */
+function runSubmitGates(): boolean {
+  if (!validateMileageForWork({ required: true })) return false
   if (hasBusyUploads()) {
     toast(
       lang.value === 'zh'
@@ -1415,52 +2411,82 @@ async function onSubmit() {
         : 'Images are still processing or uploading. Please wait before submitting.',
       'warn',
     )
-    return
+    return false
   }
   if (hasUnresolvedFailedUploads()) {
     toast(unresolvedFailedUploadMessage(), 'warn')
-    return
+    return false
   }
   if (incompleteInspectionRows.value.length) {
     toast(t.value.submitNeedAllResults, 'warn')
     focusFirstIncompleteInspection()
+    return false
+  }
+  if (incompleteEquipmentRows.value.length) {
+    toast(t.value.submitNeedAllEquipment, 'warn')
+    focusFirstIncompleteEquipment()
+    return false
+  }
+  if (hardIncompleteUploadRows.value.length) {
+    toast(
+      lang.value === 'zh'
+        ? '日志检查发现异常时，请先上传异常照片再提交'
+        : 'Upload abnormal log photos before submitting when the inspection result is abnormal.',
+      'warn',
+    )
+    focusFirstHardIncompleteUpload()
+    return false
+  }
+  return true
+}
+
+function openAbnormalitySummary(allowEmptyUploads: boolean) {
+  pendingSubmitAllowEmpty.value = allowEmptyUploads
+  abnormalitySummaryOpen.value = true
+}
+
+async function executeTaskSubmit(allowEmptyUploads = false) {
+  if (submittingTask.value) return
+  submittingTask.value = true
+  try {
+    const submitResp = await postTaskSubmit(buildTaskSubmitPayload(allowEmptyUploads))
+    await finalizeSubmit(submitResp)
+  } catch {
+    toast('Submit failed', 'error')
+  } finally {
+    submittingTask.value = false
+  }
+}
+
+async function onSubmit() {
+  if (isViewOnly.value) return
+  if (!runSubmitGates()) return
+  if (!isSubmitReady.value) {
+    submitConfirmOpen.value = true
     return
   }
-  if (!isSubmitReady.value) { submitConfirmOpen.value = true; return }
-  try {
-    const submitResp = await postTaskSubmit(buildTaskSubmitPayload())
-    await finalizeSubmit(submitResp)
-  } catch { toast('Submit failed', 'error') }
+  openAbnormalitySummary(false)
 }
 
 async function confirmSubmitWithMissingUploads() {
-  if (hasBusyUploads()) {
-    toast(
-      lang.value === 'zh'
-        ? '仍有图片正在处理或上传，请稍后再提交'
-        : 'Images are still processing or uploading. Please wait before submitting.',
-      'warn',
-    )
-    return
-  }
-  if (hasUnresolvedFailedUploads()) {
-    toast(unresolvedFailedUploadMessage(), 'warn')
-    return
-  }
-  if (incompleteInspectionRows.value.length) {
-    toast(t.value.submitNeedAllResults, 'warn')
-    focusFirstIncompleteInspection()
+  if (!runSubmitGates()) {
+    submitConfirmOpen.value = false
     return
   }
   submitConfirmOpen.value = false
-  try {
     const hasAnyUpload = Object.values(uploadRecords.value).some((row) => String(row?.url || '').trim())
-    const submitResp = await postTaskSubmit(buildTaskSubmitPayload(!hasAnyUpload))
-    await finalizeSubmit(submitResp)
-  } catch { toast('Submit failed', 'error') }
+  openAbnormalitySummary(!hasAnyUpload)
+}
+
+async function confirmAbnormalitySummarySubmit() {
+  if (submittingTask.value) return
+  const allowEmpty = pendingSubmitAllowEmpty.value
+  abnormalitySummaryOpen.value = false
+  await executeTaskSubmit(allowEmpty)
 }
 
 function onEditRequest() {
+  if (isViewOnly.value) return
   editRequestReason.value = ''
   editRequestOpen.value = true
 }
@@ -1527,7 +2553,7 @@ watch(mainTaskId, (next, prev) => {
   if (next && next !== prev) hydrateTaskPage()
 })
 
-watch([uploadRecords, issueRecords, currentTaskStatus, maintType], () => {
+watch([uploadRecords, issueRecords, equipmentRecords, currentTaskStatus, maintType, mileageKmInput], () => {
   persistTaskListCache()
 }, { deep: true })
 
@@ -1562,90 +2588,314 @@ onUnmounted(() => {
     clearTimeout(flashTimer)
     flashTimer = null
   }
+  if (mileageFlashTimer) {
+    clearTimeout(mileageFlashTimer)
+    mileageFlashTimer = null
+  }
 })
 </script>
 
 <template>
   <div class="task-list-page">
+    <input
+      ref="addPhotoInputRef"
+      type="file"
+      accept="image/*"
+      class="tl-file"
+      tabindex="-1"
+      aria-hidden="true"
+      @change="onAddPhotoPickerChange"
+    />
     <PageShell>
       <TopBrandBar :title="t.title" :back-to="backToHome" :back-label="t.back" />
       <main class="tl-main">
       <section class="tl-card">
         <h2 class="tl-card__head">{{ t.basicInfo }}</h2>
         <dl class="tl-basic">
-          <div class="tl-basic__row"><dt>{{ t.depot }}</dt><dd><input class="tl-readonly" :value="basicDepot" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.train }}</dt><dd><input class="tl-readonly" :value="basicTrainNo" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="basicEmployeeId" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.trainModel }}</dt><dd><input class="tl-readonly" :value="basicTrainModel" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.depot }}</dt><dd><input class="tl-readonly" :value="basicServiceLocation" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.maint }}</dt><dd><input class="tl-readonly" :value="basicMaintLabel" readonly /></dd></div>
-          <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" :value="basicTaskId" readonly /></dd></div>
           <div class="tl-basic__row"><dt>{{ t.deadline }}</dt><dd><input class="tl-readonly" :value="basicDeadline" readonly /></dd></div>
+          <div
+            class="tl-basic__row"
+            data-mileage-field
+            :class="{ 'is-flash': mileageFlash }"
+          >
+            <dt>{{ t.mileage }}<span v-if="canEditWork" aria-hidden="true"> *</span></dt>
+            <dd>
+              <input
+                v-model="mileageKmInput"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                autocomplete="off"
+                class="tl-readonly"
+                :class="{ 'tl-mileage-input': canEditWork, 'is-flash': mileageFlash }"
+                :readonly="!canEditWork"
+                :placeholder="canEditWork ? t.mileagePlaceholder : ''"
+                :aria-required="canEditWork"
+                @input="onMileageKmInput"
+              />
+            </dd>
+          </div>
+          <div class="tl-basic__row"><dt>{{ t.employee }}</dt><dd><input class="tl-readonly" :value="basicEmployeeId" readonly /></dd></div>
+          <div class="tl-basic__row"><dt>{{ t.taskid }}</dt><dd><input class="tl-readonly" :value="basicTaskId" readonly /></dd></div>
         </dl>
       </section>
 
-      <section class="tl-card">
-        <h2 class="tl-card__head">{{ t.subtask }}</h2>
-        <p class="tl-hint">{{ t.filterHint }} ({{ visibleRows.length }})</p>
-        <div class="tl-table-wrap">
-          <table class="tl-table">
-            <thead><tr><th>{{ colLabels.seq }}</th><th>{{ colLabels.desc }}</th><th>{{ colLabels.upload }}</th></tr></thead>
-            <tbody>
+      <section class="tl-card tl-card--subtasks">
+        <header class="tl-card__head tl-card__head--subtasks">
+          <h2 class="tl-card__head-title">{{ t.subtask }}</h2>
+          <div class="tl-subtasks__progress" aria-live="polite">
+            <span class="tl-subtasks__progress-text">{{ subtaskProgressText }}</span>
+            <div
+              class="tl-subtasks__progress-track"
+              role="progressbar"
+              :aria-valuenow="subtaskProgress.completed"
+              :aria-valuemin="0"
+              :aria-valuemax="subtaskProgress.total"
+            >
+              <div
+                class="tl-subtasks__progress-bar"
+                :style="{ width: `${subtaskProgress.percent}%` }"
+              />
+            </div>
+          </div>
+        </header>
+
+        <div class="tl-subtask-list">
               <template v-for="(row, idx) in visibleRows" :key="row.id">
-                <tr v-if="isDataSyncStart(idx)" class="tl-section-break-row">
-                  <td colspan="3">
-                    <div class="tl-section-break">
+            <div v-if="isDataSyncStart(idx)" class="tl-section-break tl-section-break--card">
                       <strong>{{ lang === 'zh' ? '数据同步阶段' : 'Data Synchronization' }}</strong>
                       <span>{{ lang === 'zh' ? '以下为系统上传与同步步骤。' : 'The steps below are for upload and sync.' }}</span>
                     </div>
-                  </td>
-                </tr>
-                <tr
+
+            <article
                   :data-row-id="row.id"
-                  :class="{ 'is-data-sync-row': isDataSyncRow(row), 'is-flash': flashingRowId === row.id }"
+              class="tl-subtask-card"
+              :class="{
+                'is-expanded': isSubtaskExpanded(row.id),
+                'is-done': rowWorkStatus(row) === 'done',
+                'is-doing': rowWorkStatus(row) === 'doing',
+                'is-todo': rowWorkStatus(row) === 'todo',
+                'is-data-sync-row': isDataSyncRow(row),
+                'is-flash': flashingRowId === row.id,
+              }"
+            >
+              <button
+                type="button"
+                class="tl-subtask-card__summary"
+                :aria-expanded="isSubtaskExpanded(row.id) ? 'true' : 'false'"
+                @click="toggleSubtaskCard(row.id)"
+              >
+                <span
+                  class="tl-subtask-card__seq"
+                  :class="rowSeqClass(row)"
+                >{{ row.displaySeq }}</span>
+                <span class="tl-subtask-card__summary-main">
+                  <span class="tl-subtask-card__name">{{ rowCardTitle(row) }}</span>
+                  <span
+                    v-if="!isSubtaskExpanded(row.id)"
+                    class="tl-subtask-card__meta"
+                  >{{ rowCollapsedMeta(row) }}</span>
+                </span>
+                <span class="tl-subtask-card__summary-end">
+                  <span class="tl-subtask-card__status-stack">
+                    <span
+                      class="tl-subtask-card__status"
+                      :class="rowCollapsedStatusClass(row)"
+                    >{{ rowCollapsedStatusLabel(row) }}</span>
+                    <span
+                      v-if="!isSubtaskExpanded(row.id) && rowWorkStatus(row) !== 'done' && rowCollapsedIssueLabel(row)"
+                      class="tl-subtask-card__issue-status"
+                      :class="issueBtnClass(row.id)"
+                    >{{ rowCollapsedIssueLabel(row) }}</span>
+                  </span>
+                  <span
+                    class="tl-subtask-card__chevron"
+                    aria-hidden="true"
+                  />
+                </span>
+              </button>
+
+              <div v-if="isSubtaskExpanded(row.id)" class="tl-subtask-card__body">
+                <div class="tl-subtask-card__content-panel">
+                  <p class="tl-subtask-card__desc">{{ rowDescription(row) }}</p>
+                  <div class="tl-subtask-card__panel-footer">
+                    <button
+                      v-if="rowHasPicSample(row)"
+                      type="button"
+                      class="tl-subtask-card__help"
+                      @click="openSchematicForRow(row)"
+                    >{{ lang === 'zh' ? '获取帮助' : 'Get help' }}</button>
+                  </div>
+                </div>
+
+                <div
+                  v-if="rowNeedsEquipmentInputs(row)"
+                  class="tl-equipment-fields tl-equipment-fields--card"
                 >
-                <td class="tl-seq-cell">{{ row.displaySeq }}</td>
-                <td class="tl-desc-cell">
-                  <span class="tl-desc-text">{{ rowDescription(row) }}</span>
-                  <button v-if="SCHEMATIC_SEQS.has(row.seq)" type="button" class="tl-desc-btn tl-desc-btn--inline" @click="openSchematic(row.seq)">{{ lang === 'zh' ? '获取帮助' : 'Get help' }}</button>
-                </td>
-                <td class="tl-upload-cell">
-                  <div class="tl-upload-stack">
+                  <div class="tl-equipment-fields__pair">
+                    <label
+                      v-if="equipmentFlagsOf(row).materialNumber"
+                      class="tl-equipment-field"
+                      :class="{ 'is-flash': flashingEquipmentKey === `${row.id}:materialNumber` }"
+                      :data-equipment-field="`${row.id}:materialNumber`"
+                    >
+                      <span>{{ equipmentFieldLabel('materialNumber') }}</span>
+                      <input
+                        type="text"
+                        :value="equipmentValue(row.id, 'materialNumber')"
+                        :placeholder="inputPlaceholder(row.materialNumberInput)"
+                        :readonly="!canEditWork"
+                        :disabled="!canEditWork"
+                        @input="setEquipmentValue(row.id, 'materialNumber', ($event.target as HTMLInputElement).value)"
+                      />
+                    </label>
+                    <label
+                      v-if="equipmentFlagsOf(row).serialNumber"
+                      class="tl-equipment-field"
+                      :class="{ 'is-flash': flashingEquipmentKey === `${row.id}:serialNumber` }"
+                      :data-equipment-field="`${row.id}:serialNumber`"
+                    >
+                      <span>{{ equipmentFieldLabel('serialNumber') }}</span>
+                      <input
+                        type="text"
+                        :value="equipmentValue(row.id, 'serialNumber')"
+                        :placeholder="inputPlaceholder(row.serialNumberInput)"
+                        :readonly="!canEditWork"
+                        :disabled="!canEditWork"
+                        @input="setEquipmentValue(row.id, 'serialNumber', ($event.target as HTMLInputElement).value)"
+                      />
+                    </label>
+                  </div>
+                  <label
+                    v-if="equipmentFlagsOf(row).overhaulOrManufactureDate"
+                    class="tl-equipment-field tl-equipment-field--date"
+                    :class="{ 'is-flash': flashingEquipmentKey === `${row.id}:overhaulOrManufactureDate` }"
+                    :data-equipment-field="`${row.id}:overhaulOrManufactureDate`"
+                  >
+                    <span>{{ equipmentFieldLabel('overhaulOrManufactureDate') }}</span>
+                    <span class="tl-equipment-field__control">
+                      <input
+                        type="date"
+                        :value="equipmentDateInputValue(row.id)"
+                        :min="equipmentDateMin"
+                        :max="equipmentDateMax"
+                        :readonly="!canEditWork"
+                        :disabled="!canEditWork"
+                        :aria-label="equipmentFieldLabel('overhaulOrManufactureDate')"
+                        @change="setEquipmentValue(row.id, 'overhaulOrManufactureDate', ($event.target as HTMLInputElement).value)"
+                      />
+                      <button
+                        type="button"
+                        class="tl-equipment-field__cal"
+                        :disabled="!canEditWork"
+                        :aria-label="lang === 'zh' ? '打开日期选择' : 'Open date picker'"
+                        @click.stop.prevent="openEquipmentDatePicker($event)"
+                      />
+                    </span>
+                    <span
+                      v-if="equipmentLegacyDateHint(row.id)"
+                      class="tl-equipment-field__legacy"
+                    >{{ equipmentLegacyDateHint(row.id) }}</span>
+                  </label>
+                </div>
+
                     <template v-if="row.buttons && row.buttons.length">
-                      <div :class="row.buttons.length > 1 ? 'tl-upload-row' : ''">
-                        <TaskUploadSlot
-                          v-for="(btn, bi) in row.buttons"
-                          :key="btn.slot"
-                          :slot-id="btn.slot"
-                          :label="btn.label"
-                          :input-id="`f-${btn.slot}-${bi}`"
-                          :image-url="displayedUploadUrl(btn.slot)"
-                          :status="slotStatusOf(btn.slot)"
-                          :meta-lines="uploadMetaLines(btn.slot, btn.label)"
-                          :disabled="!isTaskDoing"
-                          @change="handleUpload(btn.slot, btn.label, $event)"
-                          @retry="retryUpload(btn.slot)"
-                          @preview="openUploadPreview(btn.slot)"
-                        />
+                  <p
+                    v-if="rowIssueStatus(row.id) === 'no_equipment'"
+                    class="tl-upload-optional-hint"
+                  >
+                    {{ lang === 'zh' ? '无此设备时无需上传照片' : 'No photo needed when there is no such equipment' }}
+                  </p>
+                  <p
+                    v-else-if="(row.uploadRequiredWhen || 'always') === 'abnormal' && rowIssueStatus(row.id) !== 'abnormal'"
+                    class="tl-upload-optional-hint"
+                  >
+                    {{ lang === 'zh' ? '检查正常时无需上传；发现异常时再上传照片' : 'No photo needed when OK; upload only if abnormal' }}
+                  </p>
+                  <div class="tl-upload-row tl-upload-row--card">
+                    <template v-for="(btn, bi) in row.buttons" :key="btn.slot">
+                      <div
+                        class="tl-upload-tile"
+                        :class="{ 'has-image': !!displayedUploadUrl(btn.slot) }"
+                        >
+                          <TaskUploadSlot
+                            :slot-id="btn.slot"
+                            :label="btn.label"
+                            :input-id="`f-${btn.slot}-${bi}`"
+                            :image-url="displayedUploadUrl(btn.slot)"
+                            :status="slotStatusOf(btn.slot)"
+                            :meta-title="uploadMetaTitle(btn.slot, btn.label)"
+                            :meta-lines="uploadMetaLines(btn.slot)"
+                            :disabled="!canEditWork"
+                          :show-add-photo="false"
+                          :show-remove="canEditWork && !!displayedUploadUrl(btn.slot)"
+                            @change="handleUpload(btn.slot, btn.label, $event)"
+                            @retry="retryUpload(btn.slot)"
+                            @preview="openUploadPreview(btn.slot)"
+                            @remove="removeSlotPhoto(btn.slot)"
+                          />
+                        <span
+                          v-if="!displayedUploadUrl(btn.slot)"
+                          class="tl-upload-tile__cap"
+                        >{{ btn.label }}</span>
                       </div>
+                      <div
+                            v-for="extraId in extraSlotsForBase(btn.slot)"
+                            :key="extraId"
+                        class="tl-upload-tile has-image"
+                      >
+                        <TaskUploadSlot
+                            :slot-id="extraId"
+                            :label="uploadMetaTitle(extraId, btn.label)"
+                            :input-id="`f-extra-${extraId}`"
+                            :image-url="displayedUploadUrl(extraId)"
+                            :status="slotStatusOf(extraId)"
+                            :meta-title="uploadMetaTitle(extraId, btn.label)"
+                            :meta-lines="uploadMetaLines(extraId)"
+                            :disabled="!canEditWork"
+                          :show-add-photo="false"
+                            :show-remove="canEditWork"
+                            @change="handleUpload(extraId, btn.label, $event)"
+                            @retry="retryUpload(extraId)"
+                            @preview="openUploadPreview(extraId)"
+                            @remove="removeSlotPhoto(extraId)"
+                          />
+                        </div>
                     </template>
-                    <span v-else class="tl-upload-na">{{ row.uploadHint || t.noUpload }}</span>
-                    <div class="tl-issue-wrap">
+                      </div>
+                  <button
+                    v-if="rowAddExtraTarget(row)"
+                    type="button"
+                    class="tl-upload-add-more"
+                    @click="onRowAddExtraPhoto(row)"
+                  >{{ lang === 'zh' ? '添加照片' : 'Add photo' }}</button>
+                    </template>
+                <span v-else class="tl-upload-na tl-upload-na--card">{{ row.uploadHint || t.noUpload }}</span>
+
+                <div class="tl-issue-wrap tl-issue-wrap--card">
                       <div v-if="issueNotePreview(row.id)" class="tl-issue-note">{{ issueNotePreview(row.id) }}</div>
                       <button
                         type="button"
                         class="tl-issue-btn"
                         :class="issueBtnClass(row.id)"
-                        :disabled="!isTaskDoing"
+                        :disabled="!canEditWork"
                         @click="openIssue(row.id)"
                       >{{ t.reportIssue }}</button>
                     </div>
                   </div>
-                </td>
-              </tr>
+            </article>
               </template>
-            </tbody>
-          </table>
         </div>
-        <div class="tl-actions tl-actions--sticky" :class="{ 'is-single': isTaskDone || isTaskRejected }">
+
+        <div
+          v-if="!isViewOnly"
+          class="tl-actions tl-actions--sticky"
+          :class="{ 'is-single': isTaskDone || isTaskRejected }"
+        >
           <template v-if="isTaskDone">
             <button type="button" class="tl-btn tl-btn--primary tl-btn--full" @click="onEditRequest">{{ editRequestBtnText }}</button>
           </template>
@@ -1662,6 +2912,7 @@ onUnmounted(() => {
             <button type="button" class="tl-btn tl-btn--primary" @click="onSubmit">{{ t.submit }}</button>
           </template>
         </div>
+        <p v-else class="tl-viewonly-hint">{{ lang === 'zh' ? '经理只读查看，不可编辑' : 'Manager view-only. Editing is disabled.' }}</p>
       </section>
       </main>
     </PageShell>
@@ -1717,13 +2968,24 @@ onUnmounted(() => {
         <div class="tl-modal__inner">
           <h3>{{ t.issueDialogTitle }}</h3>
           <p class="tl-issue-help">{{ t.issueDialogHelp }}</p>
+          <p v-if="issueShowLogPcTip" class="tl-issue-help tl-issue-help--pc-tip">{{ t.issueDialogLogPcTip }}</p>
           <label class="tl-issue-field">
             <span class="tl-issue-field__label">{{ t.issueStatusPlaceholder }}</span>
             <select v-model="issueStatus" class="tl-issue-select" @change="onIssueStatusChange">
-              <option value="">{{ t.issueStatusPlaceholder }}</option>
               <option value="ok">{{ t.issueStatusOk }}</option>
               <option value="abnormal">{{ t.issueStatusAbnormal }}</option>
-              <option value="undetectable">{{ t.issueStatusUndetectable }}</option>
+              <option value="no_equipment">{{ t.issueStatusNoEquipment }}</option>
+            </select>
+          </label>
+          <label v-if="issueAbnormalFields" class="tl-issue-field">
+            <span class="tl-issue-field__label">{{ t.issueSeverityPlaceholder }}</span>
+            <select v-model="issueSeverity" class="tl-issue-select">
+              <option value="">{{ t.issueSeverityPlaceholder }}</option>
+              <option
+                v-for="level in ABNORMAL_SEVERITY_OPTIONS"
+                :key="level"
+                :value="level"
+              >{{ severityOptionLabel(level) }}</option>
             </select>
           </label>
           <textarea
@@ -1765,6 +3027,45 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <div
+      v-if="abnormalitySummaryOpen"
+      class="tl-modal-backdrop"
+      role="presentation"
+      @click.self="!submittingTask && (abnormalitySummaryOpen = false)"
+    >
+      <div
+        class="tl-modal tl-modal--issue tl-modal--summary"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t.abnormalitySummaryTitle"
+      >
+        <div class="tl-modal__inner">
+          <h3>{{ t.abnormalitySummaryTitle }}</h3>
+          <div class="tl-abnormality-summary">
+            <p
+              v-for="(line, idx) in abnormalitySummaryLines"
+              :key="idx"
+              class="tl-abnormality-summary__line"
+            >{{ line }}</p>
+          </div>
+          <div class="tl-issue-actions">
+            <button
+              type="button"
+              class="tl-issue-action tl-issue-action--ghost"
+              :disabled="submittingTask"
+              @click="abnormalitySummaryOpen = false"
+            >{{ t.abnormalitySummaryBack }}</button>
+            <button
+              type="button"
+              class="tl-issue-action tl-issue-action--primary"
+              :disabled="submittingTask"
+              @click="confirmAbnormalitySummarySubmit"
+            >{{ t.abnormalitySummaryConfirm }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="editRequestOpen" class="tl-modal-backdrop" role="presentation" @click.self="!editRequestSubmitting && (editRequestOpen = false)">
       <div class="tl-modal tl-modal--issue" role="dialog" aria-modal="true" :aria-label="lang === 'zh' ? '编辑申请' : 'Edit Request'">
         <div class="tl-modal__inner">
@@ -1775,7 +3076,7 @@ onUnmounted(() => {
           <textarea
             v-model="editRequestReason"
             class="tl-issue-text"
-            :placeholder="lang === 'zh' ? '请输入修改原因（必填）' : 'Enter reason (required)'"
+            :placeholder="lang === 'zh' ? '请输入修改原因' : 'Enter reason'"
           ></textarea>
           <div class="tl-issue-actions">
             <button type="button" class="tl-issue-action tl-issue-action--ghost" :disabled="editRequestSubmitting" @click="editRequestOpen = false">

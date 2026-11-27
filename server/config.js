@@ -58,7 +58,7 @@ function buildConfig(projectRoot) {
     tasksDataPath: resolveFromProject(
       projectRoot,
       env.TASKS_DATA_PATH,
-      "public/data/brake-guidance-tasks.json"
+      "public/data/brake-guidance-tasks-v1.0.json"
     ),
     homeConfigPath: resolveFromProject(projectRoot, env.HOME_CONFIG_PATH, "server/data/home-config.json"),
     taskStatusPath: resolveFromProject(projectRoot, env.TASK_STATUS_PATH, "server/data/task-status.json"),

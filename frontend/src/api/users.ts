@@ -55,9 +55,17 @@ function mapRoleFromUserInfo(info: UserInfoData): User['role'] | undefined {
     return 'externalcontractor'
   }
 
-  // 金色 manager 页：角色 name 含 manager / director，或特例 Support Engineer
-  if (roleNameImpliesManager(roleNameRaw)) {
-    if (roleName.includes('director') || roleKey === 'fsd' || roleKey === 'fieldservicedirector') {
+  // 金色 manager 页：角色 name 含 manager / director / 管理员，或特例 Support Engineer
+  if (roleNameImpliesManager(roleNameRaw) || roleKey === 'admin' || roleKey === 'superadmin') {
+    // 管理员与总监同权
+    if (
+      roleName.includes('director')
+      || roleKey === 'fsd'
+      || roleKey === 'fieldservicedirector'
+      || roleKey === 'admin'
+      || roleKey === 'superadmin'
+      || roleName.includes('管理员')
+    ) {
       return ROLE_FS_DIRECTOR
     }
     if (
